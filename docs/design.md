@@ -516,6 +516,7 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 | R5 | Players spamming Z+D-pad and racing requests. | Game side: one request in flight at a time; inputs ignored while `!` is showing. Relay side: last write wins, full overwrite makes this safe. |
 | R6 | A set the TO reports by hand while a station has it open. | Wii's next REPORT_SCORE gets 4xx → "ask TO". Station clears on next LIST_SETS (set no longer pending). |
 | R7 | Multiple events (e.g. singles + doubles) in one tournament. | Out of scope for v1: one `eventId` per relay config. Second event = second relay port + a per-Wii cfg line. Revisit if it hurts. |
+| R8 | **Preview set ids** (found 2026-09-19 during bootstrap): sets in a pool that hasn't been started have *string* ids (`preview_<poolId>_<round>_<n>`), not numeric — they cannot be represented in the protocol's `uint32 set_id`. Confirmed behavior: calling any set mutation (e.g. `markSetInProgress`) with a preview id starts the pool and materializes numeric ids for **all** its sets; the preview ids then stop existing. | Decide in session 4. Candidates: (a) per-tournament setup checklist (§10) gains "start all pools" and the cache simply drops preview-id sets with a status-page warning; (b) relay auto-starts a pool on first START_SET targeting it (needs a preview→uint32 mapping in the cache, adds state). Lean (a): one path, TO does it once at setup. The test tournament deliberately keeps pool 2 (`3292311`) unstarted to exercise whichever we pick. |
 
 ---
 
