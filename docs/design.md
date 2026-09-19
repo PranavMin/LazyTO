@@ -390,6 +390,8 @@ Startup validates every field and exits non-zero on any problem. No defaults.
 | END_SET | `reportBracketSet(setId, winnerId, gameData)` |
 | ABANDON_SET | `resetSet(setId)` |
 
+Schema gotcha (verified 2026-09-19 by `scripts/probe.ts`): the `Game` *output* type exposes `orderNum`, not `gameNum` — `gameNum` exists only on the `BracketSetGameDataInput` input type. The cache's set query must select `games { orderNum winnerId }` when reloading games after a Wii reboot.
+
 **Load:** 12 stations × ~1 request/min + 3 cache refreshes/min ≈ 15 upstream calls/min worst case. Well under the 80/60 s limit; the limiter is a guard, not a throttle.
 
 **Status page** (read-only, no auth on the LAN — same trust boundary as the TSH laptop):
@@ -509,8 +511,8 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 
 | # | Risk / question | Plan |
 |---|-----------------|------|
-| R1 | `assignStream` mutation semantics (does it require the stream to belong to the tournament's stream queue? does re-assign work?) | Verify against the live schema on the test tournament before writing relay code. |
-| R2 | `reportBracketSet` without `winnerId` — confirm it accepts partial game data on an in-progress set and doesn't require `entrant1Score/entrant2Score`. | Same. First relay task. |
+| R1 | `assignStream` mutation semantics (does it require the stream to belong to the tournament's stream queue? does re-assign work?) | **Resolved 2026-09-19** (`scripts/probe.ts`): `assignStream(setId, streamId)` exists and works on an in-progress set with no stream-queue precondition surfacing; start.gg updates its own `stationQueueItem`. Re-assign untested — see §12. |
+| R2 | `reportBracketSet` without `winnerId` — confirm it accepts partial game data on an in-progress set and doesn't require `entrant1Score/entrant2Score`. | **Resolved 2026-09-19** (`scripts/probe.ts`): accepts `gameData` alone — no `winnerId`, no entrant scores — and the set stays state 2. A second report is a full overwrite (old game rows deleted, new ones created), exactly what §5.4 needs. |
 | R3 | Nintendont kernel networking availability during GC-mode game execution — Slippi Nintendont proves it works for broadcast; confirm a *blocking receive* is fine from the EXI handler context. | Read Slippi Nintendont's broadcast path before designing `RelayEXI.c`. If the EXI handler can't block, add a kernel-side state machine (still one path). |
 | R4 | Menu memory budget in the decomp build. | 64 × 64 B list + 4 KB buffer = ~8 KB static. Should be fine; verify with the build's free-RAM report. |
 | R5 | Players spamming Z+D-pad and racing requests. | Game side: one request in flight at a time; inputs ignored while `!` is showing. Relay side: last write wins, full overwrite makes this safe. |
@@ -524,5 +526,6 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 
 - **Auto score from game end.** The game knows who won; a `GAME_END` hook could append the game automatically, with CSS keybinds only for corrections. Deferred so v1 has exactly one source of score truth (the player).
 - **Station assignment.** If the event uses start.gg stations, `assignStation` on START_SET makes the bracket page show where sets are playing.
+- **Probe follow-ups.** Two datapoints `scripts/probe.ts` deliberately skipped: re-assigning an already-assigned set (the rest of R1), and whether a decided score without `winnerId` auto-completes the set. Neither blocks v1 — END_SET always sends `winnerId` — so they're cheap probe tweaks only if a future feature needs them.
 - **Second relay for redundancy.** Not now — one Pi, one path, and the manual start.gg workflow is the fallback.
 - **Non-stream overlay data.** The relay already knows every station's set and score; a per-station overlay for a second stream is a status-page query away.
