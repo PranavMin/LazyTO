@@ -11,7 +11,18 @@
 #define RELAY_PROTO_H
 
 #include <stddef.h>
+
+/* The melee decomp's MWCC/MSL toolchain ships no <stdint.h>. Its EABI
+ * types match these widths exactly; no other TU in that tree defines
+ * the uintN_t names. Every other consumer (Nintendont's ARM GCC) has
+ * the real header. */
+#ifdef __MWERKS__
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned long uint32_t;
+#else
 #include <stdint.h>
+#endif
 
 /* Layout guards. C11 gives us _Static_assert; the pre-C11 fallback (the
  * decomp's MWCC toolchain) diagnoses via a negative array size instead. */
