@@ -295,7 +295,7 @@ export class RelayTcpServer {
       p1Id: claim.p1Id,
       p2Id: claim.p2Id,
       bestOf: claim.bestOf,
-      games: claim.games.length,
+      games: claim.games,
     });
   }
 
