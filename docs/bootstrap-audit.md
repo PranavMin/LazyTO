@@ -32,5 +32,6 @@ Audited 2026-09-19. Status legend: ✅ done · ❌ not done · ⚠️ wrong. Ite
 
 ## 4. Remaining §0 steps
 
-- [ ] §0 step 5: melee Windows build toolchain + `ninja` producing a matching DOL (needs your input for any licensed tools/downloads).
-- [ ] You: fill `.env` (§0 hand-step 2 — start.gg test tournament, developer token, event/stream/set IDs).
+- [x] §0 step 5: **done 2026-09-19** — `main.dol` extracted from the user's GALE01 v1.02 ISO (SHA-1 verified `08e0bf20...`), `python configure.py` + `ninja` (pip-installed, `%APPDATA%\Python\Python314\Scripts`) → `build/GALE01/main.dol: OK`, 100.00% matched/linked. `orig/` contents are gitignored; nothing game-derived is committed.
+- [x] `.env`: token (user), `EVENT_ID=1613010` (Melee Singles! 7:30 Start), `STREAM_ID=1358079` (TWITCH/SFMelee; alt sidestream=1358080). Tournament id 905882.
+- [ ] `TEST_SET_ID`: **blocked on starting the bracket** — sets currently have `preview_*` ids; start the phase on start.gg, re-query, pick a Winners Round 1 set id.
