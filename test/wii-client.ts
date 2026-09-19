@@ -1,0 +1,116 @@
+// wii-client.ts -- a minimal Wii impersonator for tests and scripts/sim-wii.ts.
+// Speaks the wire protocol the way the kernel does: one TCP connection per
+// request, send, read until close, decode.
+
+import { connect } from 'node:net';
+import {
+  MAGIC_0,
+  MAGIC_1,
+  PROTO_VERSION,
+  RELAY_HDR_SIZE,
+  RELAY_RESP_SIZE,
+  RelayCmd,
+  decodeListSetsResp,
+  decodeRelayHdr,
+  decodeRelayResp,
+  encodeAbandonSetReq,
+  encodeEndSetReq,
+  encodeRelayHdr,
+  encodeReportScoreReq,
+  encodeStartSetReq,
+  type GameResult,
+  type ListSetsResp,
+  type RelayHdr,
+  type RelayResp,
+} from '../generated/wire.js';
+
+export interface WireReply {
+  hdr: RelayHdr;
+  resp: RelayResp;
+  payload: Uint8Array;
+}
+
+export function rawRequest(
+  port: number,
+  station: number,
+  cmd: number,
+  payload: Uint8Array = new Uint8Array(0),
+  { version = PROTO_VERSION, host = '127.0.0.1', timeoutMs = 3000 } = {},
+): Promise<WireReply> {
+  const req = Buffer.concat([
+    encodeRelayHdr({ magic: new Uint8Array([MAGIC_0, MAGIC_1]), version, cmd, station, len: payload.length }),
+    payload,
+  ]);
+  return new Promise((resolve, reject) => {
+    const socket = connect({ port, host });
+    const chunks: Buffer[] = [];
+    socket.setTimeout(timeoutMs, () => {
+      socket.destroy();
+      reject(new Error('relay timeout'));
+    });
+    socket.on('error', reject);
+    socket.on('connect', () => socket.write(req));
+    socket.on('data', (c: Buffer) => chunks.push(c));
+    socket.on('close', () => {
+      const buf = Buffer.concat(chunks);
+      if (buf.length < RELAY_HDR_SIZE + RELAY_RESP_SIZE) {
+        reject(new Error(`short response: ${buf.length} bytes`));
+        return;
+      }
+      resolve({
+        hdr: decodeRelayHdr(buf),
+        resp: decodeRelayResp(buf, RELAY_HDR_SIZE),
+        payload: buf.subarray(RELAY_HDR_SIZE + RELAY_RESP_SIZE),
+      });
+    });
+  });
+}
+
+export class WiiClient {
+  constructor(
+    private readonly port: number,
+    readonly station: number,
+    private readonly stream: 0 | 1 = 0,
+  ) {}
+
+  async listSets(): Promise<{ resp: RelayResp; sets: ListSetsResp['sets'] }> {
+    const r = await rawRequest(this.port, this.station, RelayCmd.CMD_LIST_SETS);
+    return { resp: r.resp, sets: r.resp.status === 0 ? decodeListSetsResp(r.payload).sets : [] };
+  }
+
+  startSet(setId: number, stream = this.stream): Promise<WireReply> {
+    return rawRequest(this.port, this.station, RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: setId, stream }));
+  }
+
+  reportScore(setId: number, games: GameResult[]): Promise<WireReply> {
+    return rawRequest(
+      this.port,
+      this.station,
+      RelayCmd.CMD_REPORT_SCORE,
+      encodeReportScoreReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
+    );
+  }
+
+  endSet(setId: number, games: GameResult[]): Promise<WireReply> {
+    return rawRequest(
+      this.port,
+      this.station,
+      RelayCmd.CMD_END_SET,
+      encodeEndSetReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
+    );
+  }
+
+  abandonSet(setId: number): Promise<WireReply> {
+    return rawRequest(this.port, this.station, RelayCmd.CMD_ABANDON_SET, encodeAbandonSetReq({ set_id: setId }));
+  }
+}
+
+export function game(winnerSlot: 1 | 2, p1Char = 2, p2Char = 9): GameResult {
+  return { winner_slot: winnerSlot, p1_char: p1Char, p2_char: p2Char };
+}
+
+function padGames(games: GameResult[]): GameResult[] {
+  const out = [...games];
+  while (out.length < 5) out.push({ winner_slot: 0, p1_char: 0, p2_char: 0 });
+  return out;
+}
