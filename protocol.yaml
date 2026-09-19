@@ -1,0 +1,157 @@
+# protocol.yaml — single source of truth for the Wii <-> relay wire protocol.
+#
+# This file is design.md section 5 in machine-readable form. Everything on the
+# wire is defined here and nowhere else. Generated outputs (do not edit them):
+#
+#   generated/relay_proto.h   C header for the Melee decomp + Nintendont kernel
+#   generated/wire.ts         encode/decode module for the relay
+#
+# Regenerate:  python tools/gen_protocol.py
+# Verify:      python tools/check_protocol.py   (CI fails on drift)
+#
+# Layout rules enforced by the generator:
+#   - All integers big-endian on the wire (PowerPC sends structs as-is).
+#   - All strings ASCII, NUL-padded, not NUL-terminated if full.
+#   - Every field must fall on its natural alignment with no implicit
+#     padding; padding is always an explicit _pad field.
+#   - Each struct declares its expected size; the generator errors if the
+#     computed layout disagrees.
+
+protocol:
+  version: 1
+  magic: "MT"          # first two bytes of every message
+  endian: big
+
+constants:
+  MAX_GAMES:
+    value: 5
+    doc: "games per set (best of 5)"
+  MAX_SETS:
+    value: 64
+    doc: "cap on set_entry rows in a LIST_SETS response (4 KB)"
+  MSG_LEN:
+    value: 30
+    doc: "human-readable status text in relay_resp"
+  ROUND_LEN:
+    value: 16
+    doc: "round name, e.g. WR2, LF, GF"
+  TAG_LEN:
+    value: 16
+    doc: "player tag"
+
+enums:
+  relay_cmd:
+    doc: "request/response command, echoed back in the response header"
+    values:
+      CMD_LIST_SETS:    {value: 1}
+      CMD_START_SET:    {value: 2}
+      CMD_REPORT_SCORE: {value: 3}
+      CMD_END_SET:      {value: 4}
+      CMD_ABANDON_SET:  {value: 5, doc: "player-initiated \"wrong set\"; relay resets it"}
+
+  relay_status:
+    doc: "result of a request, first byte of relay_resp"
+    values:
+      ST_OK:            {value: 0}
+      ST_BAD_VERSION:   {value: 1}
+      ST_SET_NOT_FOUND: {value: 2}
+      ST_SET_TAKEN:     {value: 3, doc: "started on another station"}
+      ST_NOT_STREAM:    {value: 4, doc: "stream flag from non-stream station"}
+      ST_STARTGG_ERROR: {value: 5, doc: "upstream rejected; see status page"}
+      ST_RATE_LIMITED:  {value: 6}
+      ST_INTERNAL:      {value: 7}
+
+structs:
+  relay_hdr:
+    doc: "Every message (request and response) begins with this header."
+    size: 8
+    fields:
+      - {name: magic,   type: u8, array: 2, doc: "'M','T'"}
+      - {name: version, type: u8,           doc: "PROTO_VERSION"}
+      - {name: cmd,     type: u8,           doc: "enum relay_cmd"}
+      - {name: station, type: u16,          doc: "from tournament.cfg"}
+      - {name: len,     type: u16,          doc: "payload bytes following the header"}
+
+  relay_resp:
+    doc: >-
+      Every response: relay_hdr (same cmd), then this, then an optional
+      command-specific payload (see messages).
+    size: 32
+    fields:
+      - {name: status, type: u8, doc: "enum relay_status"}
+      - {name: _pad,   type: u8}
+      - {name: msg,    type: char, array: MSG_LEN, doc: "short human text for the menu"}
+
+  set_entry:
+    doc: "One selectable set in a LIST_SETS response."
+    size: 64
+    fields:
+      - {name: set_id,        type: u32}
+      - {name: p1_entrant_id, type: u32}
+      - {name: p2_entrant_id, type: u32}
+      - {name: round,         type: char, array: ROUND_LEN, doc: "\"WR2\", \"LF\", \"GF\""}
+      - {name: p1_tag,        type: char, array: TAG_LEN}
+      - {name: p2_tag,        type: char, array: TAG_LEN}
+      - {name: best_of,       type: u8,   doc: "3 or 5"}
+      - {name: state,         type: u8,   doc: "0 = pending, 1 = in progress (this station)"}
+      - {name: _pad,          type: u8, array: 2}
+
+  list_sets_resp:
+    doc: "CMD_LIST_SETS response payload. count set_entry rows follow the fixed part."
+    size: 4          # fixed part only; sets[] follows
+    fields:
+      - {name: count, type: u16, doc: "number of sets following"}
+      - {name: _pad,  type: u16}
+      - {name: sets,  type: set_entry, array: count, max: MAX_SETS}
+
+  start_set_req:
+    doc: "CMD_START_SET request payload."
+    size: 8
+    fields:
+      - {name: set_id, type: u32}
+      - {name: stream, type: u8, doc: "from tournament.cfg"}
+      - {name: _pad,   type: u8, array: 3}
+
+  game_result:
+    doc: "One completed game."
+    size: 4
+    fields:
+      - {name: winner_slot, type: u8, doc: "1 or 2"}
+      - {name: p1_char,     type: u8, doc: "Melee internal character id"}
+      - {name: p2_char,     type: u8}
+      - {name: _pad,        type: u8}
+
+  report_score_req:
+    doc: >-
+      CMD_REPORT_SCORE request payload. Always the full game list;
+      the relay does a full overwrite (idempotent).
+    size: 28
+    fields:
+      - {name: set_id,     type: u32}
+      - {name: game_count, type: u8, doc: "0-5 valid entries in games"}
+      - {name: _pad,       type: u8, array: 3}
+      - {name: games,      type: game_result, array: MAX_GAMES}
+
+  end_set_req:
+    doc: "CMD_END_SET request payload. Relay derives the winner from the game list."
+    size: 28
+    fields:
+      - {name: set_id,     type: u32}
+      - {name: game_count, type: u8}
+      - {name: _pad,       type: u8, array: 3}
+      - {name: games,      type: game_result, array: MAX_GAMES}
+
+  abandon_set_req:
+    doc: "CMD_ABANDON_SET request payload. Only valid if the set has no reported games."
+    size: 4
+    fields:
+      - {name: set_id, type: u32}
+
+# Which struct follows relay_hdr in a request, and which struct (if any)
+# follows relay_resp in an ST_OK response.
+messages:
+  CMD_LIST_SETS:    {request: null,             response_payload: list_sets_resp}
+  CMD_START_SET:    {request: start_set_req,    response_payload: null}
+  CMD_REPORT_SCORE: {request: report_score_req, response_payload: null}
+  CMD_END_SET:      {request: end_set_req,      response_payload: null}
+  CMD_ABANDON_SET:  {request: abandon_set_req,  response_payload: null}

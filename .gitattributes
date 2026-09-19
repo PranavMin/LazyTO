@@ -1,0 +1,5 @@
+# Generated protocol sources are written with LF by tools/gen_protocol.py;
+# keep them LF on every checkout so tools/check_protocol.py diffs cleanly.
+generated/** text eol=lf
+protocol.yaml text eol=lf
+tools/*.py    text eol=lf
