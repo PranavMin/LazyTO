@@ -53,7 +53,7 @@ Today a set moves through start.gg only when a TO touches it: call the set, assi
 
 ### Constraints
 
-- Melee has no networking; all network I/O is done by the Nintendont kernel on the Wii's ARM core, reached via the fake Slippi EXI device.
+- Melee has no networking; all network I/O is done by the Nintendont kernel on the Wii's ARM core, reached via a fake EXI device (implemented by Nintendont on hardware, by Slippi Dolphin's forwarder in development).
 - PowerPC is big-endian, 32-bit, ~24 MB usable RAM shared with the game. Menu code must be small.
 - Nintendont kernel iteration is slow (SD swap + reboot). Minimize kernel surface area.
 - Single developer, evenings and weekends. Simple beats complete.
@@ -269,7 +269,7 @@ Steps 4–5 are not atomic in start.gg. If 5 fails after 4 succeeds, the relay r
 ```c
 struct game_result {
     uint8_t winner_slot;     // 1 or 2
-    uint8_t p1_char;         // Melee internal character id
+    uint8_t p1_char;         // Melee external character id (CharacterKind — the CSS ckind value)
     uint8_t p2_char;
     uint8_t _pad;
 };
@@ -282,7 +282,7 @@ struct report_score_req {
 };
 ```
 
-Relay behavior: translate slots → entrant ids, Melee char ids → start.gg character ids (static table in relay), call `reportBracketSet(setId, gameData)` **without** `winnerId`. Full overwrite every time — idempotent.
+Relay behavior: translate slots → entrant ids, Melee **external** char ids (`CharacterKind` — what the CSS stores in `ckind`; found 2026-09-19, session 5) → start.gg character ids (static table in relay), call `reportBracketSet(setId, gameData)` **without** `winnerId`. Full overwrite every time — idempotent.
 
 ### 5.5 CMD_END_SET
 
@@ -310,7 +310,7 @@ Payload: `uint32_t set_id`. Relay calls `resetSet(setId)` and clears the station
 **Files (new):**
 - `melee/mn/mntourney.c` — the Tournament menu: list, name filter, confirm screen, error screen.
 - `melee/lb/lbtourney.c` — set state (current set, games[5]), CSS keybind handler.
-- `melee/lb/lbrelayexi.c` — EXI request/poll helpers, wraps the existing Slippi EXI device access.
+- `melee/lb/lbrelayexi.c` — EXI request/poll helpers. The decomp has **no Slippi code** (found 2026-09-19, session 5): this is a new EXI driver on the vanilla SDK API (`dolphin/os/OSExi`; template: `hio.c`), speaking the `exi_cmd` commands from `relay_proto.h` to the fake relay device that Slippi Dolphin (§9.3) and Nintendont (§6.2) implement.
 
 **Menu flow:**
 
@@ -335,7 +335,9 @@ Main menu ─► Tournament
 
 Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn in the CSS corner as `MANGO 2 – 1 ZAIN`, with a small `!` while a request is in flight and `✗` if the last one failed. Character ids are read from the CSS selection state at send time.
 
-**EXI usage:** Extend the Slippi EXI command space with `EXI_RELAY_REQ` (write request buffer) and `EXI_RELAY_POLL` (read `{state, response buffer}`). The game never blocks: the menu shows "Loading…" and polls once per frame. Response buffer is a static 4 KB region in `lbrelayexi.c`.
+**EXI usage:** `EXI_RELAY_REQ` (write request buffer) and `EXI_RELAY_POLL` (read `{state, response buffer}`) — command ids and poll states are defined in `protocol.yaml` (`exi_cmd`, `exi_poll_state`) so the game, the Dolphin forwarder, and the kernel can't drift; values sit clear of Slippi's 0x35–0x3D command range. The game never blocks: the menu shows "Loading…" and polls once per frame. Response buffer is a static 4 KB region in `lbrelayexi.c`, `ATTRIBUTE_ALIGN(32)` as EXI DMA requires.
+
+**Menu route** (session 5): build the Tournament menu as a submenu of `GS_MENU` following the Sound Test pattern rather than a new scene. Memory is a non-issue — the arena is ~18 MiB and the tournament statics are ~8 KB (R4 resolved).
 
 **Constraints honored:** no malloc, no string parsing, all buffers static, all struct sizes asserted at compile time against the generated header.
 
@@ -344,11 +346,11 @@ Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn 
 **Files:** `kernel/RelayEXI.c` + `.h`.
 
 Responsibilities, and nothing else:
-1. Parse `tournament.cfg` at boot (relay IP/port, station, stream). Missing or malformed file → relay commands return `ST_INTERNAL` with `msg="no tournament.cfg"`.
-2. On `EXI_RELAY_REQ`: copy request buffer, open TCP to relay, send, receive up to 4 KB with 3 s total timeout, close, store result + status.
-3. On `EXI_RELAY_POLL`: return `{state: IDLE|BUSY|DONE|ERROR, buffer}`.
+1. Parse `tournament.cfg` at boot (relay IP/port, station, stream) using the kernel-side FatFS pattern (`ConfigInit()` / `f_open_main_drive`). Missing or malformed file → set a flag; every relay command returns `ST_INTERNAL` with `msg="no tournament.cfg"`.
+2. On `EXI_RELAY_REQ`: copy the request buffer, set `RELAY_BUSY`, and hand off to a **dedicated kernel thread** that does socket → connect → send → recv → close with the 3 s budget enforced via the existing `poll()`-with-deadline pattern (SlippiNetwork.c). **The EXI handler itself must never block** (R3 resolved 2026-09-19): there is no EXI interrupt context — the game's EXI writes are serviced by the kernel's single main loop, and the game sits frozen inside the patched EXI transfer until that loop acks, so a block there freezes the console.
+3. On `EXI_RELAY_POLL`: return `{state: RELAY_IDLE|BUSY|DONE|ERROR, buffer}`. The Slippi-era EXI path never DMAs data back to the game, so the poll response uses the memcard read-back pattern: write through the DMA pointer, then `sync_after_write`.
 
-The kernel does not interpret payloads beyond the header length. Template: the existing Slippi broadcast networking in Slippi Nintendont.
+The kernel does not interpret payloads beyond the header length. Still one code path: one buffer, one thread (own 0x2000 stack added to the kernel.ld stack chain), four states, no retries. Template: Slippi Nintendont's broadcast networking thread.
 
 ### 6.3 Relay (Node 22 / TypeScript, on the Pi)
 
@@ -363,7 +365,7 @@ The kernel does not interpret payloads beyond the header length. Template: the e
 | `state.ts` | In-memory `Map<station, {setId, games}>`. |
 | `audit.ts` | Append-only JSONL: every request, response, and upstream call with timestamps. |
 | `status.ts` | HTTP server-rendered status page on :8080. |
-| `chars.ts` | Melee internal char id → start.gg character id table. |
+| `chars.ts` | Melee external char id (`CharacterKind`) → start.gg character id table. |
 
 **Config** (`/etc/tournament-reporter/config.json`):
 
@@ -513,12 +515,13 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 |---|-----------------|------|
 | R1 | `assignStream` mutation semantics (does it require the stream to belong to the tournament's stream queue? does re-assign work?) | **Resolved 2026-09-19** (`scripts/probe.ts`): `assignStream(setId, streamId)` exists and works on an in-progress set with no stream-queue precondition surfacing; start.gg updates its own `stationQueueItem`. Re-assign untested — see §12. |
 | R2 | `reportBracketSet` without `winnerId` — confirm it accepts partial game data on an in-progress set and doesn't require `entrant1Score/entrant2Score`. | **Resolved 2026-09-19** (`scripts/probe.ts`): accepts `gameData` alone — no `winnerId`, no entrant scores — and the set stays state 2. A second report is a full overwrite (old game rows deleted, new ones created), exactly what §5.4 needs. |
-| R3 | Nintendont kernel networking availability during GC-mode game execution — Slippi Nintendont proves it works for broadcast; confirm a *blocking receive* is fine from the EXI handler context. | Read Slippi Nintendont's broadcast path before designing `RelayEXI.c`. If the EXI handler can't block, add a kernel-side state machine (still one path). |
-| R4 | Menu memory budget in the decomp build. | 64 × 64 B list + 4 KB buffer = ~8 KB static. Should be fine; verify with the build's free-RAM report. |
+| R3 | Nintendont kernel networking availability during GC-mode game execution — Slippi Nintendont proves it works for broadcast; confirm a *blocking receive* is fine from the EXI handler context. | **Resolved 2026-09-19** (Nintendont `docs/relay-exi-investigation.md`): blocking is NOT safe — the fallback clause is the design. No EXI interrupt context exists; EXI writes are polled by the kernel's single main loop and the game is frozen until the ack. §6.2 now specifies the dedicated-thread state machine. A second TCP socket coexists fine (three already run across two threads). |
+| R4 | Menu memory budget in the decomp build. | **Resolved 2026-09-19** (melee `docs/menu-orientation.md`): arena is ~18 MiB (`__ArenaHi = 0x81700000`); ~8 KB of statics is negligible. EXI DMA needs the 4 KB buffer `ATTRIBUTE_ALIGN(32)`. |
 | R5 | Players spamming Z+D-pad and racing requests. | Game side: one request in flight at a time; inputs ignored while `!` is showing. Relay side: last write wins, full overwrite makes this safe. |
 | R6 | A set the TO reports by hand while a station has it open. | Wii's next REPORT_SCORE gets 4xx → "ask TO". Station clears on next LIST_SETS (set no longer pending). |
 | R7 | Multiple events (e.g. singles + doubles) in one tournament. | Out of scope for v1: one `eventId` per relay config. Second event = second relay port + a per-Wii cfg line. Revisit if it hurts. |
 | R8 | **Preview set ids** (found 2026-09-19 during bootstrap): sets in a pool that hasn't been started have *string* ids (`preview_<poolId>_<round>_<n>`), not numeric — they cannot be represented in the protocol's `uint32 set_id`. Confirmed behavior: calling any set mutation (e.g. `markSetInProgress`) with a preview id starts the pool and materializes numeric ids for **all** its sets; the preview ids then stop existing. | Decide in session 4. Candidates: (a) per-tournament setup checklist (§10) gains "start all pools" and the cache simply drops preview-id sets with a status-page warning; (b) relay auto-starts a pool on first START_SET targeting it (needs a preview→uint32 mapping in the cache, adds state). Lean (a): one path, TO does it once at setup. The test tournament deliberately keeps pool 2 (`3292311`) unstarted to exercise whichever we pick. |
+| R9 | Kernel `connect()` has no timeout and nothing in Nintendont does outbound TCP today (session 3). An unreachable relay pins the RelayEXI thread inside `connect()` for IOS's internal timeout — the game is fine (it just sees `RELAY_BUSY`), but the station can't retry until `connect()` returns. | Measure on hardware in session 8. If it hurts: `IOCTL_SO_FCNTL` non-blocking socket + `poll(POLLOUT)` with the 3 s deadline, same as the recv path. |
 
 ---
 

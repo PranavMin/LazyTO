@@ -37,6 +37,20 @@ export enum RelayStatus {
   ST_INTERNAL = 7,
 }
 
+/** Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's 0x35-0x3D EXI command range. */
+export enum ExiCmd {
+  EXI_RELAY_REQ = 208, // write request buffer to the ARM side
+  EXI_RELAY_POLL = 209, // read {state, response buffer}
+}
+
+/** first byte returned by EXI_RELAY_POLL */
+export enum ExiPollState {
+  RELAY_IDLE = 0,
+  RELAY_BUSY = 1, // request in flight on the ARM side
+  RELAY_DONE = 2, // response buffer valid
+  RELAY_ERROR = 3, // transport failed; see status byte detail
+}
+
 // ---- ASCII field helpers ----
 
 function putAscii(bytes: Uint8Array, off: number, len: number, s: string): void {
@@ -238,7 +252,7 @@ export function decodeStartSetReq(buf: Uint8Array, off = 0): StartSetReq {
 /** One completed game. */
 export interface GameResult {
   winner_slot: number; // 1 or 2
-  p1_char: number; // Melee internal character id
+  p1_char: number; // Melee external character id (CharacterKind, the CSS ckind value)
   p2_char: number;
 }
 export const GAME_RESULT_SIZE = 4;
