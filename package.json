@@ -1,0 +1,19 @@
+{
+  "name": "tournament-reporter-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "tsc --noEmit && tsx --test \"test/*.test.ts\"",
+    "start": "tsx src/main.ts",
+    "sim": "tsx scripts/sim-wii.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
