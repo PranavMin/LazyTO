@@ -31,7 +31,6 @@ export interface FakeGame {
   id: number;
   orderNum: number;
   winnerId: number;
-  selections: unknown;
 }
 
 export interface FakeSet {
@@ -241,7 +240,6 @@ export class FakeStartgg {
     const gameData = (variables.gameData ?? []) as {
       gameNum?: unknown;
       winnerId?: unknown;
-      selections?: unknown;
     }[];
     for (const g of gameData) {
       if (!Number.isInteger(g.gameNum) || (g.gameNum as number) < 1) {
@@ -257,7 +255,6 @@ export class FakeStartgg {
       id: this.nextGameId++,
       orderNum: g.gameNum as number,
       winnerId: Number(g.winnerId),
-      selections: g.selections ?? null,
     }));
 
     if (variables.winnerId != null) {

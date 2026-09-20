@@ -37,13 +37,13 @@ test('startgg client', async (t) => {
     await client(fake).assignStream(SET, 1358079);
     assert.equal(fake.getSet(SET).stream!.id, 1358079);
     await client(fake).reportGames(SET, [
-      { gameNum: 1, winnerId: entrant(1).id, selections: [{ entrantId: entrant(1).id, characterId: 6 }] },
+      { gameNum: 1, winnerId: entrant(1).id },
     ]);
     assert.equal(fake.getSet(SET).games.length, 1);
     assert.equal(fake.getSet(SET).state, 2);
     await client(fake).reportWinner(SET, entrant(1).id, [
-      { gameNum: 1, winnerId: entrant(1).id, selections: [] },
-      { gameNum: 2, winnerId: entrant(1).id, selections: [] },
+      { gameNum: 1, winnerId: entrant(1).id },
+      { gameNum: 2, winnerId: entrant(1).id },
     ]);
     assert.equal(fake.getSet(SET).state, 3);
     await client(fake).resetSet(SET);

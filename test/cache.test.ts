@@ -83,8 +83,8 @@ test('set cache', async (t) => {
     const SET = 107949995;
     await client.markSetInProgress(SET);
     await client.reportGames(SET, [
-      { gameNum: 1, winnerId: entrant(3).id, selections: [] },
-      { gameNum: 2, winnerId: entrant(4).id, selections: [] },
+      { gameNum: 1, winnerId: entrant(3).id },
+      { gameNum: 2, winnerId: entrant(4).id },
     ]);
 
     const cache = new SetCache(client, FIXTURE_EVENT_ID);

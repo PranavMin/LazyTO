@@ -130,18 +130,18 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(r.resp.msg, 'started on station 3');
   });
 
-  await t.test('REPORT_SCORE translates slots and characters and overwrites upstream', async () => {
-    // Game 1: Alpha (slot 1) wins, Fox (ext 2 -> sgg 6) vs Marth (ext 9 -> sgg 14).
+  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends winners only (design.md R13)', async () => {
+    // Game 1: Alpha (slot 1) wins. v1 reports winners only -- no selections.
     const r = await wii.reportScore(SET, [game(1, 2, 9)]);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
     assert.equal(r.resp.msg, '1-0');
     const games = env.fake.getSet(SET).games;
     assert.equal(games.length, 1);
     assert.equal(games[0]!.winnerId, entrant(1).id);
-    assert.deepEqual(games[0]!.selections, [
-      { entrantId: entrant(1).id, characterId: 6 },
-      { entrantId: entrant(2).id, characterId: 14 },
-    ]);
+
+    // No character/selection data reaches start.gg: just gameNum + winnerId.
+    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(1).id }]);
 
     const r2 = await wii.reportScore(SET, [game(1, 2, 9), game(2, 2, 9), game(1, 2, 9)]);
     assert.equal(r2.resp.msg, '2-1');
@@ -324,12 +324,16 @@ test('claim guards', async (t) => {
     assert.equal(r.resp.msg, 'in progress on start.gg');
   });
 
-  await t.test('bad character id is refused before going upstream', async () => {
-    const before = env.fake.callsFor('reportBracketSet').length;
+  await t.test('an out-of-range character value no longer blocks the report (winners only, design.md R13)', async () => {
+    // ext 77 has no start.gg mapping; in v1 the char is ignored, so the
+    // winner is still recorded and the report succeeds.
     const r = await wii.reportScore(SET, [game(1, 77, 9)]);
-    assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
-    assert.equal(r.resp.msg, 'game 1: bad character id');
-    assert.equal(env.fake.callsFor('reportBracketSet').length, before);
+    assert.equal(r.resp.status, RelayStatus.ST_OK);
+    assert.equal(r.resp.msg, '1-0');
+    const games = env.fake.getSet(SET).games;
+    assert.equal(games.at(-1)!.winnerId, entrant(1).id);
+    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(1).id }]);
   });
 });
 

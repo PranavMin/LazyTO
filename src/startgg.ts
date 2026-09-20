@@ -30,7 +30,6 @@ export class RateLimitedError extends Error {
 export interface GameDataInput {
   gameNum: number;
   winnerId: number;
-  selections: { entrantId: number; characterId: number }[];
 }
 
 /** A set node as the event-sets query returns it (states 1 and 2 only). */

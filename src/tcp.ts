@@ -28,7 +28,6 @@ import {
 import type { SetCache, CachedSet } from './cache.js';
 import { StationState, type Claim } from './state.js';
 import { StartggClient, StartggError, RateLimitedError, type GameDataInput } from './startgg.js';
-import { toStartggCharacter } from './chars.js';
 
 /** Where audit records go; audit.ts is the JSONL implementation. */
 export interface AuditSink {
@@ -396,7 +395,9 @@ function toEntry(s: CachedSet, state: 0 | 1): SetEntry {
 
 /**
  * Validate the wire game list against the claim and translate it for
- * start.gg: slots -> entrant ids, external char ids -> start.gg ids.
+ * start.gg: winner slots -> entrant ids. v1 reports winners only; the wire
+ * still carries p1_char/p2_char but the relay ignores them (design.md R13 --
+ * the Wii-side character read is unreliable, deferred to v2).
  * Returns an error msg string on bad data.
  */
 function validGames(
@@ -409,16 +410,9 @@ function validGames(
   for (let i = 0; i < list.length; i++) {
     const g = list[i];
     if (g.winner_slot !== 1 && g.winner_slot !== 2) return `game ${i + 1}: bad winner slot`;
-    const p1Char = toStartggCharacter(g.p1_char);
-    const p2Char = toStartggCharacter(g.p2_char);
-    if (p1Char === undefined || p2Char === undefined) return `game ${i + 1}: bad character id`;
     data.push({
       gameNum: i + 1,
       winnerId: g.winner_slot === 1 ? claim.p1Id : claim.p2Id,
-      selections: [
-        { entrantId: claim.p1Id, characterId: p1Char },
-        { entrantId: claim.p2Id, characterId: p2Char },
-      ],
     });
   }
   return { list, data };
