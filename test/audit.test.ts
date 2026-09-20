@@ -84,7 +84,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     await wii3.reportScore(SET_A, [game(1), game(1)]);
     const wii4 = new WiiClient(port, 4);
     await wii4.startSet(SET_B);
-    await wii4.endSet(SET_B, [game(2), game(2)]);
+    await wii4.endSet(SET_B, [game(2), game(2), game(2)]);
 
     await server.close();
     audit.close();
@@ -114,7 +114,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     const { sets } = await wii3.listSets();
     assert.equal(sets[0]!.set_id, SET_A);
     assert.equal(sets[0]!.state, 1);
-    const finish = await wii3.endSet(SET_A, [game(1), game(1)]);
+    const finish = await wii3.endSet(SET_A, [game(1), game(1), game(1)]);
     assert.equal(finish.resp.status, RelayStatus.ST_OK);
     assert.equal(fake.getSet(SET_A).state, 3);
 

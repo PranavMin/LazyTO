@@ -46,8 +46,8 @@ test('set cache', async (t) => {
       pending.map((s) => s.id),
       [107949994, 107949995, 107949996, 107949997],
     );
-    assert.equal(pending[0]!.roundShort, 'WR1');
-    assert.equal(pending[0]!.bestOf, 3);
+    assert.equal(pending[0]!.roundShort, 'WQF');
+    assert.equal(pending[0]!.bestOf, 5);
     assert.equal(pending[0]!.p1.tag, 'Alpha');
 
     const status = cache.status();
@@ -72,7 +72,7 @@ test('set cache', async (t) => {
       await cache.refresh();
       assert.deepEqual(
         cache.pending().map((s) => s.roundShort),
-        ['WR1', 'WR1', 'WR1', 'WR1', 'LR1', 'WSF', 'WF', 'LF', 'GF'],
+        ['WQF', 'WQF', 'WQF', 'WQF', 'LR1', 'WSF', 'WF', 'LF', 'GF'],
       );
     } finally {
       await f2.close();

@@ -23,7 +23,7 @@ test('startgg client', async (t) => {
     assert.equal(sets.length, 11);
     assert.ok(sets.some((s) => typeof s.id === 'string' && s.id.startsWith('preview_')));
     const first = sets.find((s) => s.id === SET)!;
-    assert.equal(first.totalGames, 3);
+    assert.equal(first.totalGames, 5);
     assert.equal(first.slots[0]!.entrant!.name, 'Alpha');
   });
 

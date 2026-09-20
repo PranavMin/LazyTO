@@ -19,7 +19,7 @@ import { WiiClient, rawRequest, game } from './wii-client.js';
 
 const STREAM_STATION = 1;
 const STREAM_ID = 1358079;
-const SET = 107949994; // Alpha vs Bravo, WR1, bo3
+const SET = 107949994; // Alpha vs Bravo, WQF, bo5
 
 class ArrayAudit implements AuditSink {
   events: Record<string, unknown>[] = [];
@@ -107,10 +107,10 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(resp.status, RelayStatus.ST_OK);
     assert.deepEqual(sets.map((s) => s.set_id), [107949994, 107949995, 107949996, 107949997]);
     const first = sets[0]!;
-    assert.equal(first.round, 'WR1');
+    assert.equal(first.round, 'WQF');
     assert.equal(first.p1_tag, 'Alpha');
     assert.equal(first.p2_tag, 'Bravo');
-    assert.equal(first.best_of, 3);
+    assert.equal(first.best_of, 5);
     assert.equal(first.state, 0);
   });
 
@@ -151,14 +151,14 @@ test('full set lifecycle on a non-stream station', async (t) => {
   await t.test('END_SET with an undecided score is refused locally', async () => {
     const r = await wii.endSet(SET, [game(1), game(2)]);
     assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
-    assert.equal(r.resp.msg, 'no winner at 1-1 bo3');
+    assert.equal(r.resp.msg, 'no winner at 1-1 bo5');
     assert.equal(env.fake.getSet(SET).state, 2, 'nothing went upstream');
   });
 
   await t.test('END_SET with a decided score completes the set and frees the station', async () => {
-    const r = await wii.endSet(SET, [game(1), game(2), game(1)]);
+    const r = await wii.endSet(SET, [game(1), game(2), game(1), game(1)]);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(r.resp.msg, 'final 2-1');
+    assert.equal(r.resp.msg, 'final 3-1');
     assert.equal(env.fake.getSet(SET).state, 3);
     assert.equal(env.state.get(3), undefined);
   });
@@ -361,6 +361,17 @@ test('abandon (section 5.6)', async (t) => {
   await t.test('abandoning a set the station does not hold', async () => {
     const r = await env.wii(11).abandonSet(SET);
     assert.equal(r.resp.status, RelayStatus.ST_SET_NOT_FOUND);
+  });
+
+  await t.test('abandoning a stream set leaves the stream assigned upstream', async () => {
+    // Verified live 2026-09-20 (design.md section 5.6): resetSet does not
+    // clear a stream assignment; only the TO can, by hand.
+    const streamWii = env.wii(STREAM_STATION, 1);
+    await streamWii.startSet(107949995, 1);
+    const r = await streamWii.abandonSet(107949995);
+    assert.equal(r.resp.status, RelayStatus.ST_OK);
+    assert.equal(env.fake.getSet(107949995).state, 1);
+    assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);
   });
 });
 

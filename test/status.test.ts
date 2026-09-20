@@ -42,7 +42,7 @@ test('status page', async (t) => {
   await t.test('renders stations, sets, scores, flags, and cache info', async () => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /1 ★/, 'stream station is starred');
-    assert.match(html, /WR1 {2}Alpha vs Bravo \(Bo3\)/);
+    assert.match(html, /WQF {2}Alpha vs Bravo \(Bo5\)/);
     assert.match(html, /2–1/);
     assert.match(html, /REPORT_SCORE \d+s/);
     assert.match(html, /✗ reportBracketSet failed/, 'failed upstream call is flagged');

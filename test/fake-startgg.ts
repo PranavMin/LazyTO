@@ -13,7 +13,8 @@
 //   - reportBracketSet without winnerId: full overwrite of the game rows
 //     (old ids deleted, fresh ids created), set stays state 2.
 //   - reportBracketSet with winnerId: same overwrite, state -> 3.
-//   - resetSet: state -> 1, games cleared.
+//   - resetSet: state -> 1, games cleared, stream assignment KEPT (verified
+//     live 2026-09-20, design.md section 5.6).
 //
 // Test hooks: failNext() injects 5xx or GraphQL errors, calls[] records
 // every upstream call with a timestamp for retry-count and rate assertions.
@@ -276,7 +277,8 @@ export class FakeStartgg {
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
     set.state = 1;
     set.games = [];
-    set.stream = null;
+    // set.stream stays: the real resetSet does not clear a stream assignment
+    // (verified live 2026-09-20, design.md section 5.6).
     return { status: 200, body: JSON.stringify({ data: { resetSet: { id: set.id, state: set.state } } }) };
   }
 }
@@ -285,6 +287,8 @@ export class FakeStartgg {
 // Event 1613010, 16 dummy entrants Alpha..Papa. Pool 1 is started (numeric
 // set ids like the probe's 107949994); pool 2 (3292311) is deliberately
 // unstarted, so its sets have preview_* string ids (design.md R8).
+// Matches the live event's shape (2026-09-20 run): sets are Bo5 and the
+// first round is "Winners Quarter-Final".
 
 export const FIXTURE_EVENT_ID = 1613010;
 export const FIXTURE_TOKEN = 'test-token';
@@ -304,7 +308,7 @@ function set(
   fullRoundText: string,
   p1: number | null,
   p2: number | null,
-  totalGames = 3,
+  totalGames = 5,
 ): FakeSet {
   return {
     id,
@@ -321,18 +325,18 @@ function set(
 /** Fresh mutable fixture per test; entrants 1..8 in pool 1, 9..16 in preview pool 2. */
 export function defaultFixture(): FakeSet[] {
   return [
-    set(107949994, 1, 'Winners Round 1', 1, 2),
-    set(107949995, 1, 'Winners Round 1', 3, 4),
-    set(107949996, 1, 'Winners Round 1', 5, 6),
-    set(107949997, 1, 'Winners Round 1', 7, 8),
+    set(107949994, 1, 'Winners Quarter-Final', 1, 2),
+    set(107949995, 1, 'Winners Quarter-Final', 3, 4),
+    set(107949996, 1, 'Winners Quarter-Final', 5, 6),
+    set(107949997, 1, 'Winners Quarter-Final', 7, 8),
     set(107949998, 2, 'Winners Semi-Final', null, null), // entrants TBD: must be filtered out
     set(107950001, -1, 'Losers Round 1', null, null),
     set(107950002, 3, 'Winners Final', null, null),
-    set(107950003, -3, 'Losers Final', null, null, 5),
-    set(107950004, 4, 'Grand Final', null, null, 5),
+    set(107950003, -3, 'Losers Final', null, null),
+    set(107950004, 4, 'Grand Final', null, null),
     // Unstarted pool 2: preview ids, both entrants known but unreportable (R8).
-    set('preview_3292311_1_1', 1, 'Winners Round 1', 9, 10),
-    set('preview_3292311_1_2', 1, 'Winners Round 1', 11, 12),
+    set('preview_3292311_1_1', 1, 'Winners Quarter-Final', 9, 10),
+    set('preview_3292311_1_2', 1, 'Winners Quarter-Final', 11, 12),
   ];
 }
 

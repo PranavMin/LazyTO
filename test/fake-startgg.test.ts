@@ -109,12 +109,15 @@ test('fake start.gg', async (t) => {
     assert.match(json.errors[0].message, /already been completed/);
   });
 
-  await t.test('resetSet returns the set to pending with no games', async () => {
+  await t.test('resetSet returns the set to pending with no games, keeping the stream', async () => {
     const { json } = await gql(fake, 'mutation Reset($setId: ID!) { resetSet(setId: $setId) { id state } }', {
       setId: SET,
     });
     assert.equal(json.data.resetSet.state, 1);
     assert.equal(fake.getSet(SET).games.length, 0);
+    // Verified live 2026-09-20 (design.md section 5.6): the real resetSet
+    // does not clear the stream assigned by the earlier assignStream.
+    assert.equal(fake.getSet(SET).stream?.id, 1358079);
   });
 
   await t.test('failNext injects 5xx then recovers, and calls are recorded', async () => {
