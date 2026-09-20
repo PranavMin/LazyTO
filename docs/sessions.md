@@ -177,7 +177,7 @@ Build with ninja. If the build breaks, fix the cause, don't work around it.
 ## 7. Slippi Dolphin — EXI forwarder
 
 **Repo:** `Ishiiruka` (fork, branch `reporter`)
-**Status: implemented 2026-09-19, uncommitted, not yet build-verified** (no C++ toolchain on the dev box at the time). Forwarder in EXI_DeviceSlippi + SlippiRelayAddress config field. Open: build it, commit, and R10 (station stamping) in design.md §11.
+**Status: done — built and landed 2026-09-19/20.** Forwarder in EXI_DeviceSlippi + SlippiRelayAddress config field; Release x64 builds (v142 toolset + DXSDK + Rust 1.88 — recipe in the fork's session report). Only code fix needed: C4200 pragma around relay_proto.h. R10: station 0 accepted for dev. R11 fixed via GALE01r2.ini (injected gecko codes disabled on reporter branch). Output: Binary/x64/Slippi Dolphin.exe, portable mode.
 **Prep:** `gh repo fork project-slippi/Ishiiruka --clone && cd Ishiiruka && git checkout -b reporter`, inside `P:\\Projects\\Automated Tournament Reporter\\`. Confirm you can build Slippi Dolphin locally first.
 
 **First message:**
