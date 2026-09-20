@@ -186,6 +186,8 @@ Build with ninja. If the build breaks, fix the cause, don't work around it.
 
 **Done when:** in Dolphin, with the relay running, the Tournament menu lists sets from the test tournament and starting one shows up in start.gg. Then iterate on menu UX in session 6's repo until it feels right at a venue.
 
+**Status: MET 2026-09-20 (end-to-end).** Our fork's Slippi Dolphin + rebuilt 0xF0 DOL (patched into `build/GALE01/SmashTournament-v2.iso`): the Tournament menu listed the 4 live WQF sets and START_SET on Alpha vs Papa (set 107949994) drove `markSetInProgress` on real start.gg -> state 2, confirmed via API. Station 0 (R10, Dolphin doesn't stamp). Root cause of the earlier timeout: the DOL had been built before the 0xD0->0xF0 EXI-cmd renumber, so game and forwarder disagreed on the command byte; rebuild aligned them. REPORT_SCORE / END_SET still to be exercised.
+
 ---
 
 ## 8. Nintendont — RelayEXI implementation
