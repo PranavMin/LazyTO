@@ -8,6 +8,14 @@ function makeClient(url: string) {
   return new StartggClient({ endpoint: url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
 }
 
+async function until(cond: () => boolean, what: string, deadlineMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > deadlineMs) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
 test('abbreviateRound', () => {
   assert.equal(abbreviateRound('Winners Round 2'), 'WR2');
   assert.equal(abbreviateRound('Winners Quarter-Final'), 'WQF');
@@ -114,10 +122,21 @@ test('set cache', async (t) => {
 
     fake.failNext('eventSets', '5xx', 3); // one full failed refresh (1 try + 2 retries)
     cache.start(25);
-    await new Promise((r) => setTimeout(r, 120));
-    cache.stop();
+    try {
+      // Tick 1: all three failures land on the same refresh (start() never
+      // overlaps refreshes), so it exhausts its retries and rejects.
+      await until(() => errors.length === 1, 'the failed refresh to reach the callback');
+      // Later ticks keep refreshing, now successfully; wait for one to finish.
+      await until(
+        () => fake.callsFor('eventSets').length >= before + 4 && cache.status().error === null,
+        'a successful refresh after the failed one',
+      );
+    } finally {
+      cache.stop();
+    }
 
     assert.ok(fake.callsFor('eventSets').length >= before + 4, 'interval kept refreshing');
     assert.equal(errors.length, 1, 'the failed refresh reached the callback');
+    assert.equal(cache.status().error, null, 'recovery cleared the recorded error');
   });
 });

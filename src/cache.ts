@@ -56,6 +56,7 @@ export class SetCache {
   private refreshedAt = 0;
   private refreshError: string | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private refreshing = false;
 
   constructor(
     private readonly client: StartggClient,
@@ -130,7 +131,15 @@ export class SetCache {
   start(intervalMs = 20_000): void {
     if (this.timer) throw new Error('cache already started');
     this.timer = setInterval(() => {
-      this.refresh().catch((e) => this.onRefreshError(e as Error));
+      // Skip the tick while a refresh (including its 5xx retries) is still in
+      // flight: refreshes never overlap, and the retry budget stays per-refresh.
+      if (this.refreshing) return;
+      this.refreshing = true;
+      this.refresh()
+        .catch((e) => this.onRefreshError(e as Error))
+        .finally(() => {
+          this.refreshing = false;
+        });
     }, intervalMs);
     this.timer.unref();
   }
