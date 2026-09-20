@@ -2,8 +2,10 @@
 // (design.md section 6.3). The wire carries the CSS ckind value
 // (CharacterKind, the EXTERNAL id ordering, sessions 5's finding); start.gg
 // numbers Melee's cast 1..26 alphabetically. Both tables are frozen -- the
-// cast has not changed since 2001 -- but the start.gg side should be
-// spot-checked once against the real API in the follow-up probe session.
+// cast has not changed since 2001. Verified against the real API 2026-09-19:
+// videogame(id: 1).characters returns exactly ids 1..26 alphabetical, and all
+// 26 rows below match. (The API also has 628 "Sheik / Zelda" and 1744 "Random
+// Character", which this table never maps to.)
 
 const EXTERNAL_TO_STARTGG: readonly (readonly [external: number, startgg: number, name: string])[] = [
   [0, 2, 'Captain Falcon'],
