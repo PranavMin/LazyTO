@@ -52,6 +52,7 @@ Only four things need a human. Everything else in setup is one Claude Code sessi
 ## 2. Relay — start.gg probe (R1 / R2)
 
 **Repo:** `tournament-reporter`
+**Status: done 2026-09-19.** R1/R2 resolved (see design.md §11); `scripts/probe.ts` committed. Two skipped datapoints recorded in design.md §12.
 **Prep:** `.env` filled in (bootstrap created it). `CLAUDE.md` already written by bootstrap; contents for reference:
 
 ```
@@ -82,6 +83,7 @@ The real API is touched only by scripts/probe.ts using .env (gitignored).
 ## 3. Nintendont — read-only investigation (R3)
 
 **Repo:** `Nintendont` (your fork, branch `reporter`)
+**Status: done 2026-09-19.** R3 resolved: blocking is unsafe; §6.2 is the dedicated-thread state machine. Output: `docs/relay-exi-investigation.md` in the fork. New R9 (connect() timeout) for session 8.
 **Prep:** none; `CLAUDE.md` written by bootstrap:
 
 ```
@@ -111,6 +113,7 @@ Do not write code unless the prompt asks for it.
 ## 4. Relay — build
 
 **Repo:** `tournament-reporter`
+**Status: done 2026-09-19.** 91 tests green, sim-wii passes (peak 66/70 per min, 0 errors), status page verified. R8 implemented as option (a). Follow-up run against the live test tournament still pending (design.md §12).
 **Prep:** if session 2 changed anything in the design, update `docs/design.md` and `protocol.yaml` and regenerate first.
 
 **First message:**
@@ -128,6 +131,7 @@ Do not write code unless the prompt asks for it.
 ## 5. Melee decomp — read-only orientation
 
 **Repo:** `melee` (your fork, branch `reporter`)
+**Status: done 2026-09-19.** Output: `docs/menu-orientation.md` in the fork. Key findings folded into design.md: no Slippi code in the decomp, external CharacterKind ids, R4 resolved.
 **Prep:** none; `CLAUDE.md` written by bootstrap:
 
 ```
@@ -155,6 +159,7 @@ Build with ninja. If the build breaks, fix the cause, don't work around it.
 ## 6. Melee decomp — menu and CSS keybinds
 
 **Repo:** `melee` (branch `reporter`)
+**Status: built 2026-09-19, awaiting the user's Dolphin test.** Three commits + `docs/session6-report.md` in the fork (EXI device contract, deviations folded into design.md §6.1). Expected in Dolphin: Z on main menu → LOADING → 5 s timeout; empty memcard Slot B first.
 **Prep:** `cp ../tournament-reporter/generated/relay_proto.h include/`. Have Slippi Dolphin ready to run the built DOL.
 
 **First message:**
@@ -172,6 +177,7 @@ Build with ninja. If the build breaks, fix the cause, don't work around it.
 ## 7. Slippi Dolphin — EXI forwarder
 
 **Repo:** `Ishiiruka` (fork, branch `reporter`)
+**Status: implemented 2026-09-19, uncommitted, not yet build-verified** (no C++ toolchain on the dev box at the time). Forwarder in EXI_DeviceSlippi + SlippiRelayAddress config field. Open: build it, commit, and R10 (station stamping) in design.md §11.
 **Prep:** `gh repo fork project-slippi/Ishiiruka --clone && cd Ishiiruka && git checkout -b reporter`, inside `P:\\Projects\\Automated Tournament Reporter\\`. Confirm you can build Slippi Dolphin locally first.
 
 **First message:**

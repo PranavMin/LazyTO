@@ -75,7 +75,7 @@ enum exi_poll_state {
     RELAY_IDLE  = 0,
     RELAY_BUSY  = 1,  /* request in flight on the ARM side */
     RELAY_DONE  = 2,  /* response buffer valid */
-    RELAY_ERROR = 3,  /* transport failed; see status byte detail */
+    RELAY_ERROR = 3,  /* transport failed; response buffer is zeroed */
 };
 
 /* Every message (request and response) begins with this header. */

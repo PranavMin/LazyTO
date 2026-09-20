@@ -78,7 +78,7 @@ enums:
       RELAY_IDLE:  {value: 0}
       RELAY_BUSY:  {value: 1, doc: "request in flight on the ARM side"}
       RELAY_DONE:  {value: 2, doc: "response buffer valid"}
-      RELAY_ERROR: {value: 3, doc: "transport failed; see status byte detail"}
+      RELAY_ERROR: {value: 3, doc: "transport failed; response buffer is zeroed"}
 
 structs:
   relay_hdr:

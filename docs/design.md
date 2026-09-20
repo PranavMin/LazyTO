@@ -236,33 +236,36 @@ struct set_entry {
 };  // 64 bytes
 
 struct list_sets_resp {
-    uint16_t count;          // ≤ 64
+    uint16_t count;          // ≤ MAX_SETS = 63
     uint16_t _pad;
     struct set_entry sets[]; // count entries
 };
 ```
 
-Cap of 64 entries (4 KB). A local with 12 stations never has 64 *pending, both-entrants-known* sets at once; if it does, the relay returns the 64 with the lowest round number and the menu's name filter finds the rest on the next refresh.
+Cap of **63** entries — the exact fit for the game's 4096-byte poll buffer once the framing is counted: 4 (poll state word) + 8 (`relay_hdr`) + 32 (`relay_resp`) + 4 (`list_sets_resp` fixed part) leaves 4048 bytes = 63 × 64-byte rows (found in session 6; the original "64 (4 KB)" predated the poll framing). A local with 12 stations never has 63 *pending, both-entrants-known* sets at once; if it does, the relay returns the 63 with the lowest round number and the menu's name filter finds the rest on the next refresh.
 
 ### 5.3 CMD_START_SET
 
 ```c
 struct start_set_req {
     uint32_t set_id;
-    uint8_t  stream;         // from tournament.cfg
+    uint8_t  stream;         // from tournament.cfg — stamped by the kernel, see below
     uint8_t  _pad[3];
 };
 ```
 
+**Station/stream stamping** (session 6): the game has no access to `tournament.cfg`, so it always sends `hdr.station = 0` and `start_set_req.stream = 0`. The Nintendont kernel (and the Dolphin forwarder in dev) stamps both from its config before forwarding. The relay treats the values it receives as authoritative.
+
 Relay behavior:
 1. If set not in cache → `ST_SET_NOT_FOUND`.
-2. If set already claimed by another station → `ST_SET_TAKEN`.
-3. If `stream=1` and `station != config.streamStation` → `ST_NOT_STREAM`.
-4. `markSetInProgress(setId)`.
-5. If `stream=1`: `assignStream(setId, config.streamId)`.
-6. Record `station → set_id` in memory and audit log. Return `ST_OK`.
+2. If set already claimed by another station → `ST_SET_TAKEN`. Also applies when the set is in progress *upstream* but claimed by no station (the TO started it by hand on start.gg): `ST_SET_TAKEN` with `msg = "in progress on start.gg"` (session 4).
+3. If the requesting station already holds a *different* set → `ST_INTERNAL` with `msg = "finish current set first"` — auto-releasing would orphan an in-progress set upstream (session 4).
+4. If `stream=1` and `station != config.streamStation` → `ST_NOT_STREAM`.
+5. `markSetInProgress(setId)`.
+6. If `stream=1`: `assignStream(setId, config.streamId)`.
+7. Record `station → set_id` in memory and audit log. Return `ST_OK`.
 
-Steps 4–5 are not atomic in start.gg. If 5 fails after 4 succeeds, the relay returns `ST_STARTGG_ERROR`, the set stays in progress and unassigned, and the status page flags it. The TO assigns the stream by hand. This is the one known partial-failure case and it degrades to today's workflow.
+Steps 5–6 are not atomic in start.gg. If 6 fails after 5 succeeds, the relay returns `ST_STARTGG_ERROR`, the set stays in progress and unassigned, and the status page flags it. The TO assigns the stream by hand. This is the one known partial-failure case and it degrades to today's workflow.
 
 ### 5.4 CMD_REPORT_SCORE
 
@@ -333,11 +336,17 @@ Main menu ─► Tournament
 | Z + D-down  | Undo last game |
 | Z + Start (hold 1 s) | End set (requires a decided score) |
 
-Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn in the CSS corner as `MANGO 2 – 1 ZAIN`, with a small `!` while a request is in flight and `✗` if the last one failed. Character ids are read from the CSS selection state at send time.
+Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn in the CSS corner as `MANGO 2 - 1 ZAIN`, with a small `!` while a request is in flight and `X` if the last one failed (the SIS printf path is ASCII-only, so no `✗`/`–` glyphs). Character ids are read from the CSS selection state at send time: slots 1 and 2 are the first two ports with `slot_type == Gm_PKind_Human`, `ChKind_None` when a slot has no human. END_SET is gated on a clinched score (`wins >= best_of/2 + 1`).
 
 **EXI usage:** `EXI_RELAY_REQ` (write request buffer) and `EXI_RELAY_POLL` (read `{state, response buffer}`) — command ids and poll states are defined in `protocol.yaml` (`exi_cmd`, `exi_poll_state`) so the game, the Dolphin forwarder, and the kernel can't drift; values (0xF0/0xF1) sit clear of Slippi's EXI command space, which extends to 0xE5. The game never blocks: the menu shows "Loading…" and polls once per frame. Response buffer is a static 4 KB region in `lbrelayexi.c`, `ATTRIBUTE_ALIGN(32)` as EXI DMA requires.
 
-**Menu route** (session 5): build the Tournament menu as a submenu of `GS_MENU` following the Sound Test pattern rather than a new scene. Memory is a non-issue — the arena is ~18 MiB and the tournament statics are ~8 KB (R4 resolved).
+**EXI device contract** (as built in session 6; authoritative header `melee/src/melee/lb/lbrelayexi.h`, details in melee `docs/session6-report.md`) — what the Dolphin forwarder (§9.3) and Nintendont (§6.2) must implement:
+- Address: **channel 1, device 0, frequency 4** (Slot B — the device Slippi Dolphin already exposes).
+- REQ: 4-byte immediate command word (`EXI_RELAY_REQ << 24`), then `relay_hdr` + payload via EXIImmEx (8–36 bytes), one select window.
+- POLL: immediate command word (`EXI_RELAY_POLL << 24`), then exactly 4096 bytes DMA-read by the game: byte 0 = `exi_poll_state`, 3 pad bytes, then `relay_hdr` (echoing the request's cmd), `relay_resp`, payload.
+- The game treats any poll state other than DONE/ERROR (including the 0xFF an absent device reads) as "still waiting" and times out after **5 s** (the kernel's own budget is 3 s). On `RELAY_ERROR` the response buffer is zeroed.
+
+**Menu route** (session 5, built in session 6): the Tournament menu lives in `GS_MENU`, entered by a **Z press on the main menu** — a visible "Tournament" menu item would need a modified SdMenu.dat asset, which is asset work, not code. All screens are SIS text overlays on a 640×480 ortho canvas (the gmtitle build-timestamp pattern); no models, no new assets. Every hook is a data-table or declaration edit (never a matched-function edit): main-menu think wrap, `GS_CSS` scene-row wraps, menu table grown to id 35 (`MENU_KIND_TOURNAMENT`). Memory is a non-issue — the arena is ~18 MiB and the tournament statics are ~8 KB (R4 resolved).
 
 **Constraints honored:** no malloc, no string parsing, all buffers static, all struct sizes asserted at compile time against the generated header.
 
@@ -347,8 +356,9 @@ Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn 
 
 Responsibilities, and nothing else:
 1. Parse `tournament.cfg` at boot (relay IP/port, station, stream) using the kernel-side FatFS pattern (`ConfigInit()` / `f_open_main_drive`). Missing or malformed file → set a flag; every relay command returns `ST_INTERNAL` with `msg="no tournament.cfg"`.
-2. On `EXI_RELAY_REQ`: copy the request buffer, set `RELAY_BUSY`, and hand off to a **dedicated kernel thread** that does socket → connect → send → recv → close with the 3 s budget enforced via the existing `poll()`-with-deadline pattern (SlippiNetwork.c). **The EXI handler itself must never block** (R3 resolved 2026-09-19): there is no EXI interrupt context — the game's EXI writes are serviced by the kernel's single main loop, and the game sits frozen inside the patched EXI transfer until that loop acks, so a block there freezes the console.
-3. On `EXI_RELAY_POLL`: return `{state: RELAY_IDLE|BUSY|DONE|ERROR, buffer}`. The Slippi-era EXI path never DMAs data back to the game, so the poll response uses the memcard read-back pattern: write through the DMA pointer, then `sync_after_write`.
+2. **Stamp `hdr.station` (every request) and `start_set_req.stream` (START_SET) from `tournament.cfg`** — the game always sends 0 for both (§5.3).
+3. On `EXI_RELAY_REQ`: copy the request buffer, set `RELAY_BUSY`, and hand off to a **dedicated kernel thread** that does socket → connect → send → recv → close with the 3 s budget enforced via the existing `poll()`-with-deadline pattern (SlippiNetwork.c). **The EXI handler itself must never block** (R3 resolved 2026-09-19): there is no EXI interrupt context — the game's EXI writes are serviced by the kernel's single main loop, and the game sits frozen inside the patched EXI transfer until that loop acks, so a block there freezes the console.
+4. On `EXI_RELAY_POLL`: return `{state: RELAY_IDLE|BUSY|DONE|ERROR, buffer}` in the §6.1 poll layout (zeroed buffer on ERROR). The Slippi-era EXI path never DMAs data back to the game, so the poll response uses the memcard read-back pattern: write through the DMA pointer, then `sync_after_write`.
 
 The kernel does not interpret payloads beyond the header length. Still one code path: one buffer, one thread (own 0x2000 stack added to the kernel.ld stack chain), four states, no retries. Template: Slippi Nintendont's broadcast networking thread.
 
@@ -376,11 +386,12 @@ The kernel does not interpret payloads beyond the header length. Still one code 
   "streamId": 7890,
   "streamStation": 1,
   "tcpPort": 7777,
-  "httpPort": 8080
+  "httpPort": 8080,
+  "auditDir": "/var/lib/tournament-reporter"
 }
 ```
 
-Startup validates every field and exits non-zero on any problem. No defaults.
+Startup validates every field and exits non-zero on any problem. No defaults — `auditDir` is explicit config rather than a hardcoded path (session 4: a hidden default, and it breaks Windows dev).
 
 **start.gg calls used:**
 
@@ -443,8 +454,8 @@ start.gg states: `1` not started → `2` in progress → `3` complete. The relay
 | reportBracketSet 5xx | Relay | Retry ×2. Then `ST_STARTGG_ERROR` to Wii; row flagged. Player retries later; full overwrite makes this safe. |
 | reportBracketSet 4xx (e.g. set already complete by TO) | Wii menu | "start.gg rejected — ask TO". No retry. |
 | Rate limited | Relay | Request waits up to 2 s for a token, else `ST_RATE_LIMITED`. Should never happen at this scale; if it does, the status page shows the call rate. |
-| Wii reboot mid-set | — | Set list offers current set first. Games are reloaded from start.gg via the cache (set query includes `games`). |
-| Relay restart | — | Station map rebuilt from start.gg: any in-progress set with a station note is re-claimed. (Relay writes `station N` into the set's `assignStation` if the event has stations configured; otherwise from the audit log replay on boot.) |
+| Wii reboot mid-set | — | Set list offers current set first; resume is a no-op START_SET. The relay and start.gg keep the score, but `set_entry` carries no games, so the CSS overlay restarts at a displayed 0–0 — the player re-enters the score and full overwrite makes that safe (session 4; a protocol design limit, not a bug). |
+| Relay restart | — | Audit-log replay on boot, only: claim/score/release events replayed, filtered against the live cache (a replayed set no longer pending is dropped). The `assignStation` variant §8 originally offered was not built (session 4). |
 
 ---
 
@@ -502,8 +513,9 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 
 **Per-tournament setup checklist** (this replaces nothing; it's added to the existing setup):
 1. Edit `config.json`: `eventId`, `streamId`. Restart service. Check status page shows the set count.
-2. Confirm each SD card's `tournament.cfg` station number matches the physical station label. Exactly one has `stream=1`.
-3. Boot one Wii, open Tournament menu, confirm the set list loads.
+2. **Start all pools on start.gg** (bracket page → each phase). Unstarted pools have preview-id sets the relay drops (R8); the status page warns "start all pools on start.gg" until this is done.
+3. Confirm each SD card's `tournament.cfg` station number matches the physical station label. Exactly one has `stream=1`.
+4. Boot one Wii, open Tournament menu, confirm the set list loads.
 
 **Network:** Pi and stream Wii on Ethernet, mandatory. Other Wiis on Ethernet where possible; Wii WiFi is 802.11g and unreliable on a busy venue network. A single unmanaged switch under the stream table covers it.
 
@@ -520,8 +532,9 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 | R5 | Players spamming Z+D-pad and racing requests. | Game side: one request in flight at a time; inputs ignored while `!` is showing. Relay side: last write wins, full overwrite makes this safe. |
 | R6 | A set the TO reports by hand while a station has it open. | Wii's next REPORT_SCORE gets 4xx → "ask TO". Station clears on next LIST_SETS (set no longer pending). |
 | R7 | Multiple events (e.g. singles + doubles) in one tournament. | Out of scope for v1: one `eventId` per relay config. Second event = second relay port + a per-Wii cfg line. Revisit if it hurts. |
-| R8 | **Preview set ids** (found 2026-09-19 during bootstrap): sets in a pool that hasn't been started have *string* ids (`preview_<poolId>_<round>_<n>`), not numeric — they cannot be represented in the protocol's `uint32 set_id`. Confirmed behavior: calling any set mutation (e.g. `markSetInProgress`) with a preview id starts the pool and materializes numeric ids for **all** its sets; the preview ids then stop existing. | Decide in session 4. Candidates: (a) per-tournament setup checklist (§10) gains "start all pools" and the cache simply drops preview-id sets with a status-page warning; (b) relay auto-starts a pool on first START_SET targeting it (needs a preview→uint32 mapping in the cache, adds state). Lean (a): one path, TO does it once at setup. The test tournament deliberately keeps pool 2 (`3292311`) unstarted to exercise whichever we pick. |
+| R8 | **Preview set ids** (found 2026-09-19 during bootstrap): sets in a pool that hasn't been started have *string* ids (`preview_<poolId>_<round>_<n>`), not numeric — they cannot be represented in the protocol's `uint32 set_id`. Confirmed behavior: calling any set mutation (e.g. `markSetInProgress`) with a preview id starts the pool and materializes numeric ids for **all** its sets; the preview ids then stop existing. | **Resolved 2026-09-19** (session 4): option (a) built — the cache drops preview-id sets and the status page warns "start all pools on start.gg"; §10's checklist gained the step. The test tournament deliberately keeps pool 2 (`3292311`) unstarted to exercise this against the real event. |
 | R9 | Kernel `connect()` has no timeout and nothing in Nintendont does outbound TCP today (session 3). An unreachable relay pins the RelayEXI thread inside `connect()` for IOS's internal timeout — the game is fine (it just sees `RELAY_BUSY`), but the station can't retry until `connect()` returns. | Measure on hardware in session 8. If it hurts: `IOCTL_SO_FCNTL` non-blocking socket + `poll(POLLOUT)` with the 3 s deadline, same as the recv path. |
+| R10 | The Dolphin forwarder does not stamp `hdr.station`/`stream` (session 7) — the relay sees station 0 from Dolphin, while the kernel stamps real values (§5.3/§6.2). | Decide: accept station 0 as the §9.3 dev-loop convention (relay config gains nothing; station 0 just must not collide with a real station number), or add a `SlippiRelayStation` Dolphin config field + stamping. Lean: accept station 0 for dev — one fewer config knob; revisit only if two Dolphins ever need to hit one relay. |
 
 ---
 
@@ -529,6 +542,7 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 
 - **Auto score from game end.** The game knows who won; a `GAME_END` hook could append the game automatically, with CSS keybinds only for corrections. Deferred so v1 has exactly one source of score truth (the player).
 - **Station assignment.** If the event uses start.gg stations, `assignStation` on START_SET makes the bracket page show where sets are playing.
-- **Probe follow-ups.** Two datapoints `scripts/probe.ts` deliberately skipped: re-assigning an already-assigned set (the rest of R1), and whether a decided score without `winnerId` auto-completes the set. Neither blocks v1 — END_SET always sends `winnerId` — so they're cheap probe tweaks only if a future feature needs them.
+- **Probe follow-ups.** Two datapoints `scripts/probe.ts` deliberately skipped: re-assigning an already-assigned set (the rest of R1), and whether a decided score without `winnerId` auto-completes the set. Neither blocks v1 — END_SET always sends `winnerId` — so they're cheap probe tweaks only if a future feature needs them. **Before the first live event:** spot-check two or three `chars.ts` mappings against the real API — the external-id → start.gg-id table was written from common knowledge (session 4).
+- **Session-4 follow-up run** (from the runbook): drive one station through the relay's real TCP port against the live test tournament with sim-wii, and diff the audit log against the start.gg set page. Pool 2 being unstarted should show the R8 warning on the status page.
 - **Second relay for redundancy.** Not now — one Pi, one path, and the manual start.gg workflow is the fallback.
 - **Non-stream overlay data.** The relay already knows every station's set and score; a per-station overlay for a second stream is a status-page query away.
