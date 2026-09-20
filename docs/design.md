@@ -335,7 +335,7 @@ Main menu ─► Tournament
 
 Each action sends `REPORT_SCORE` (or `END_SET`) immediately. The score is drawn in the CSS corner as `MANGO 2 – 1 ZAIN`, with a small `!` while a request is in flight and `✗` if the last one failed. Character ids are read from the CSS selection state at send time.
 
-**EXI usage:** `EXI_RELAY_REQ` (write request buffer) and `EXI_RELAY_POLL` (read `{state, response buffer}`) — command ids and poll states are defined in `protocol.yaml` (`exi_cmd`, `exi_poll_state`) so the game, the Dolphin forwarder, and the kernel can't drift; values sit clear of Slippi's 0x35–0x3D command range. The game never blocks: the menu shows "Loading…" and polls once per frame. Response buffer is a static 4 KB region in `lbrelayexi.c`, `ATTRIBUTE_ALIGN(32)` as EXI DMA requires.
+**EXI usage:** `EXI_RELAY_REQ` (write request buffer) and `EXI_RELAY_POLL` (read `{state, response buffer}`) — command ids and poll states are defined in `protocol.yaml` (`exi_cmd`, `exi_poll_state`) so the game, the Dolphin forwarder, and the kernel can't drift; values (0xF0/0xF1) sit clear of Slippi's EXI command space, which extends to 0xE5. The game never blocks: the menu shows "Loading…" and polls once per frame. Response buffer is a static 4 KB region in `lbrelayexi.c`, `ATTRIBUTE_ALIGN(32)` as EXI DMA requires.
 
 **Menu route** (session 5): build the Tournament menu as a submenu of `GS_MENU` following the Sound Test pattern rather than a new scene. Memory is a non-issue — the arena is ~18 MiB and the tournament statics are ~8 KB (R4 resolved).
 

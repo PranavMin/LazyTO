@@ -38,7 +38,7 @@ typedef unsigned long uint32_t;
 #define RELAY_MAGIC_1 'T'
 
 #define MAX_GAMES 5  /* games per set (best of 5) */
-#define MAX_SETS  64  /* cap on set_entry rows in a LIST_SETS response (4 KB) */
+#define MAX_SETS  63  /* cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64) */
 #define MSG_LEN   30  /* human-readable status text in relay_resp */
 #define ROUND_LEN 16  /* round name, e.g. WR2, LF, GF */
 #define TAG_LEN   16  /* player tag */
@@ -64,10 +64,10 @@ enum relay_status {
     ST_INTERNAL      = 7,
 };
 
-/* Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's 0x35-0x3D EXI command range. */
+/* Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY in EXI_DeviceSlippi.h). */
 enum exi_cmd {
-    EXI_RELAY_REQ  = 208,  /* write request buffer to the ARM side */
-    EXI_RELAY_POLL = 209,  /* read {state, response buffer} */
+    EXI_RELAY_REQ  = 240,  /* write request buffer to the ARM side */
+    EXI_RELAY_POLL = 241,  /* read {state, response buffer} */
 };
 
 /* first byte returned by EXI_RELAY_POLL */

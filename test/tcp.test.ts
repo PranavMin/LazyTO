@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { RelayStatus, RelayCmd } from '../generated/wire.js';
+import { RelayStatus, RelayCmd, MAX_SETS } from '../generated/wire.js';
 import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
 import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
@@ -364,9 +364,9 @@ test('abandon (section 5.6)', async (t) => {
   });
 });
 
-test('LIST_SETS caps at the wire limit of 64 rows', async (t) => {
+test('LIST_SETS caps at the wire limit of MAX_SETS rows', async (t) => {
   const sets: FakeSet[] = [];
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < MAX_SETS + 6; i++) {
     sets.push({
       id: 200_000 + i,
       state: 1,
@@ -383,5 +383,5 @@ test('LIST_SETS caps at the wire limit of 64 rows', async (t) => {
 
   const { resp, sets: listed } = await env.wii(3).listSets();
   assert.equal(resp.status, RelayStatus.ST_OK);
-  assert.equal(listed.length, 64);
+  assert.equal(listed.length, MAX_SETS);
 });

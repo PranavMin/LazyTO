@@ -27,8 +27,8 @@ constants:
     value: 5
     doc: "games per set (best of 5)"
   MAX_SETS:
-    value: 64
-    doc: "cap on set_entry rows in a LIST_SETS response (4 KB)"
+    value: 63
+    doc: "cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64)"
   MSG_LEN:
     value: 30
     doc: "human-readable status text in relay_resp"
@@ -66,10 +66,11 @@ enums:
       Command byte on the fake relay EXI device. Shared by the game side
       (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI;
       not part of the TCP wire format. Values chosen clear of Slippi's
-      0x35-0x3D EXI command range.
+      EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY
+      in EXI_DeviceSlippi.h).
     values:
-      EXI_RELAY_REQ:  {value: 0xD0, doc: "write request buffer to the ARM side"}
-      EXI_RELAY_POLL: {value: 0xD1, doc: "read {state, response buffer}"}
+      EXI_RELAY_REQ:  {value: 0xF0, doc: "write request buffer to the ARM side"}
+      EXI_RELAY_POLL: {value: 0xF1, doc: "read {state, response buffer}"}
 
   exi_poll_state:
     doc: "first byte returned by EXI_RELAY_POLL"

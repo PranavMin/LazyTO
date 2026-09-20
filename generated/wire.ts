@@ -11,7 +11,7 @@ export const MAGIC_0 = 0x4d; // 'M'
 export const MAGIC_1 = 0x54; // 'T'
 
 export const MAX_GAMES = 5; // games per set (best of 5)
-export const MAX_SETS = 64; // cap on set_entry rows in a LIST_SETS response (4 KB)
+export const MAX_SETS = 63; // cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64)
 export const MSG_LEN = 30; // human-readable status text in relay_resp
 export const ROUND_LEN = 16; // round name, e.g. WR2, LF, GF
 export const TAG_LEN = 16; // player tag
@@ -37,10 +37,10 @@ export enum RelayStatus {
   ST_INTERNAL = 7,
 }
 
-/** Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's 0x35-0x3D EXI command range. */
+/** Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY in EXI_DeviceSlippi.h). */
 export enum ExiCmd {
-  EXI_RELAY_REQ = 208, // write request buffer to the ARM side
-  EXI_RELAY_POLL = 209, // read {state, response buffer}
+  EXI_RELAY_REQ = 240, // write request buffer to the ARM side
+  EXI_RELAY_POLL = 241, // read {state, response buffer}
 }
 
 /** first byte returned by EXI_RELAY_POLL */
