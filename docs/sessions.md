@@ -159,7 +159,7 @@ Build with ninja. If the build breaks, fix the cause, don't work around it.
 ## 6. Melee decomp — menu and CSS keybinds
 
 **Repo:** `melee` (branch `reporter`)
-**Status: built 2026-09-19, awaiting the user's Dolphin test.** Three commits + `docs/session6-report.md` in the fork (EXI device contract, deviations folded into design.md §6.1). Expected in Dolphin: Z on main menu → LOADING → 5 s timeout; empty memcard Slot B first.
+**Status: done — Dolphin test passed 2026-09-19.** Three commits + `docs/session6-report.md` in the fork (EXI device contract, deviations folded into design.md §6.1). Test notes: shifted DOL patched into an ISO (`build/GALE01/SmashTournament.iso`, DOL appended past end-of-data, header 0x420 repointed — the trimmed rip has no in-place slack). Slippi Netplay Dolphin crashes it (its Gecko injections assume vanilla 1.02 addresses — expected; use mainline or our fork). In mainline Dolphin the menu renders correctly and shows "EXI ERROR" immediately — correct for an absent EXI device in an emulator (no floating bus); the 5 s timeout path is exercised via the session-7 fork with a dead relay address.
 **Prep:** `cp ../tournament-reporter/generated/relay_proto.h include/`. Have Slippi Dolphin ready to run the built DOL.
 
 **First message:**
