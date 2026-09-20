@@ -304,6 +304,8 @@ Relay derives winner from the game list (more wins), refuses with `ST_INTERNAL` 
 
 Payload: `uint32_t set_id`. Relay calls `resetSet(setId)` and clears the station's claim. Only valid if the set has no reported games; otherwise `ST_INTERNAL` with `msg = "ask TO"`. Undoing a set with games is a TO decision.
 
+**Verified live 2026-09-20:** `resetSet` does **not** clear a stream assignment on start.gg. An abandon (or TO reset) of a stream-station set leaves it stream-assigned upstream, so TSH keeps it on the overlay's radar until the TO clears the assignment by hand. The relay itself never reads `Set.stream`, so this is an operational note, not a code path.
+
 ---
 
 ## 6. Components
@@ -513,7 +515,7 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 
 **Per-tournament setup checklist** (this replaces nothing; it's added to the existing setup):
 1. Edit `config.json`: `eventId`, `streamId`. Restart service. Check status page shows the set count.
-2. **Start all pools on start.gg** (bracket page → each phase). Unstarted pools have preview-id sets the relay drops (R8); the status page warns "start all pools on start.gg" until this is done.
+2. **Start all pools and phases on start.gg** (bracket page → every phase, later phases included). Any unstarted pool or phase has preview-id sets the relay drops (R8) — the live event showed 37 dropped across unstarted pool 2 plus the later phases; the status page warns until this is done.
 3. Confirm each SD card's `tournament.cfg` station number matches the physical station label. Exactly one has `stream=1`.
 4. Boot one Wii, open Tournament menu, confirm the set list loads.
 
@@ -544,6 +546,7 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotat
 - **Auto score from game end.** The game knows who won; a `GAME_END` hook could append the game automatically, with CSS keybinds only for corrections. Deferred so v1 has exactly one source of score truth (the player).
 - **Station assignment.** If the event uses start.gg stations, `assignStation` on START_SET makes the bracket page show where sets are playing.
 - **Probe follow-ups.** Two datapoints `scripts/probe.ts` deliberately skipped: re-assigning an already-assigned set (the rest of R1), and whether a decided score without `winnerId` auto-completes the set. Neither blocks v1 — END_SET always sends `winnerId` — so they're cheap probe tweaks only if a future feature needs them. ~~Spot-check `chars.ts` against the real API~~ — done 2026-09-19: all 26 mappings verified against `videogame(id: 1).characters` (ids 1–26, alphabetical, exact match).
-- **Session-4 follow-up run** (from the runbook): drive one station through the relay's real TCP port against the live test tournament with sim-wii, and diff the audit log against the start.gg set page. Pool 2 being unstarted should show the R8 warning on the status page.
+- ~~Session-4 follow-up run~~ — **done 2026-09-20**: full set lifecycle (list → start → score ×2 → end 3-1 → reset) against the live event, all ST_OK, audit log matches start.gg exactly, chars.ts selections verified on live game rows, R8 warning rendered. One divergence found (resetSet keeps stream assignments — see §5.6); uint32 headroom confirmed (entrant ids ~24.7M, set ids ~108M).
+- **Relay repo follow-up:** align `test/fake-startgg.ts` with reality — resetSet must keep the stream assignment (the fake clears it today); optionally update the fixture to Bo5 / "Winners Quarter-Final" to mirror the live event.
 - **Second relay for redundancy.** Not now — one Pi, one path, and the manual start.gg workflow is the fallback.
 - **Non-stream overlay data.** The relay already knows every station's set and score; a per-station overlay for a second stream is a status-page query away.

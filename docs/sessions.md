@@ -113,7 +113,7 @@ Do not write code unless the prompt asks for it.
 ## 4. Relay — build
 
 **Repo:** `tournament-reporter`
-**Status: done 2026-09-19.** 91 tests green, sim-wii passes (peak 66/70 per min, 0 errors), status page verified. R8 implemented as option (a). Follow-up run against the live test tournament still pending (design.md §12).
+**Status: done.** 91 tests green, sim-wii passes (peak 66/70 per min, 0 errors), status page verified, R8 as option (a). Live follow-up run done 2026-09-20: full lifecycle against the real event, audit log matches start.gg, one divergence recorded (resetSet keeps stream assignments, design.md §5.6).
 **Prep:** if session 2 changed anything in the design, update `docs/design.md` and `protocol.yaml` and regenerate first.
 
 **First message:**
