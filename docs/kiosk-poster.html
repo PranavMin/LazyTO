@@ -1,0 +1,268 @@
+<!--
+  Kiosk controls poster: the one-page printout that sits next to each setup and
+  tells players how to find their set, score games, strike stages and read the
+  status lines. Open in a browser and print (Letter/A4 portrait, one page; turn
+  on "background graphics" so the GameCube button colours print).
+
+  FIRST PASS (2026-09-22), written the same night the v24 features it documents
+  were built, before any of them had been tested. Come back and make it better:
+    - re-check every bind and status string against the shipped build (binds are
+      mirrored from melee/src/melee/lb/lbtourney.h and mntourney.c);
+    - proof the printed sheet for clipping at the 3-column print layout;
+    - give it a real visual pass (it has had none - written blind, no render seen);
+    - consider a big-type "quick card" variant with only the CSS scoring binds;
+    - bump the "build vN" footer whenever the poster is re-verified.
+  Published copy: https://claude.ai/artifact/KGp3kXq5udrMwSVqAMbuSn (private).
+-->
+<title>Kiosk Controls Poster</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;700&display=swap">
+<style>
+  /* Single-theme by design: this is a sheet of paper. Every color is painted
+     explicitly so it holds on a dark host ground too. */
+  :root {
+    --paper: #ffffff;
+    --ink: #15161c;
+    --ink-2: #4a4c58;
+    --rule: #d9dae2;
+    --tint: #f1f2f7;
+    --accent: #3f3a8f;        /* GameCube indigo */
+    --btn-a: #3fae6d;         /* the real GC button colours: players read these */
+    --btn-b: #d9453d;
+    --btn-xy: #c9cad3;
+    --btn-z: #5a52b8;
+    --btn-c: #e7c33a;
+    --btn-d: #8a8c99;
+    --btn-l: #8a8c99;
+    --warn: #b7521a;
+    --desk: #2b2c33;
+  }
+  html { background: var(--desk); }
+  body {
+    margin: 0;
+    background: var(--desk);
+    color: var(--ink);
+    font-family: "Barlow", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.35;
+    padding-block: 24px;
+    padding-inline: 16px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .toolbar {
+    max-width: 8.5in; margin: 0 auto 12px; display: flex; gap: 12px;
+    align-items: center; justify-content: space-between; color: #e6e6ee;
+    font-size: 13px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    font: inherit; font-weight: 700; color: var(--ink); background: #fff;
+    border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer;
+  }
+  .toolbar button:focus-visible { outline: 3px solid var(--btn-c); outline-offset: 2px; }
+
+  .sheet {
+    background: var(--paper);
+    max-width: 8.5in;
+    margin: 0 auto;
+    padding: 0.45in 0.5in 0.4in;
+    box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    display: grid;
+    gap: 18px;
+  }
+
+  /* ---- masthead ---- */
+  .mast { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end;
+          border-bottom: 4px solid var(--ink); padding-bottom: 10px; }
+  .mast h1 {
+    font-family: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+    font-weight: 800; font-size: 54px; line-height: .92; margin: 0;
+    letter-spacing: -.01em; text-wrap: balance; text-transform: uppercase;
+  }
+  .mast h1 span { color: var(--accent); }
+  .mast .sub { color: var(--ink-2); font-size: 15px; margin: 8px 0 0; max-width: 34em; }
+  .flow { display: grid; gap: 6px; font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+          font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .04em;
+          text-align: right; color: var(--ink-2); }
+  .flow b { color: var(--ink); }
+
+  /* ---- three screens ---- */
+  .screens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .screen { border: 1.5px solid var(--ink); border-radius: 6px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+  .screen header {
+    background: var(--ink); color: #fff; padding: 8px 12px;
+    font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 800;
+    font-size: 20px; text-transform: uppercase; letter-spacing: .03em;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .screen header .n { color: var(--btn-c); font-size: 16px; }
+  .screen .body { padding: 10px 12px 12px; display: grid; gap: 9px; align-content: start; }
+  .screen .lead { color: var(--ink-2); margin: 0; font-size: 13px; }
+
+  .bind { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; }
+  .keys { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+  .plus { font-weight: 700; color: var(--ink-2); font-size: 12px; }
+  .k {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 13px; color: #fff;
+    border: 1.5px solid rgba(0,0,0,.25); box-sizing: border-box; letter-spacing: 0;
+  }
+  .k.a { background: var(--btn-a); }
+  .k.b { background: var(--btn-b); }
+  .k.x, .k.y { background: var(--btn-xy); color: var(--ink); border-radius: 11px; width: 22px; }
+  .k.z { background: var(--btn-z); border-radius: 5px; }
+  .k.c { background: var(--btn-c); color: var(--ink); font-size: 11px; width: 26px; border-radius: 13px; }
+  .k.l { background: var(--btn-l); border-radius: 5px; width: 24px; font-size: 11px; }
+  .k.st { background: var(--btn-d); font-size: 9px; width: 26px; border-radius: 13px; }
+  .k.d { background: var(--btn-d); border-radius: 4px; font-size: 12px; }
+  .k.stick { background: var(--tint); color: var(--ink); border-color: var(--ink-2); font-size: 12px; }
+  .does { font-size: 13.5px; }
+  .does b { font-weight: 700; }
+  .does small { display: block; color: var(--ink-2); font-size: 12px; margin-top: 1px; }
+
+  .sep { height: 1px; background: var(--rule); margin: 2px 0; }
+  .tag { display: inline-block; font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+         font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent);
+         border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; }
+
+  /* ---- bottom band ---- */
+  .band { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 14px; border-top: 1.5px solid var(--ink); padding-top: 12px; }
+  .band h3 { margin: 0 0 6px; font-family: "Barlow Condensed", sans-serif; font-weight: 800; font-size: 17px;
+             text-transform: uppercase; letter-spacing: .04em; }
+  .band p, .band li { margin: 0; font-size: 13px; }
+  .band ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+  .stages { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 13px; }
+  .stages span::before { content: ""; display: inline-block; width: 8px; height: 8px; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+  .status { display: grid; gap: 4px; font-size: 13px; }
+  .status code { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .04em;
+                 background: var(--tint); padding: 1px 6px; border-radius: 3px; color: var(--ink); }
+  .status .red code { color: var(--btn-b); }
+
+  .foot { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); font-size: 11.5px;
+          border-top: 1px solid var(--rule); padding-top: 8px; flex-wrap: wrap; }
+
+  @media (max-width: 720px) {
+    .screens, .band { grid-template-columns: 1fr; }
+    .mast { grid-template-columns: 1fr; }
+    .flow { text-align: left; }
+    .mast h1 { font-size: 40px; }
+    .sheet { padding: 20px 16px; }
+  }
+
+  @page { size: letter portrait; margin: 0.35in; }
+  @media print {
+    html, body { background: #fff; padding: 0; }
+    .toolbar { display: none; }
+    .sheet { box-shadow: none; max-width: none; padding: 0.1in 0.15in; gap: 14px; }
+    .mast h1 { font-size: 50px; }
+    .screens, .band { grid-template-columns: repeat(3, 1fr); break-inside: avoid; }
+    .band { grid-template-columns: 1.3fr 1fr 1fr; }
+    .screen { break-inside: avoid; }
+  }
+</style>
+
+<div class="toolbar">
+  <span>Letter / A4 portrait, one page. Turn on "background graphics" in the print dialog so the button colours print.</span>
+  <button type="button" id="print-btn" onclick="window.print()">Print</button>
+</div>
+
+<main class="sheet">
+  <div class="mast">
+    <div>
+      <h1>Tournament <span>Kiosk</span><br>How to play your set</h1>
+      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, pick your tag, play, and score each game with the controller. Any port can score.</p>
+    </div>
+    <div class="flow">
+      <div><b>1</b> Set list</div>
+      <div><b>2</b> Character select</div>
+      <div><b>3</b> Stage select</div>
+      <div><b>4</b> Play, then back to <b>2</b> to score</div>
+    </div>
+  </div>
+
+  <div class="screens">
+    <!-- 1 -->
+    <section class="screen">
+      <header><span class="n">1</span> Set list</header>
+      <div class="body">
+        <p class="lead">Every set that's ready to play, names first, round at the end. Pick yours.</p>
+        <div class="bind"><div class="keys"><span class="k stick">&uarr;&darr;</span></div><div class="does">Move up / down the list</div></div>
+        <div class="bind"><div class="keys"><span class="k l">L</span><span class="k l">R</span></div><div class="does">Filter by first letter of a tag</div></div>
+        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does"><b>Start the set</b><small>Confirms once, then A again to accept</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span></div><div class="does"><b>Friendlies</b><small>Play without a set. Nothing is reported.</small></div></div>
+        <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Refresh the list</div></div>
+        <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to the main menu</div></div>
+        <div class="sep"></div>
+        <p class="lead">No sets showing? Press Y. If it still says NO SETS, tell the TO, the bracket may not be started yet.</p>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="screen">
+      <header><span class="n">2</span> Character select</header>
+      <div class="body">
+        <p class="lead"><b>Pick your name tag first.</b> The two players' tags are the top two entries in the tag list. This tells the kiosk which port is which.</p>
+        <div class="sep"></div>
+        <span class="tag">Scoring, hold Z + flick the C-stick</span>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Left player won the game</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Right player won the game</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game</div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 second)<small>Only once someone has the winning score</small></div></div>
+        <div class="sep"></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k x">X</span></div><div class="does"><b>Handwarmer: starts right now</b><small>Everyone ready? Random legal stage, no striking, not scored. Not ready? It arms for the next game instead.</small></div></div>
+        <div class="bind"><div class="keys"><span class="k d">&uarr;</span><span class="k d">&darr;</span></div><div class="does">D-pad: rumble on / off for your port</div></div>
+        <div class="bind"><div class="keys"><span class="k st">START</span></div><div class="does">Go to stage select</div></div>
+        <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to the set list</div></div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="screen">
+      <header><span class="n">3</span> Stage select</header>
+      <div class="body">
+        <p class="lead">Only the six legal stages are on the screen. Strike right here: a struck stage disappears and can't be picked, by hand or by random.</p>
+        <div class="bind"><div class="keys"><span class="k x">X</span></div><div class="does"><b>Strike the stage under the cursor</b></div></div>
+        <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Bring every struck stage back<small>Mis-strike? Y and start over</small></div></div>
+        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does">Pick the stage</div></div>
+        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does">On the random icon: random from what's left</div></div>
+        <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to character select</div></div>
+        <div class="sep"></div>
+        <p class="lead">Strikes clear every time you come back to this screen, so strike fresh for each game (loser of the last game picks, as usual).</p>
+        <div class="sep"></div>
+        <p class="lead"><b>After the game</b> you land back on character select. Score it there (step 2), then pick characters for the next game.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="band">
+    <div>
+      <h3>What the bottom of the screen means</h3>
+      <div class="status">
+        <div><code>MANGO P1 &nbsp;2 - 1&nbsp; P3 ZAIN</code> the score, with the port each player's tag is on</div>
+        <div class="red"><code>HANDWARMER NEXT - NOT SCORED</code> at the top: the next game won't count (armed because someone wasn't ready yet)</div>
+        <div><code>SCORE SENT</code> start.gg has it &nbsp;&middot;&nbsp; <code>SENDING...</code> wait &nbsp;&middot;&nbsp; <code>SEND FAILED</code> flick again, or tell the TO</div>
+      </div>
+    </div>
+    <div>
+      <h3>Already set for you</h3>
+      <ul>
+        <li>4 stock, 8:00, items off</li>
+        <li>UCF 0.8 and neutral spawns</li>
+        <li>All characters and stages unlocked</li>
+        <li>Music off; a handwarmer shows a count-up clock top-left that goes red after 1:00</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Random picks from</h3>
+      <div class="stages">
+        <span>Battlefield</span><span>Final Destination</span>
+        <span>Fountain of Dreams</span><span>Yoshi's Story</span>
+        <span>Dream Land</span><span>Pok&eacute;mon Stadium</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Wrong set started, or a score you can't fix with undo? Get the TO before ending the set.</span>
+    <span>Tournament Reporter kiosk &middot; build v33</span>
+  </div>
+</main>
