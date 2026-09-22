@@ -1,0 +1,10 @@
+{
+  "startggEndpoint": "https://api.start.gg/gql/alpha",
+  "token": "REPLACE_ME",
+  "eventId": 0,
+  "streamId": 0,
+  "streamStation": 1,
+  "tcpPort": 7777,
+  "httpPort": 8080,
+  "auditDir": "/var/lib/tournament-reporter"
+}

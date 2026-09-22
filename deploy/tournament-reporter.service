@@ -1,0 +1,32 @@
+# Tournament Reporter LAN relay (docs/design.md section 10).
+# Installed by deploy/install.sh, which replaces @NODE@ with the absolute
+# path of the nvm-installed Node 22 binary (e.g.
+# /home/pi/.nvm/versions/node/v22.20.0/bin/node) and copies the result to
+# /etc/systemd/system/tournament-reporter.service. Do not install this file
+# unrendered: systemd would refuse to start it, by design.
+
+[Unit]
+Description=Tournament Reporter LAN relay (Wii <-> start.gg)
+Documentation=file:///opt/tournament-reporter/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/tournament-reporter
+Environment=CONFIG=/etc/tournament-reporter/config.json
+ExecStart=@NODE@ /opt/tournament-reporter/dist/main.js
+# The relay exits non-zero on a bad config or an unreachable start.gg at
+# startup (fail fast). on-failure restarts it; systemd's start-rate limit
+# (5 in 10 s) then parks the unit as "failed", which is what `systemctl
+# status` and the checklist expect to see.
+Restart=on-failure
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tournament-reporter
+
+[Install]
+WantedBy=multi-user.target

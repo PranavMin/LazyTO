@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, ConfigError } from '../src/config.js';
@@ -124,4 +124,25 @@ test('tcpPort and httpPort must differ', () => {
 
 test('empty auditDir', () => {
   expectProblems(JSON.stringify({ ...VALID, auditDir: '' }), 'auditDir must be a non-empty string');
+});
+
+// deploy/config.example.json is the file install.sh copies to
+// /etc/tournament-reporter/config.json. It must document exactly the fields
+// config.ts validates, and its only placeholders are the three the TO has
+// to fill in (token, eventId, streamId); everything else must pass as-is.
+test('deploy/config.example.json matches the validated fields', () => {
+  const examplePath = join(import.meta.dirname, '..', 'deploy', 'config.example.json');
+  const example = JSON.parse(readFileSync(examplePath, 'utf8')) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(example).sort(), Object.keys(VALID).sort());
+  assert.equal(example.token, 'REPLACE_ME');
+  try {
+    loadConfig(examplePath);
+    assert.fail('the unedited example must not load (eventId/streamId are placeholders)');
+  } catch (e) {
+    assert.ok(e instanceof ConfigError, `expected ConfigError, got ${e}`);
+    assert.deepEqual(e.problems, ['eventId must be a positive integer', 'streamId must be a positive integer']);
+  }
+  // With the three placeholders filled in, the example is a complete config.
+  const filled = { ...example, token: 'tok', eventId: 1613010, streamId: 1358079 };
+  assert.deepEqual(loadConfig(writeConfig(JSON.stringify(filled))), filled);
 });

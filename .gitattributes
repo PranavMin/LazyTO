@@ -3,3 +3,5 @@
 generated/** text eol=lf
 protocol.yaml text eol=lf
 tools/*.py    text eol=lf
+# Deployment files run on the Pi: keep them LF regardless of the checkout.
+deploy/**     text eol=lf
