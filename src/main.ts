@@ -44,7 +44,13 @@ async function main(): Promise<void> {
     streamId: config.streamId,
   });
   await tcp.listen(config.tcpPort);
-  const status = new StatusServer({ state, cache, startgg, streamStation: config.streamStation });
+  const status = new StatusServer({
+    state,
+    cache,
+    startgg,
+    streamStation: config.streamStation,
+    eventId: config.eventId,
+  });
   await status.listen(config.httpPort);
 
   audit.record({ type: 'startup', eventId: config.eventId, sets: cache.status().count });

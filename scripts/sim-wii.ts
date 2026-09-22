@@ -150,7 +150,7 @@ async function main(): Promise<void> {
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079 });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1 });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventId: FIXTURE_EVENT_ID });
   await status.listen(0, '127.0.0.1');
   cache.start();
 

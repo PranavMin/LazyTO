@@ -17,6 +17,8 @@ export interface Action {
   cmd: string;
   at: number;
   ok: boolean;
+  status: string; // RelayStatus name sent back, e.g. ST_OK, ST_STARTGG_ERROR
+  msg: string; // the relay_resp msg the player saw
 }
 
 export interface Flag {
@@ -51,8 +53,8 @@ export class StationState {
     return undefined;
   }
 
-  recordAction(station: number, cmd: string, ok: boolean): void {
-    this.actions.set(station, { cmd, at: Date.now(), ok });
+  recordAction(station: number, cmd: string, ok: boolean, status: string, msg: string): void {
+    this.actions.set(station, { cmd, at: Date.now(), ok, status, msg });
   }
 
   lastAction(station: number): Action | undefined {

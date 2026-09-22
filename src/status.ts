@@ -1,8 +1,14 @@
-// status.ts -- server-rendered status page on :8080 (design.md section 6.3).
-// Read-only, no auth: the LAN is the trust boundary, same as the TSH laptop.
-// One row per station with its set, score, last action, and status; rows
-// with a failed start.gg call stay flagged until the TO clicks ack -- the
-// only interactive element. Auto-refreshes every 5 s.
+// status.ts -- server-rendered status page on :8080 (design.md section 6.3,
+// requirement F7). Read-only, no auth: the LAN is the trust boundary, same
+// as the TSH laptop. One row per station with its set, score, last action
+// (with the status and message the player saw), and any failed start.gg
+// call; rows with a failed start.gg call stay flagged until the TO clicks
+// ack -- the only interactive element. Plain HTML, no client JS; a meta
+// refresh every 5 s. Readable on a phone (viewport meta, wrapping table).
+//
+// The footer is the "night of" dashboard: event id, cache size and age
+// (stale = warning), how many sets are selectable vs on stations, upstream
+// call rate, the last refresh error, and the R8 preview-id warning.
 
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -15,7 +21,11 @@ export interface StatusDeps {
   cache: SetCache;
   startgg: StartggClient;
   streamStation: number;
+  eventId: number;
 }
+
+/** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
+export const STALE_CACHE_MS = 60_000;
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -67,7 +77,7 @@ export class StatusServer {
   }
 
   render(): string {
-    const { state, cache, startgg, streamStation } = this.deps;
+    const { state, cache, startgg, streamStation, eventId } = this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -81,45 +91,70 @@ export class StatusServer {
       const score = claim?.games.length
         ? `${claim.games.filter((g) => g.winner_slot === 1).length}–${claim.games.filter((g) => g.winner_slot === 2).length}`
         : '—';
+
       const action = state.lastAction(station);
-      const actionText = action ? `${action.cmd.replace('CMD_', '')} ${age(action.at)}` : '—';
+      let actionText = '—';
+      if (action) {
+        const cmd = escapeHtml(action.cmd.replace('CMD_', ''));
+        actionText = action.ok
+          ? `${cmd} ${age(action.at)} ago`
+          : `<span class="warn">✗ ${cmd} ${age(action.at)} ago — ${escapeHtml(action.status)}: ${escapeHtml(action.msg)}</span>`;
+      }
+
       const stationFlags = flags.filter((f) => f.station === station);
       const status = stationFlags.length
         ? stationFlags
             .map(
               (f) =>
-                `✗ ${escapeHtml(f.message)} <form method="post" action="/ack?id=${f.id}"><button>ack</button></form>`,
+                `<span class="warn">✗ ${escapeHtml(f.message)} (${age(f.at)} ago)</span> ` +
+                `<form method="post" action="/ack?id=${f.id}"><button>ack</button></form>`,
             )
             .join('<br>')
         : 'OK';
       const star = station === streamStation ? ' ★' : '';
       return `<tr><td>${station}${star}</td><td>${escapeHtml(setText)}</td><td>${score}</td><td>${actionText}</td><td>${status}</td></tr>`;
     });
+    if (rows.length === 0) {
+      rows.push('<tr><td colspan="5" class="muted">no station has connected yet</td></tr>');
+    }
 
     const cs = cache.status();
+    const onStations = state.stations().filter((s) => state.get(s) !== undefined).length;
+    const selectable = cache.pending().filter((s) => state.stationFor(s.id) === undefined).length;
+    const stale = cs.refreshedAt > 0 && Date.now() - cs.refreshedAt > STALE_CACHE_MS;
     const cacheLine = cs.refreshedAt
-      ? `Cache: ${cs.count} sets, refreshed ${age(cs.refreshedAt)} ago.`
+      ? `Cache: ${cs.count} sets (${selectable} selectable, ${onStations} on stations), refreshed ${age(cs.refreshedAt)} ago.`
       : 'Cache: never refreshed.';
+    const staleLine = stale
+      ? `<p class="warn">⚠ cache is stale (last refresh ${age(cs.refreshedAt)} ago; expected every 20 s) — is start.gg reachable?</p>`
+      : '';
     const errorLine = cs.error ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>` : '';
     const warningLines = cs.warnings.map((w) => `<p class="warn">⚠ ${escapeHtml(w)}</p>`).join('');
 
     return `<!doctype html>
-<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="5">
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="5">
 <title>Tournament Reporter</title>
 <style>
-  body { font-family: monospace; margin: 1.5em; }
-  table { border-collapse: collapse; }
-  td, th { padding: 0.3em 1em; border-bottom: 1px solid #ccc; text-align: left; }
+  body { font-family: monospace; font-size: 16px; margin: 1em; }
+  h1 { font-size: 1.25em; margin: 0 0 0.25em; }
+  .sub { margin: 0 0 1em; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { padding: 0.4em 0.6em; border-bottom: 1px solid #ccc; text-align: left; vertical-align: top; }
   .warn { color: #a40; }
+  .muted { color: #888; }
   form { display: inline; }
+  button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
 </style></head><body>
 <h1>Tournament Reporter</h1>
+<p class="sub">Event <b>${eventId}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
 <table>
-<tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>Status</th></tr>
+<tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
 ${rows.join('\n')}
 </table>
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
-${errorLine}${warningLines}
+${staleLine}${errorLine}${warningLines}
 </body></html>`;
   }
 }
