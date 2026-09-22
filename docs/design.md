@@ -518,11 +518,15 @@ Environment=CONFIG=/etc/tournament-reporter/config.json
 
 Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotated per tournament by naming it `<eventId>.jsonl`).
 
+**Status: done 2026-09-22** — `npm run build` (tsc → `dist/`, ESM, `dist/main.js` is the entry; `generated/wire.ts` compiled in place, never copied); the unit above is `deploy/tournament-reporter.service` (plus `User=pi`, `RestartSec=2`, `network-online.target`), with the exact nvm Node 22 path rendered in by `deploy/install.sh` (idempotent: nvm + Node 22, `npm ci` + build, `/opt` code, `/etc` config 0600, `/var/lib` audit dir, enable + restart, reports `failed` loudly). `deploy/config.example.json` + README "Config" document every field. Rehearsed on the dev machine 2026-09-22: `node dist/main.js` against `npm run fake`, driven by `npm run sim -- --relay=…` for 600 s: 12 stations, 122 sets completed, 749 Wii requests (peak 80/min), 8 benign ST_SET_TAKEN races, **0 errors**; upstream 643 calls, **peak 67/min** against the 70/min guard (the sim paces one action every ~12 s per station — 5× the §6.3 estimate of ~1 upstream call/min/station — so this is a stress number, not the venue rate). Not yet run on a real Pi.
+
 **Per-tournament setup checklist** (this replaces nothing; it's added to the existing setup):
 1. Edit `config.json`: `eventId`, `streamId`. Restart service. Check status page shows the set count.
 2. **Start all pools and phases on start.gg** (bracket page → every phase, later phases included). Any unstarted pool or phase has preview-id sets the relay drops (R8) — the live event showed 37 dropped across unstarted pool 2 plus the later phases; the status page warns until this is done.
 3. Confirm each SD card's `tournament.cfg` station number matches the physical station label. Exactly one has `stream=1`.
 4. Boot one Wii, open Tournament menu, confirm the set list loads.
+
+**Status: done 2026-09-22** — checklist is in README.md ("Per-tournament checklist"), with a "The night of" table keyed on what the status page shows. The status page (F7) now shows per station the set, score, last action with age and the status/msg the player saw, and every failed start.gg call with message and age (sticky until ack); footer has event id, cache size split selectable / on stations, cache age with a stale warning after 60 s, upstream rate, last refresh error, and the R8 preview warning. Server-rendered, no client JS beyond the 5 s meta refresh; phone-width layout checked.
 
 **Network:** Pi and stream Wii on Ethernet, mandatory. Other Wiis on Ethernet where possible; Wii WiFi is 802.11g and unreliable on a busy venue network. A single unmanaged switch under the stream table covers it.
 
