@@ -140,19 +140,25 @@ export class StatusServer {
   body { font-family: monospace; font-size: 16px; margin: 1em; }
   h1 { font-size: 1.25em; margin: 0 0 0.25em; }
   .sub { margin: 0 0 1em; }
+  .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; }
   td, th { padding: 0.4em 0.6em; border-bottom: 1px solid #ccc; text-align: left; vertical-align: top; }
+  td:first-child, td:nth-child(3) { white-space: nowrap; }
   .warn { color: #a40; }
   .muted { color: #888; }
   form { display: inline; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
+  @media (max-width: 600px) {
+    body { font-size: 14px; margin: 0.5em; }
+    td, th { padding: 0.3em 0.4em; }
+  }
 </style></head><body>
 <h1>Tournament Reporter</h1>
 <p class="sub">Event <b>${eventId}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
-<table>
+<div class="scroll"><table>
 <tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
 ${rows.join('\n')}
-</table>
+</table></div>
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${staleLine}${errorLine}${warningLines}
 </body></html>`;

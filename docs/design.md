@@ -387,6 +387,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
 
 ```json
 {
+  "startggEndpoint": "https://api.start.gg/gql/alpha",
   "token": "…",
   "eventId": 123456,
   "streamId": 7890,
@@ -397,7 +398,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
 }
 ```
 
-Startup validates every field and exits non-zero on any problem. No defaults — `auditDir` is explicit config rather than a hardcoded path (session 4: a hidden default, and it breaks Windows dev).
+Startup validates every field and exits non-zero on any problem. No defaults — `auditDir` is explicit config rather than a hardcoded path (session 4: a hidden default, and it breaks Windows dev), and `startggEndpoint` is explicit for the same reason (2026-09-22: the built `dist/main.js` is rehearsed against `test/fake-startgg.ts` served by `npm run fake`, so the URL cannot be a constant). `deploy/config.example.json` is the template; a test pins its keys to `config.ts`.
 
 **start.gg calls used:**
 
