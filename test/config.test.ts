@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { loadConfig, ConfigError } from '../src/config.js';
 
 const VALID = {
+  startggEndpoint: 'https://api.start.gg/gql/alpha',
   token: 'tok-abc',
   eventId: 1613010,
   streamId: 1358079,
@@ -72,6 +73,7 @@ test('non-object JSON', () => {
 test('every missing field is reported at once', () => {
   expectProblems(
     '{}',
+    'missing field "startggEndpoint"',
     'missing field "token"',
     'missing field "eventId"',
     'missing field "streamId"',
@@ -84,6 +86,13 @@ test('every missing field is reported at once', () => {
 
 test('unknown field is rejected', () => {
   expectProblems(JSON.stringify({ ...VALID, extra: 1 }), 'unknown field "extra"');
+});
+
+test('startggEndpoint must be an http(s) URL', () => {
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: '' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'ftp://api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 7 }), 'startggEndpoint must be an http(s) URL');
 });
 
 test('empty token', () => {

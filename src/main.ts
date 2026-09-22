@@ -5,7 +5,7 @@
 // rebuild station claims, then serves TCP and the status page.
 
 import { loadConfig } from './config.js';
-import { StartggClient, STARTGG_ENDPOINT } from './startgg.js';
+import { StartggClient } from './startgg.js';
 import { SetCache } from './cache.js';
 import { StationState } from './state.js';
 import { AuditLog, auditPath, replayClaims } from './audit.js';
@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   const config = loadConfig(configPath);
 
   const audit = new AuditLog(auditPath(config.auditDir, config.eventId));
-  const startgg = new StartggClient({ endpoint: STARTGG_ENDPOINT, token: config.token });
+  const startgg = new StartggClient({ endpoint: config.startggEndpoint, token: config.token });
   const cache = new SetCache(startgg, config.eventId, (e) =>
     audit.record({ type: 'refresh_error', error: String(e) }),
   );
