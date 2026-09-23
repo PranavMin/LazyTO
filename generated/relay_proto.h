@@ -159,16 +159,16 @@ RELAY_STATIC_ASSERT(offsetof(struct start_set_req, _pad) == 5, start_set_req__pa
 /* One completed game. */
 struct game_result {
     uint8_t winner_slot;  /* 1 or 2 */
-    uint8_t p1_char;  /* Melee external character id (CharacterKind, the CSS ckind value) */
+    uint8_t p1_char;  /* Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected. */
     uint8_t p2_char;
-    uint8_t _pad;
+    uint8_t stage;  /* Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand */
 };  /* 4 bytes */
 
 RELAY_STATIC_ASSERT(sizeof(struct game_result) == 4, game_result_size);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, winner_slot) == 0, game_result_winner_slot);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, p1_char) == 1, game_result_p1_char);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, p2_char) == 2, game_result_p2_char);
-RELAY_STATIC_ASSERT(offsetof(struct game_result, _pad) == 3, game_result__pad);
+RELAY_STATIC_ASSERT(offsetof(struct game_result, stage) == 3, game_result_stage);
 
 /* CMD_REPORT_SCORE request payload. Always the full game list; the relay does
  * a full overwrite (idempotent).

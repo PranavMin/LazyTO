@@ -252,8 +252,9 @@ export function decodeStartSetReq(buf: Uint8Array, off = 0): StartSetReq {
 /** One completed game. */
 export interface GameResult {
   winner_slot: number; // 1 or 2
-  p1_char: number; // Melee external character id (CharacterKind, the CSS ckind value)
+  p1_char: number; // Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected.
   p2_char: number;
+  stage: number; // Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand
 }
 export const GAME_RESULT_SIZE = 4;
 
@@ -263,6 +264,7 @@ export function encodeGameResult(v: GameResult): Uint8Array {
   dv.setUint8(0, v.winner_slot);
   dv.setUint8(1, v.p1_char);
   dv.setUint8(2, v.p2_char);
+  dv.setUint8(3, v.stage);
   return bytes;
 }
 
@@ -273,6 +275,7 @@ export function decodeGameResult(buf: Uint8Array, off = 0): GameResult {
     winner_slot: dv.getUint8(off + 0),
     p1_char: dv.getUint8(off + 1),
     p2_char: dv.getUint8(off + 2),
+    stage: dv.getUint8(off + 3),
   };
 }
 

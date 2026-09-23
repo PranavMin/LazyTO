@@ -136,9 +136,9 @@ structs:
     size: 4
     fields:
       - {name: winner_slot, type: u8, doc: "1 or 2"}
-      - {name: p1_char,     type: u8, doc: "Melee external character id (CharacterKind, the CSS ckind value)"}
+      - {name: p1_char,     type: u8, doc: "Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected."}
       - {name: p2_char,     type: u8}
-      - {name: _pad,        type: u8}
+      - {name: stage,       type: u8, doc: "Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand"}
 
   report_score_req:
     doc: >-

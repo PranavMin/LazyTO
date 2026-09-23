@@ -169,13 +169,13 @@
   <div class="mast">
     <div>
       <h1>Tournament <span>Kiosk</span><br>How to play your set</h1>
-      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, pick your tag, play, and score each game with the controller. Any port can score.</p>
+      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, pick your tag, play: each game is scored automatically when it ends. The controller binds are there to fix mistakes. Any port can use them.</p>
     </div>
     <div class="flow">
       <div><b>1</b> Set list</div>
       <div><b>2</b> Character select</div>
       <div><b>3</b> Stage select</div>
-      <div><b>4</b> Play, then back to <b>2</b> to score</div>
+      <div><b>4</b> Play &mdash; the game scores itself</div>
     </div>
   </div>
 
@@ -200,12 +200,12 @@
     <section class="screen">
       <header><span class="n">2</span> Character select</header>
       <div class="body">
-        <p class="lead"><b>Pick your name tag first.</b> The two players' tags are the top two entries in the tag list. This tells the kiosk which port is which.</p>
+        <p class="lead"><b>Pick your name tag first.</b> The two players' tags are the top two entries in the tag list. One of you picking is enough: the other port is then the other player.</p>
         <div class="sep"></div>
-        <span class="tag">Scoring, hold Z + flick the C-stick</span>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Left player won the game</b></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Right player won the game</b></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game</div></div>
+        <span class="tag">Corrections only &mdash; hold Z + flick the C-stick</span>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b><small>Only if the auto-score got it wrong or was skipped</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Give the right player a game</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game<small>Also removes an auto-scored game</small></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 second)<small>Only once someone has the winning score</small></div></div>
         <div class="sep"></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k x">X</span></div><div class="does"><b>Handwarmer: starts right now</b><small>Everyone ready? Random legal stage, no striking, not scored. Not ready? It arms for the next game instead.</small></div></div>
@@ -228,7 +228,7 @@
         <div class="sep"></div>
         <p class="lead">Strikes clear every time you come back to this screen, so strike fresh for each game (loser of the last game picks, as usual).</p>
         <div class="sep"></div>
-        <p class="lead"><b>After the game</b> you land back on character select. Score it there (step 2), then pick characters for the next game.</p>
+        <p class="lead"><b>After the game</b> you land back on character select with the score already updated (<code>GAME 2 TO MANGO</code>). Quitting with L+R+A+Start is a no contest and is not scored.</p>
       </div>
     </section>
   </div>
@@ -239,6 +239,7 @@
       <div class="status">
         <div><code>MANGO P1 &nbsp;2 - 1&nbsp; P3 ZAIN</code> the score, with the port each player's tag is on</div>
         <div class="red"><code>HANDWARMER NEXT - NOT SCORED</code> at the top: the next game won't count (armed because someone wasn't ready yet)</div>
+        <div><code>GAME 2 TO MANGO</code> auto-scored &nbsp;&middot;&nbsp; <code>PICK A TAG TO AUTO-SCORE</code> nobody picked a tag, score by hand</div>
         <div><code>SCORE SENT</code> start.gg has it &nbsp;&middot;&nbsp; <code>SENDING...</code> wait &nbsp;&middot;&nbsp; <code>SEND FAILED</code> flick again, or tell the TO</div>
       </div>
     </div>
@@ -263,6 +264,6 @@
 
   <div class="foot">
     <span>Wrong set started, or a score you can't fix with undo? Get the TO before ending the set.</span>
-    <span>Tournament Reporter kiosk &middot; build v33</span>
+    <span>Tournament Reporter kiosk &middot; build v37</span>
   </div>
 </main>

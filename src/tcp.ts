@@ -28,6 +28,8 @@ import {
 import type { SetCache, CachedSet } from './cache.js';
 import { StationState, type Claim } from './state.js';
 import { StartggClient, StartggError, RateLimitedError, type GameDataInput } from './startgg.js';
+import { toStartggCharacter } from './chars.js';
+import { toStartggStage } from './stages.js';
 
 /** Where audit records go; audit.ts is the JSONL implementation. */
 export interface AuditSink {
@@ -284,7 +286,7 @@ export class RelayTcpServer {
       p1Id: set.p1.id,
       p2Id: set.p2.id,
       bestOf: set.bestOf,
-      games: set.games.map((g) => ({ winner_slot: g.winnerSlot, p1_char: 0, p2_char: 0 })),
+      games: set.games.map((g) => ({ winner_slot: g.winnerSlot, p1_char: 0xff, p2_char: 0xff, stage: 0 })),
     };
     this.deps.state.claim(station, claim);
     this.deps.audit.record({
@@ -395,9 +397,9 @@ function toEntry(s: CachedSet, state: 0 | 1): SetEntry {
 
 /**
  * Validate the wire game list against the claim and translate it for
- * start.gg: winner slots -> entrant ids. v1 reports winners only; the wire
- * still carries p1_char/p2_char but the relay ignores them (design.md R13 --
- * the Wii-side character read is unreliable, deferred to v2).
+ * start.gg: winner slots -> entrant ids, plus characters (chars.ts) and the
+ * stage (stages.ts) when the Wii knew them -- the auto-score path fills them
+ * from the match standings; a hand-scored game sends zeros (design.md R13).
  * Returns an error msg string on bad data.
  */
 function validGames(
@@ -410,10 +412,23 @@ function validGames(
   for (let i = 0; i < list.length; i++) {
     const g = list[i];
     if (g.winner_slot !== 1 && g.winner_slot !== 2) return `game ${i + 1}: bad winner slot`;
-    data.push({
+    const entry: GameDataInput = {
       gameNum: i + 1,
       winnerId: g.winner_slot === 1 ? claim.p1Id : claim.p2Id,
-    });
+    };
+    // Characters and stage (design.md R13): sent when the Wii knew them
+    // (auto-scored games), omitted when it did not (0 / ChKind_None from a
+    // hand-scored game) or when the value has no start.gg mapping. An
+    // unmapped value never blocks the report -- the winner is what matters.
+    const selections: { entrantId: number; characterId: number }[] = [];
+    const c1 = toStartggCharacter(g.p1_char);
+    const c2 = toStartggCharacter(g.p2_char);
+    if (c1 !== undefined) selections.push({ entrantId: claim.p1Id, characterId: c1 });
+    if (c2 !== undefined) selections.push({ entrantId: claim.p2Id, characterId: c2 });
+    if (selections.length) entry.selections = selections;
+    const stage = toStartggStage(g.stage);
+    if (stage !== undefined) entry.stageId = stage;
+    data.push(entry);
   }
   return { list, data };
 }

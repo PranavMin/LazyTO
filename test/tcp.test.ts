@@ -130,22 +130,40 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(r.resp.msg, 'started on station 3');
   });
 
-  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends winners only (design.md R13)', async () => {
-    // Game 1: Alpha (slot 1) wins. v1 reports winners only -- no selections.
-    const r = await wii.reportScore(SET, [game(1, 2, 9)]);
+  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (design.md R13)', async () => {
+    // Game 1: Alpha (slot 1) wins as Fox (ext 2) vs Marth (ext 9) on
+    // Battlefield (StKind 0x1F) -- what an auto-scored game carries.
+    const r = await wii.reportScore(SET, [game(1, 2, 9, 0x1f)]);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
     assert.equal(r.resp.msg, '1-0');
     const games = env.fake.getSet(SET).games;
     assert.equal(games.length, 1);
     assert.equal(games[0]!.winnerId, entrant(1).id);
 
-    // No character/selection data reaches start.gg: just gameNum + winnerId.
     const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
-    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(1).id }]);
+    assert.deepEqual(lastCall.variables.gameData, [
+      {
+        gameNum: 1,
+        winnerId: entrant(1).id,
+        stageId: 19, // Battlefield
+        selections: [
+          { entrantId: entrant(1).id, characterId: 6 }, // Fox
+          { entrantId: entrant(2).id, characterId: 14 }, // Marth
+        ],
+      },
+    ]);
 
     const r2 = await wii.reportScore(SET, [game(1, 2, 9), game(2, 2, 9), game(1, 2, 9)]);
     assert.equal(r2.resp.msg, '2-1');
     assert.equal(env.fake.getSet(SET).games.length, 3);
+  });
+
+  await t.test('a hand-scored game (0xFF characters, stage 0) reports the winner only', async () => {
+    // 0 is Captain Falcon on the external scale, so "unknown" is 0xFF.
+    const r = await wii.reportScore(SET, [game(2, 0xff, 0xff, 0)]);
+    assert.equal(r.resp.status, RelayStatus.ST_OK);
+    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(2).id }]);
   });
 
   await t.test('END_SET with an undecided score is refused locally', async () => {
@@ -324,16 +342,19 @@ test('claim guards', async (t) => {
     assert.equal(r.resp.msg, 'in progress on start.gg');
   });
 
-  await t.test('an out-of-range character value no longer blocks the report (winners only, design.md R13)', async () => {
-    // ext 77 has no start.gg mapping; in v1 the char is ignored, so the
-    // winner is still recorded and the report succeeds.
-    const r = await wii.reportScore(SET, [game(1, 77, 9)]);
+  await t.test('an out-of-range character or stage value never blocks the report (design.md R13)', async () => {
+    // ext 77 has no start.gg character mapping and 0x15 (Akaneia) no stage
+    // mapping: both are dropped, the mapped Marth selection and the winner
+    // still go through.
+    const r = await wii.reportScore(SET, [game(1, 77, 9, 0x15)]);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
     assert.equal(r.resp.msg, '1-0');
     const games = env.fake.getSet(SET).games;
     assert.equal(games.at(-1)!.winnerId, entrant(1).id);
     const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
-    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(1).id }]);
+    assert.deepEqual(lastCall.variables.gameData, [
+      { gameNum: 1, winnerId: entrant(1).id, selections: [{ entrantId: entrant(2).id, characterId: 14 }] },
+    ]);
   });
 });
 

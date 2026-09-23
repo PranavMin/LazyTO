@@ -148,7 +148,29 @@ async function resetSet(label: string): Promise<void> {
   await gql(label, `mutation Reset($setId: ID!) { resetSet(setId: $setId) { id state } }`, { setId: SET_ID });
 }
 
+// --- read-only lookups (no mutations) ---------------------------------------
+
+// `node scripts/probe.ts --stages`: Melee's stage list with start.gg's ids, the
+// source for src/stages.ts (design.md section 6.3). Read-only; touches no set.
+async function listStages(): Promise<void> {
+  const data = await gql(
+    "videogame(id: 1) stages",
+    `query MeleeStages { videogame(id: 1) { id name stages { id name } } }`,
+    {},
+    false,
+  );
+  const stages = (data.videogame?.stages ?? []) as { id: number; name: string }[];
+  console.log(`\n${data.videogame?.name}: ${stages.length} stages`);
+  for (const s of stages.slice().sort((a, b) => a.id - b.id)) {
+    console.log(`  ${String(s.id).padStart(6)}  ${s.name}`);
+  }
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes("--stages")) {
+    await listStages();
+    return;
+  }
   await checkMutations();
 
   const before = await gql("initial set query (entrant ids + starting state)", SET_QUERY, { setId: SET_ID });

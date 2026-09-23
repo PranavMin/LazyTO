@@ -27,9 +27,14 @@ export class RateLimitedError extends Error {
   }
 }
 
+// BracketSetGameDataInput as the relay uses it. stageId and selections are
+// present only when the Wii knew them (auto-scored games; design.md R13) --
+// a hand-scored game carries winner only.
 export interface GameDataInput {
   gameNum: number;
   winnerId: number;
+  stageId?: number;
+  selections?: { entrantId: number; characterId: number }[];
 }
 
 /** A set node as the event-sets query returns it (states 1 and 2 only). */

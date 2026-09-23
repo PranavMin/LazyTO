@@ -31,6 +31,8 @@ export interface FakeGame {
   id: number;
   orderNum: number;
   winnerId: number;
+  stageId?: number;
+  selections?: { entrantId: number; characterId: number }[];
 }
 
 export interface FakeSet {
@@ -240,6 +242,8 @@ export class FakeStartgg {
     const gameData = (variables.gameData ?? []) as {
       gameNum?: unknown;
       winnerId?: unknown;
+      stageId?: unknown;
+      selections?: { entrantId?: unknown; characterId?: unknown }[];
     }[];
     for (const g of gameData) {
       if (!Number.isInteger(g.gameNum) || (g.gameNum as number) < 1) {
@@ -248,6 +252,19 @@ export class FakeStartgg {
       if (!entrantIds.includes(Number(g.winnerId))) {
         return { status: 200, body: gqlErrorBody(`winnerId ${g.winnerId} is not an entrant in this set`) };
       }
+      // Selections must name entrants of this set and a positive character id
+      // (the real API rejects both otherwise).
+      for (const s of g.selections ?? []) {
+        if (!entrantIds.includes(Number(s.entrantId))) {
+          return { status: 200, body: gqlErrorBody(`selection entrantId ${s.entrantId} is not an entrant in this set`) };
+        }
+        if (!Number.isInteger(s.characterId) || (s.characterId as number) < 1) {
+          return { status: 200, body: gqlErrorBody('selection missing valid characterId') };
+        }
+      }
+      if (g.stageId !== undefined && (!Number.isInteger(g.stageId) || (g.stageId as number) < 1)) {
+        return { status: 200, body: gqlErrorBody('gameData entry has invalid stageId') };
+      }
     }
 
     // Full overwrite, as the probe confirmed: old rows deleted, fresh ids.
@@ -255,6 +272,10 @@ export class FakeStartgg {
       id: this.nextGameId++,
       orderNum: g.gameNum as number,
       winnerId: Number(g.winnerId),
+      ...(g.stageId !== undefined ? { stageId: Number(g.stageId) } : {}),
+      ...(g.selections?.length
+        ? { selections: g.selections.map((s) => ({ entrantId: Number(s.entrantId), characterId: Number(s.characterId) })) }
+        : {}),
     }));
 
     if (variables.winnerId != null) {

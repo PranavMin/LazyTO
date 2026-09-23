@@ -106,9 +106,9 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
     // A 2-1 set: winners of games 1 and 2 split, game 3 decides.
     const decider = (Math.random() < 0.5 ? 1 : 2) as 1 | 2;
     const games = [
-      { winner_slot: decider, p1_char: randChar(), p2_char: randChar() },
-      { winner_slot: (3 - decider) as 1 | 2, p1_char: randChar(), p2_char: randChar() },
-      { winner_slot: decider, p1_char: randChar(), p2_char: randChar() },
+      { winner_slot: decider, p1_char: randChar(), p2_char: randChar(), stage: 0x1f },
+      { winner_slot: (3 - decider) as 1 | 2, p1_char: randChar(), p2_char: randChar(), stage: 0x1f },
+      { winner_slot: decider, p1_char: randChar(), p2_char: randChar(), stage: 0x1f },
     ];
 
     let dead = false;
