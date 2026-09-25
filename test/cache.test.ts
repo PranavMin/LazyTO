@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SetCache, abbreviateRound } from '../src/cache.js';
+import { SetCache, abbreviateRound, wireRoundName } from '../src/cache.js';
 import { StartggClient } from '../src/startgg.js';
 import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, entrant } from './fake-startgg.js';
 
@@ -139,4 +139,11 @@ test('set cache', async (t) => {
     assert.equal(errors.length, 1, 'the failed refresh reached the callback');
     assert.equal(cache.status().error, null, 'recovery cleared the recorded error');
   });
+});
+
+test('wireRoundName: upper case, cut to the wire field', () => {
+  assert.equal(wireRoundName('Winners Quarter-Final'), 'WINNERS QUARTER-FINAL');
+  assert.equal(wireRoundName('Grand Final Reset'), 'GRAND FINAL RESET');
+  assert.equal(wireRoundName('Some Custom Round Name Here Too'), 'SOME CUSTOM ROUND NAME H');
+  assert.equal(wireRoundName('Winners Quarter-Final').length <= 24, true);
 });

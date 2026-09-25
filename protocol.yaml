@@ -27,14 +27,14 @@ constants:
     value: 5
     doc: "games per set (best of 5)"
   MAX_SETS:
-    value: 63
-    doc: "cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64)"
+    value: 56
+    doc: "cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72)"
   MSG_LEN:
     value: 30
     doc: "human-readable status text in relay_resp"
   ROUND_LEN:
-    value: 16
-    doc: "round name, e.g. WR2, LF, GF"
+    value: 24
+    doc: "round name as the players see it, upper case: \"WINNERS QUARTER-FINAL\", \"LOSERS ROUND 1\", \"GRAND FINAL RESET\" (start.gg fullRoundText, cut to fit)"
   TAG_LEN:
     value: 16
     doc: "player tag"
@@ -73,7 +73,7 @@ enums:
       EXI_RELAY_POLL: {value: 0xF1, doc: "read {state, response buffer}"}
 
   exi_poll_state:
-    doc: "first byte returned by EXI_RELAY_POLL"
+    doc: "state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns"
     values:
       RELAY_IDLE:  {value: 0}
       RELAY_BUSY:  {value: 1, doc: "request in flight on the ARM side"}
@@ -81,6 +81,23 @@ enums:
       RELAY_ERROR: {value: 3, doc: "transport failed; response buffer is zeroed"}
 
 structs:
+  exi_poll_hdr:
+    doc: >-
+      What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf:
+      this, then relay_hdr, relay_resp and the payload). Not on the TCP wire:
+      filled by the host of the fake EXI device (Nintendont kernel, Slippi
+      Dolphin) on every poll, so the game can show which station it is and
+      which relay it is talking to even while the relay never answers. The
+      response bytes after it are valid only when state == RELAY_DONE.
+    size: 12
+    fields:
+      - {name: state,      type: u8,  doc: "enum exi_poll_state"}
+      - {name: _pad,       type: u8}
+      - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (design R10)"}
+      - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
+      - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
+      - {name: _pad2,      type: u16}
+
   relay_hdr:
     doc: "Every message (request and response) begins with this header."
     size: 8
@@ -102,13 +119,13 @@ structs:
       - {name: msg,    type: char, array: MSG_LEN, doc: "short human text for the menu"}
 
   set_entry:
-    doc: "One selectable set in a LIST_SETS response."
-    size: 64
+    doc: "One selectable set in a LIST_SETS response. The relay sends them earliest round first, so equal round names are adjacent (the menu groups them under one header)."
+    size: 72
     fields:
       - {name: set_id,        type: u32}
       - {name: p1_entrant_id, type: u32}
       - {name: p2_entrant_id, type: u32}
-      - {name: round,         type: char, array: ROUND_LEN, doc: "\"WR2\", \"LF\", \"GF\""}
+      - {name: round,         type: char, array: ROUND_LEN, doc: "\"WINNERS QUARTER-FINAL\", \"LOSERS ROUND 1\""}
       - {name: p1_tag,        type: char, array: TAG_LEN}
       - {name: p2_tag,        type: char, array: TAG_LEN}
       - {name: best_of,       type: u8,   doc: "3 or 5"}

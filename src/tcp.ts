@@ -393,7 +393,7 @@ function toEntry(s: CachedSet, state: 0 | 1): SetEntry {
     set_id: s.id,
     p1_entrant_id: s.p1.id,
     p2_entrant_id: s.p2.id,
-    round: s.roundShort,
+    round: s.roundName,
     p1_tag: s.p1.tag,
     p2_tag: s.p2.tag,
     best_of: s.bestOf,

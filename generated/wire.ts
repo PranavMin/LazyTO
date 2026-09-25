@@ -11,9 +11,9 @@ export const MAGIC_0 = 0x4d; // 'M'
 export const MAGIC_1 = 0x54; // 'T'
 
 export const MAX_GAMES = 5; // games per set (best of 5)
-export const MAX_SETS = 63; // cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64)
+export const MAX_SETS = 56; // cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72)
 export const MSG_LEN = 30; // human-readable status text in relay_resp
-export const ROUND_LEN = 16; // round name, e.g. WR2, LF, GF
+export const ROUND_LEN = 24; // round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit)
 export const TAG_LEN = 16; // player tag
 
 /** request/response command, echoed back in the response header */
@@ -43,7 +43,7 @@ export enum ExiCmd {
   EXI_RELAY_POLL = 241, // read {state, response buffer}
 }
 
-/** first byte returned by EXI_RELAY_POLL */
+/** state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 export enum ExiPollState {
   RELAY_IDLE = 0,
   RELAY_BUSY = 1, // request in flight on the ARM side
@@ -76,6 +76,39 @@ function checkLen(buf: Uint8Array, off: number, need: number, what: string): voi
     );
   }
 }
+
+// ---- exi_poll_hdr (12 bytes) ----
+
+/** What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf: this, then relay_hdr, relay_resp and the payload). Not on the TCP wire: filled by the host of the fake EXI device (Nintendont kernel, Slippi Dolphin) on every poll, so the game can show which station it is and which relay it is talking to even while the relay never answers. The response bytes after it are valid only when state == RELAY_DONE. */
+export interface ExiPollHdr {
+  state: number; // enum exi_poll_state
+  station: number; // tournament.cfg station; 0 in Dolphin (design R10)
+  relay_ip: number; // relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown
+  relay_port: number; // relay TCP port; 0 = unknown
+}
+export const EXI_POLL_HDR_SIZE = 12;
+
+export function encodeExiPollHdr(v: ExiPollHdr): Uint8Array {
+  const bytes = new Uint8Array(EXI_POLL_HDR_SIZE);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint8(0, v.state);
+  dv.setUint16(2, v.station, false);
+  dv.setUint32(4, v.relay_ip, false);
+  dv.setUint16(8, v.relay_port, false);
+  return bytes;
+}
+
+export function decodeExiPollHdr(buf: Uint8Array, off = 0): ExiPollHdr {
+  checkLen(buf, off, EXI_POLL_HDR_SIZE, 'exi_poll_hdr');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    state: dv.getUint8(off + 0),
+    station: dv.getUint16(off + 2, false),
+    relay_ip: dv.getUint32(off + 4, false),
+    relay_port: dv.getUint16(off + 8, false),
+  };
+}
+
 
 // ---- relay_hdr (8 bytes) ----
 
@@ -140,20 +173,20 @@ export function decodeRelayResp(buf: Uint8Array, off = 0): RelayResp {
 }
 
 
-// ---- set_entry (64 bytes) ----
+// ---- set_entry (72 bytes) ----
 
-/** One selectable set in a LIST_SETS response. */
+/** One selectable set in a LIST_SETS response. The relay sends them earliest round first, so equal round names are adjacent (the menu groups them under one header). */
 export interface SetEntry {
   set_id: number;
   p1_entrant_id: number;
   p2_entrant_id: number;
-  round: string; // "WR2", "LF", "GF"
+  round: string; // "WINNERS QUARTER-FINAL", "LOSERS ROUND 1"
   p1_tag: string;
   p2_tag: string;
   best_of: number; // 3 or 5
   state: number; // 0 = pending, 1 = in progress (this station)
 }
-export const SET_ENTRY_SIZE = 64;
+export const SET_ENTRY_SIZE = 72;
 
 export function encodeSetEntry(v: SetEntry): Uint8Array {
   const bytes = new Uint8Array(SET_ENTRY_SIZE);
@@ -162,10 +195,10 @@ export function encodeSetEntry(v: SetEntry): Uint8Array {
   dv.setUint32(4, v.p1_entrant_id, false);
   dv.setUint32(8, v.p2_entrant_id, false);
   putAscii(bytes, 12, ROUND_LEN, v.round);
-  putAscii(bytes, 28, TAG_LEN, v.p1_tag);
-  putAscii(bytes, 44, TAG_LEN, v.p2_tag);
-  dv.setUint8(60, v.best_of);
-  dv.setUint8(61, v.state);
+  putAscii(bytes, 36, TAG_LEN, v.p1_tag);
+  putAscii(bytes, 52, TAG_LEN, v.p2_tag);
+  dv.setUint8(68, v.best_of);
+  dv.setUint8(69, v.state);
   return bytes;
 }
 
@@ -177,10 +210,10 @@ export function decodeSetEntry(buf: Uint8Array, off = 0): SetEntry {
     p1_entrant_id: dv.getUint32(off + 4, false),
     p2_entrant_id: dv.getUint32(off + 8, false),
     round: getAscii(buf, off + 12, ROUND_LEN),
-    p1_tag: getAscii(buf, off + 28, TAG_LEN),
-    p2_tag: getAscii(buf, off + 44, TAG_LEN),
-    best_of: dv.getUint8(off + 60),
-    state: dv.getUint8(off + 61),
+    p1_tag: getAscii(buf, off + 36, TAG_LEN),
+    p2_tag: getAscii(buf, off + 52, TAG_LEN),
+    best_of: dv.getUint8(off + 68),
+    state: dv.getUint8(off + 69),
   };
 }
 

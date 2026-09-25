@@ -107,7 +107,7 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(resp.status, RelayStatus.ST_OK);
     assert.deepEqual(sets.map((s) => s.set_id), [107949994, 107949995, 107949996, 107949997]);
     const first = sets[0]!;
-    assert.equal(first.round, 'WQF');
+    assert.equal(first.round, 'WINNERS QUARTER-FINAL');
     assert.equal(first.p1_tag, 'Alpha');
     assert.equal(first.p2_tag, 'Bravo');
     assert.equal(first.best_of, 5);

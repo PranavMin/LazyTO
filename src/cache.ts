@@ -6,6 +6,7 @@
 // The cache DROPS those sets and records a warning for the status page; the
 // per-tournament setup checklist says to start all pools before doors.
 
+import { ROUND_LEN } from '../generated/wire.js';
 import type { StartggClient, UpstreamSet } from './startgg.js';
 
 export interface CachedGame {
@@ -17,7 +18,8 @@ export interface CachedSet {
   id: number; // fits uint32
   state: number; // 1 pending, 2 in progress (upstream's view)
   round: number;
-  roundShort: string; // "WR2", "LF", "GF" -- fits the 16-char wire field
+  roundShort: string; // "WR2", "LF", "GF" -- the status page
+  roundName: string; // "WINNERS QUARTER-FINAL" -- the wire field the Wii shows (ROUND_LEN chars)
   bestOf: number;
   p1: { id: number; tag: string };
   p2: { id: number; tag: string };
@@ -46,6 +48,11 @@ export function abbreviateRound(fullRoundText: string): string {
     else return fullRoundText.slice(0, 16); // unrecognized wording: ship it verbatim
   }
   return parts.join('');
+}
+
+/** "Winners Quarter-Final" -> "WINNERS QUARTER-FINAL": what the kiosk prints, cut to the wire field. */
+export function wireRoundName(fullRoundText: string): string {
+  return fullRoundText.toUpperCase().slice(0, ROUND_LEN);
 }
 
 const U32_MAX = 0xffff_ffff;
@@ -108,6 +115,7 @@ export class SetCache {
         state: s.state,
         round: s.round,
         roundShort: abbreviateRound(s.fullRoundText),
+        roundName: wireRoundName(s.fullRoundText),
         bestOf: s.totalGames,
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },

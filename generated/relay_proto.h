@@ -38,9 +38,9 @@ typedef unsigned long uint32_t;
 #define RELAY_MAGIC_1 'T'
 
 #define MAX_GAMES 5  /* games per set (best of 5) */
-#define MAX_SETS  63  /* cap on set_entry rows in a LIST_SETS response; 63 is the most that fits the game's 4 KB poll buffer (4096 - 4 state - 8 hdr - 32 resp - 4 fixed = 4048 bytes = 63 rows of 64) */
+#define MAX_SETS  56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
 #define MSG_LEN   30  /* human-readable status text in relay_resp */
-#define ROUND_LEN 16  /* round name, e.g. WR2, LF, GF */
+#define ROUND_LEN 24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
 #define TAG_LEN   16  /* player tag */
 
 /* request/response command, echoed back in the response header */
@@ -70,13 +70,37 @@ enum exi_cmd {
     EXI_RELAY_POLL = 241,  /* read {state, response buffer} */
 };
 
-/* first byte returned by EXI_RELAY_POLL */
+/* state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 enum exi_poll_state {
     RELAY_IDLE  = 0,
     RELAY_BUSY  = 1,  /* request in flight on the ARM side */
     RELAY_DONE  = 2,  /* response buffer valid */
     RELAY_ERROR = 3,  /* transport failed; response buffer is zeroed */
 };
+
+/* What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf:
+ * this, then relay_hdr, relay_resp and the payload). Not on the TCP wire:
+ * filled by the host of the fake EXI device (Nintendont kernel, Slippi
+ * Dolphin) on every poll, so the game can show which station it is and which
+ * relay it is talking to even while the relay never answers. The response
+ * bytes after it are valid only when state == RELAY_DONE.
+ */
+struct exi_poll_hdr {
+    uint8_t  state;  /* enum exi_poll_state */
+    uint8_t  _pad;
+    uint16_t station;  /* tournament.cfg station; 0 in Dolphin (design R10) */
+    uint32_t relay_ip;  /* relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown */
+    uint16_t relay_port;  /* relay TCP port; 0 = unknown */
+    uint16_t _pad2;
+};  /* 12 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct exi_poll_hdr) == 12, exi_poll_hdr_size);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, state) == 0, exi_poll_hdr_state);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, _pad) == 1, exi_poll_hdr__pad);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, station) == 2, exi_poll_hdr_station);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_ip) == 4, exi_poll_hdr_relay_ip);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_port) == 8, exi_poll_hdr_relay_port);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, _pad2) == 10, exi_poll_hdr__pad2);
 
 /* Every message (request and response) begins with this header. */
 struct relay_hdr {
@@ -108,29 +132,32 @@ RELAY_STATIC_ASSERT(offsetof(struct relay_resp, status) == 0, relay_resp_status)
 RELAY_STATIC_ASSERT(offsetof(struct relay_resp, _pad) == 1, relay_resp__pad);
 RELAY_STATIC_ASSERT(offsetof(struct relay_resp, msg) == 2, relay_resp_msg);
 
-/* One selectable set in a LIST_SETS response. */
+/* One selectable set in a LIST_SETS response. The relay sends them earliest
+ * round first, so equal round names are adjacent (the menu groups them under
+ * one header).
+ */
 struct set_entry {
     uint32_t set_id;
     uint32_t p1_entrant_id;
     uint32_t p2_entrant_id;
-    char     round[ROUND_LEN];  /* "WR2", "LF", "GF" */
+    char     round[ROUND_LEN];  /* "WINNERS QUARTER-FINAL", "LOSERS ROUND 1" */
     char     p1_tag[TAG_LEN];
     char     p2_tag[TAG_LEN];
     uint8_t  best_of;  /* 3 or 5 */
     uint8_t  state;  /* 0 = pending, 1 = in progress (this station) */
     uint8_t  _pad[2];
-};  /* 64 bytes */
+};  /* 72 bytes */
 
-RELAY_STATIC_ASSERT(sizeof(struct set_entry) == 64, set_entry_size);
+RELAY_STATIC_ASSERT(sizeof(struct set_entry) == 72, set_entry_size);
 RELAY_STATIC_ASSERT(offsetof(struct set_entry, set_id) == 0, set_entry_set_id);
 RELAY_STATIC_ASSERT(offsetof(struct set_entry, p1_entrant_id) == 4, set_entry_p1_entrant_id);
 RELAY_STATIC_ASSERT(offsetof(struct set_entry, p2_entrant_id) == 8, set_entry_p2_entrant_id);
 RELAY_STATIC_ASSERT(offsetof(struct set_entry, round) == 12, set_entry_round);
-RELAY_STATIC_ASSERT(offsetof(struct set_entry, p1_tag) == 28, set_entry_p1_tag);
-RELAY_STATIC_ASSERT(offsetof(struct set_entry, p2_tag) == 44, set_entry_p2_tag);
-RELAY_STATIC_ASSERT(offsetof(struct set_entry, best_of) == 60, set_entry_best_of);
-RELAY_STATIC_ASSERT(offsetof(struct set_entry, state) == 61, set_entry_state);
-RELAY_STATIC_ASSERT(offsetof(struct set_entry, _pad) == 62, set_entry__pad);
+RELAY_STATIC_ASSERT(offsetof(struct set_entry, p1_tag) == 36, set_entry_p1_tag);
+RELAY_STATIC_ASSERT(offsetof(struct set_entry, p2_tag) == 52, set_entry_p2_tag);
+RELAY_STATIC_ASSERT(offsetof(struct set_entry, best_of) == 68, set_entry_best_of);
+RELAY_STATIC_ASSERT(offsetof(struct set_entry, state) == 69, set_entry_state);
+RELAY_STATIC_ASSERT(offsetof(struct set_entry, _pad) == 70, set_entry__pad);
 
 /* CMD_LIST_SETS response payload. count set_entry rows follow the fixed part. */
 struct list_sets_resp {
