@@ -65,7 +65,7 @@ From the repo root in PowerShell:
 .\deploy\push.ps1
 ```
 
-This compiles the relay (`npm run build`), writes a `config.json` from `.env` (event and stream ids, stream station 1, ports 7777/8080, audit dir `/var/lib/tournament-reporter`), bundles it with `dist/` and `deploy/`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
+This compiles the relay (`npm run build`), writes a `config.json` from `.env` (token, event and stream ids, stream station 1, ports 7777/8080, the production start.gg endpoint, audit dir `/var/lib/tournament-reporter`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
 
 Then prove it from this PC without a Wii (it lists sets over the real wire protocol and fetches the status page):
 

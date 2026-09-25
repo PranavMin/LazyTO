@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, ConfigError } from '../src/config.js';
 
 const VALID = {
+  startggEndpoint: 'https://api.start.gg/gql/alpha',
   token: 'tok-abc',
   eventId: 1613010,
   streamId: 1358079,
@@ -72,6 +73,7 @@ test('non-object JSON', () => {
 test('every missing field is reported at once', () => {
   expectProblems(
     '{}',
+    'missing field "startggEndpoint"',
     'missing field "token"',
     'missing field "eventId"',
     'missing field "streamId"',
@@ -84,6 +86,13 @@ test('every missing field is reported at once', () => {
 
 test('unknown field is rejected', () => {
   expectProblems(JSON.stringify({ ...VALID, extra: 1 }), 'unknown field "extra"');
+});
+
+test('startggEndpoint must be an http(s) URL', () => {
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: '' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'ftp://api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 7 }), 'startggEndpoint must be an http(s) URL');
 });
 
 test('empty token', () => {
@@ -115,4 +124,16 @@ test('tcpPort and httpPort must differ', () => {
 
 test('empty auditDir', () => {
   expectProblems(JSON.stringify({ ...VALID, auditDir: '' }), 'auditDir must be a non-empty string');
+});
+
+// deploy/push.ps1 is what writes /etc/tournament-reporter/config.json on the
+// Pi (from .env). Its $config block must name exactly the fields config.ts
+// validates, or the first push after a config change fails on the Pi instead
+// of here.
+test('deploy/push.ps1 writes exactly the validated fields', () => {
+  const script = readFileSync(join(import.meta.dirname, '..', 'deploy', 'push.ps1'), 'utf8');
+  const block = /\$config = \[ordered\]@\{([^}]*)\}/.exec(script);
+  assert.ok(block, 'push.ps1 has no $config = [ordered]@{ ... } block');
+  const written = [...block[1].matchAll(/^\s*([A-Za-z]+)\s*=/gm)].map((m) => m[1]);
+  assert.deepEqual(written.sort(), Object.keys(VALID).sort());
 });

@@ -164,7 +164,13 @@ export class RelayTcpServer {
       }
     }
 
-    state.recordAction(station, RelayCmd[cmd] ?? String(cmd), reply.status === RelayStatus.ST_OK);
+    state.recordAction(
+      station,
+      RelayCmd[cmd] ?? String(cmd),
+      reply.status === RelayStatus.ST_OK,
+      RelayStatus[reply.status] ?? String(reply.status),
+      reply.msg,
+    );
     audit.record({
       type: 'response',
       station,

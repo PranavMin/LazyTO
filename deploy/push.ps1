@@ -5,8 +5,9 @@ push.ps1 -- build the relay on this Windows machine and install it on the Pi.
   .\deploy\push.ps1 -EventId 1234 -StreamId 5678  # a real tournament
   .\deploy\push.ps1 -DryRun                       # build the bundle, install nothing
 
-Steps: npm run build -> write config.json from .env (+ overrides) -> tar the
-bundle (dist/, deploy/, config.json) -> scp to the Pi -> run deploy/install.sh
+Steps: npm run build -> write config.json from .env (+ overrides; startggEndpoint
+is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
+README.md, config.json) -> scp to the Pi -> run deploy/install.sh
 there over ssh. Needs Windows' built-in ssh/scp/tar and an ssh key the Pi
 trusts (docs/pi-setup.md). The token is read from .env and never leaves this
 machine except over ssh to the Pi.
@@ -45,7 +46,7 @@ try {
   & npm run build
   if ($LASTEXITCODE -ne 0) { throw 'npm run build failed' }
 } finally { Pop-Location }
-if (-not (Test-Path (Join-Path $repo 'dist\src\main.js'))) { throw 'build produced no dist/src/main.js' }
+if (-not (Test-Path (Join-Path $repo 'dist\main.js'))) { throw 'build produced no dist/main.js' }
 
 # --- bundle ---
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) 'tournament-reporter-bundle'
@@ -53,7 +54,10 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -Recurse (Join-Path $repo 'dist') (Join-Path $stage 'dist')
 Copy-Item -Recurse (Join-Path $repo 'deploy') (Join-Path $stage 'deploy')
+Copy-Item (Join-Path $repo 'package.json') $stage   # "type": "module", needed beside dist/
+Copy-Item (Join-Path $repo 'README.md') $stage      # night-of table, referenced by the unit
 $config = [ordered]@{
+  startggEndpoint = 'https://api.start.gg/gql/alpha'
   token         = $dotenv['STARTGG_TOKEN']
   eventId       = $EventId
   streamId      = $StreamId

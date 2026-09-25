@@ -388,6 +388,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
 
 ```json
 {
+  "startggEndpoint": "https://api.start.gg/gql/alpha",
   "token": "…",
   "eventId": 123456,
   "streamId": 7890,
@@ -398,7 +399,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
 }
 ```
 
-Startup validates every field and exits non-zero on any problem. No defaults — `auditDir` is explicit config rather than a hardcoded path (session 4: a hidden default, and it breaks Windows dev).
+Startup validates every field and exits non-zero on any problem. No defaults — `auditDir` is explicit config rather than a hardcoded path (session 4: a hidden default, and it breaks Windows dev), and `startggEndpoint` is explicit for the same reason (2026-09-22: the built `dist/main.js` is rehearsed against `test/fake-startgg.ts` served by `npm run fake`, so the URL cannot be a constant). `deploy/config.example.json` is the template; a test pins its keys to `config.ts`.
 
 **start.gg calls used:**
 
@@ -513,17 +514,21 @@ start.gg states: `1` not started → `2` in progress → `3` complete. The relay
 |------|------|
 | `deploy/push.ps1` | Run on the Windows dev PC: `npm run build` (tsc → `dist/`, no runtime npm deps), writes `config.json` from `.env` (+ `-EventId`/`-StreamId` overrides), scp's the bundle, runs the installer over ssh. |
 | `deploy/install.sh` | Run on the Pi by push.ps1 (sudo): pinned official Node 22 tarball at `/opt/node`, system user `relay`, code at `/opt/tournament-reporter`, config at `/etc/tournament-reporter/config.json` (root:relay 0640), unit installed and restarted, waits for `relay up:`. Idempotent. |
-| `deploy/tournament-reporter.service` | systemd unit: `ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/src/main.js`, `Environment=CONFIG=…`, `Restart=on-failure`, runs as `relay`. |
+| `deploy/tournament-reporter.service` | systemd unit: `ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/main.js`, `Environment=CONFIG=…`, `Restart=on-failure`, runs as `relay`. |
 | `deploy/set-static-ip.sh` | Adds the fixed venue address (what the Wiis' `relay_ip` points at) on top of DHCP via NetworkManager, so `relay.local` keeps working on any LAN. |
 | `scripts/smoke.ts` | From the PC: one LIST_SETS over the wire protocol plus a status-page fetch against the deployed relay. |
 
 Logs to journald; audit log to `/var/lib/tournament-reporter/<eventId>.jsonl` (one file per tournament).
 
+**Status 2026-09-24** — two kits were built independently (2026-09-22: clone-on-Pi, nvm, hand-edited `config.example.json`, unit run as `pi`; 2026-09-24: build-on-Windows, push over ssh) and reconciled to the second: the Pi never needs git, npm or a GitHub credential, and the config is generated from `.env`, so `config.example.json` is gone. Kept from the first: `npm run build` (`dist/main.js` entry via the root `main.ts`; `generated/wire.ts` compiled in place), `startggEndpoint` as an explicit required config field (push.ps1 writes the production URL; a rehearsal points it at `npm run fake -- --port=N`), `npm run sim -- --relay=host:port` to drive an external relay, the README's config table and night-of table. Rehearsed on the dev machine 2026-09-22: built relay against `npm run fake`, 600 s of `sim --relay`: 12 stations, 122 sets completed, 749 Wii requests (peak 80/min), 8 benign ST_SET_TAKEN races, **0 errors**; upstream 643 calls, **peak 67/min** against the 70/min guard (the sim paces one action every ~12 s per station — 5× the §6.3 estimate — a stress number, not the venue rate). Windows-side kit verified 2026-09-24 (dry-run bundle, generated config through `loadConfig`, `smoke.ts` against the fake stack). **Not yet run on a real Pi.**
+
 **Per-tournament setup checklist** (this replaces nothing; it's added to the existing setup):
-1. Edit `config.json`: `eventId`, `streamId`. Restart service. Check status page shows the set count.
+1. `.\deploy\push.ps1 -EventId <id> -StreamId <id>` from the dev PC (rebuilds, rewrites the config, restarts). Check the status page shows the set count.
 2. **Start all pools and phases on start.gg** (bracket page → every phase, later phases included). Any unstarted pool or phase has preview-id sets the relay drops (R8) — the live event showed 37 dropped across unstarted pool 2 plus the later phases; the status page warns until this is done.
 3. Confirm each SD card's `tournament.cfg` station number matches the physical station label. Exactly one has `stream=1`.
 4. Boot one Wii, open Tournament menu, confirm the set list loads.
+
+**Status: done 2026-09-22** — checklist is in README.md ("Per-tournament checklist"), with a "The night of" table keyed on what the status page shows. The status page (F7) now shows per station the set, score, last action with age and the status/msg the player saw, and every failed start.gg call with message and age (sticky until ack); footer has event id, cache size split selectable / on stations, cache age with a stale warning after 60 s, upstream rate, last refresh error, and the R8 preview warning. Server-rendered, no client JS beyond the 5 s meta refresh; phone-width layout checked.
 
 **Network:** Pi and stream Wii on Ethernet, mandatory. Other Wiis on Ethernet where possible; Wii WiFi is 802.11g and unreliable on a busy venue network. A single unmanaged switch under the stream table covers it.
 

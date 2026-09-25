@@ -71,37 +71,38 @@ export class WiiClient {
     private readonly port: number,
     readonly station: number,
     private readonly stream: 0 | 1 = 0,
+    private readonly host = '127.0.0.1',
   ) {}
 
+  private request(cmd: number, payload?: Uint8Array): Promise<WireReply> {
+    return rawRequest(this.port, this.station, cmd, payload, { host: this.host });
+  }
+
   async listSets(): Promise<{ resp: RelayResp; sets: ListSetsResp['sets'] }> {
-    const r = await rawRequest(this.port, this.station, RelayCmd.CMD_LIST_SETS);
+    const r = await this.request(RelayCmd.CMD_LIST_SETS);
     return { resp: r.resp, sets: r.resp.status === 0 ? decodeListSetsResp(r.payload).sets : [] };
   }
 
   startSet(setId: number, stream = this.stream): Promise<WireReply> {
-    return rawRequest(this.port, this.station, RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: setId, stream }));
+    return this.request(RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: setId, stream }));
   }
 
   reportScore(setId: number, games: GameResult[]): Promise<WireReply> {
-    return rawRequest(
-      this.port,
-      this.station,
+    return this.request(
       RelayCmd.CMD_REPORT_SCORE,
       encodeReportScoreReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
     );
   }
 
   endSet(setId: number, games: GameResult[]): Promise<WireReply> {
-    return rawRequest(
-      this.port,
-      this.station,
+    return this.request(
       RelayCmd.CMD_END_SET,
       encodeEndSetReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
     );
   }
 
   abandonSet(setId: number): Promise<WireReply> {
-    return rawRequest(this.port, this.station, RelayCmd.CMD_ABANDON_SET, encodeAbandonSetReq({ set_id: setId }));
+    return this.request(RelayCmd.CMD_ABANDON_SET, encodeAbandonSetReq({ set_id: setId }));
   }
 }
 

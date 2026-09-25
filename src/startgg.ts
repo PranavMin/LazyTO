@@ -6,7 +6,8 @@
 // must surface, and a network error means the venue link is down, which
 // retrying from here would only hide.
 
-export const STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha';
+// The endpoint (https://api.start.gg/gql/alpha in production) comes from
+// config.startggEndpoint; there is no built-in default.
 
 export type StartggErrorKind = 'upstream_5xx' | 'rejected' | 'network';
 

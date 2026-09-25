@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { StatusServer } from '../src/status.js';
+import { StatusServer, STALE_CACHE_MS } from '../src/status.js';
 import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
 import { StartggClient } from '../src/startgg.js';
@@ -19,13 +19,23 @@ test('status page', async (t) => {
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit: nullAudit, streamStation: 1, streamId: 1358079 });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1 });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventId: FIXTURE_EVENT_ID });
   await status.listen(0, '127.0.0.1');
   const statusUrl = `http://127.0.0.1:${status.address().port}`;
   t.after(async () => {
     await status.close();
     await tcp.close();
     await fake.close();
+  });
+
+  await t.test('before any Wii connects: event id, empty table, cache line', async () => {
+    const html = await (await fetch(statusUrl)).text();
+    assert.match(html, /Event <b>1613010<\/b>/, 'event id is shown');
+    assert.match(html, /no station has connected yet/);
+    assert.match(html, /Cache: 4 sets \(4 selectable, 0 on stations\), refreshed \d+s ago/);
+    assert.match(html, /<meta name="viewport"/, 'phone-readable');
+    assert.match(html, /<meta http-equiv="refresh" content="5">/, 'the only client-side behaviour is the meta refresh');
+    assert.doesNotMatch(html, /<script/, 'no client JS');
   });
 
   // Drive real traffic: the stream station plays a set to 2-1, another
@@ -39,25 +49,48 @@ test('status page', async (t) => {
   fake.failNext('reportBracketSet', '5xx', 3);
   await wii4.reportScore(107949995, [game(1)]);
 
-  await t.test('renders stations, sets, scores, flags, and cache info', async () => {
+  await t.test('renders stations, sets, scores, actions, flags, and cache info', async () => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /1 ★/, 'stream station is starred');
     assert.match(html, /WQF {2}Alpha vs Bravo \(Bo5\)/);
     assert.match(html, /2–1/);
-    assert.match(html, /REPORT_SCORE \d+s/);
-    assert.match(html, /✗ reportBracketSet failed/, 'failed upstream call is flagged');
+    assert.match(html, /REPORT_SCORE \d+s ago/);
+    assert.match(html, /✗ reportBracketSet failed: start\.gg HTTP 503 after 3 attempts \(\d+s ago\)/, 'failed upstream call, message, and age');
     assert.match(html, /preview-id set\(s\) dropped/, 'R8 warning is shown');
-    assert.match(html, /Cache: 4 sets, refreshed \d+s ago/);
+    assert.match(html, /Cache: 4 sets \(2 selectable, 2 on stations\), refreshed \d+s ago/);
     assert.match(html, /Upstream: \d+ calls last 60s/);
+    assert.doesNotMatch(html, /cache is stale/);
   });
 
-  await t.test('ack clears the flagged row', async () => {
+  await t.test('a failed last action shows the status and message the player saw', async () => {
+    const html = await (await fetch(statusUrl)).text();
+    assert.match(html, /✗ REPORT_SCORE \d+s ago — ST_STARTGG_ERROR: start\.gg error - retry/);
+    // Station 1's last action succeeded: no marker.
+    assert.match(html, /<td>1 ★<\/td>.*<td>REPORT_SCORE \d+s ago<\/td>/);
+  });
+
+  await t.test('a rejected (4xx) call shows the start.gg message verbatim', async () => {
+    fake.failNext('reportBracketSet', 'gqlError', 1, 'Set has already been completed');
+    await wii1.reportScore(107949994, [game(1), game(2), game(1), game(1)]);
+    const html = await (await fetch(statusUrl)).text();
+    assert.match(html, /✗ reportBracketSet failed: start\.gg rejected: Set has already been completed/);
+    assert.match(html, /✗ REPORT_SCORE \d+s ago — ST_STARTGG_ERROR: start\.gg rejected - ask TO/);
+    // HTML in an upstream message is escaped, never rendered.
+    fake.failNext('reportBracketSet', 'gqlError', 1, '<b>bold</b>');
+    await wii1.reportScore(107949994, [game(1), game(2), game(1), game(1)]);
+    const html2 = await (await fetch(statusUrl)).text();
+    assert.match(html2, /&lt;b&gt;bold&lt;\/b&gt;/);
+    assert.doesNotMatch(html2, /<b>bold<\/b>/);
+  });
+
+  await t.test('ack clears a flagged row', async () => {
+    const before = state.flags().length;
+    assert.ok(before >= 3);
     const id = state.flags()[0]!.id;
     const res = await fetch(`${statusUrl}/ack?id=${id}`, { method: 'POST', redirect: 'manual' });
     assert.equal(res.status, 303);
-    assert.equal(state.flags().length, 0);
-    const html = await (await fetch(statusUrl)).text();
-    assert.ok(!html.includes('reportBracketSet failed'));
+    assert.equal(state.flags().length, before - 1);
+    assert.ok(!(await (await fetch(statusUrl)).text()).includes('HTTP 503 after 3 attempts'));
   });
 
   await t.test('acking an unknown flag is a 404', async () => {
@@ -67,5 +100,24 @@ test('status page', async (t) => {
 
   await t.test('unknown paths are 404', async () => {
     assert.equal((await fetch(`${statusUrl}/nope`)).status, 404);
+  });
+
+  await t.test('a failed refresh is shown with its message; old data is kept', async () => {
+    fake.failNext('eventSets', 'gqlError', 1, 'Invalid authentication token');
+    await assert.rejects(cache.refresh());
+    const html = await (await fetch(statusUrl)).text();
+    assert.match(html, /✗ last refresh failed: start\.gg rejected: Invalid authentication token/);
+    assert.match(html, /Cache: 4 sets/);
+    await cache.refresh();
+    assert.doesNotMatch(await (await fetch(statusUrl)).text(), /last refresh failed/);
+  });
+
+  await t.test('a cache older than STALE_CACHE_MS is flagged', async (tt) => {
+    tt.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    tt.mock.timers.tick(STALE_CACHE_MS + 5_000);
+    const html = status.render();
+    assert.match(html, /⚠ cache is stale \(last refresh \d+s ago/);
+    tt.mock.timers.reset();
+    assert.doesNotMatch(status.render(), /cache is stale/);
   });
 });

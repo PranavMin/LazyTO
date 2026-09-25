@@ -5,6 +5,7 @@
 
 [Unit]
 Description=Tournament Reporter relay (Wii <-> start.gg)
+Documentation=file:///opt/tournament-reporter/README.md
 After=network-online.target
 Wants=network-online.target
 
@@ -14,12 +15,13 @@ User=relay
 Group=relay
 WorkingDirectory=/opt/tournament-reporter
 Environment=CONFIG=/etc/tournament-reporter/config.json
-ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/src/main.js
+ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/main.js
 # The relay exits non-zero on a bad config or an unreachable start.gg at
 # startup (fail fast). on-failure brings it back when the network returns;
 # a genuinely bad config shows up as a restart loop in `systemctl status`.
 Restart=on-failure
 RestartSec=5
+SyslogIdentifier=tournament-reporter
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true

@@ -87,10 +87,17 @@ export class FakeStartgg {
     });
   }
 
-  async start(): Promise<void> {
-    await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve));
-    const { port } = this.server.address() as AddressInfo;
-    this.baseUrl = `http://127.0.0.1:${port}/gql/alpha`;
+  /** Listen on 127.0.0.1; port 0 (tests) picks a free one, scripts/serve-fake.ts passes a fixed one. */
+  async start(port = 0): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(port, '127.0.0.1', () => {
+        this.server.removeListener('error', reject);
+        resolve();
+      });
+    });
+    const bound = (this.server.address() as AddressInfo).port;
+    this.baseUrl = `http://127.0.0.1:${bound}/gql/alpha`;
   }
 
   get url(): string {
@@ -360,4 +367,37 @@ export function defaultFixture(): FakeSet[] {
 
 export function makeFake(sets: FakeSet[] = defaultFixture()): FakeStartgg {
   return new FakeStartgg(FIXTURE_TOKEN, FIXTURE_EVENT_ID, sets);
+}
+
+/** Peak events in any sliding 60 s window (the N2 number for calls[]). */
+export function peakPerMinute(times: number[]): number {
+  const sorted = [...times].sort((a, b) => a - b);
+  let peak = 0;
+  for (let lo = 0, hi = 0; hi < sorted.length; hi++) {
+    while (sorted[hi] - sorted[lo] > 60_000) lo++;
+    peak = Math.max(peak, hi - lo + 1);
+  }
+  return peak;
+}
+
+/**
+ * Load-test fixture (scripts/sim-wii.ts, scripts/serve-fake.ts): `count`
+ * Bo3 pending sets, all with both entrants known, 64 per winners round --
+ * enough that 12 stations churning for 10 minutes never run dry.
+ */
+export function loadFixture(count: number): FakeSet[] {
+  const sets: FakeSet[] = [];
+  for (let i = 0; i < count; i++) {
+    sets.push({
+      id: 300_000 + i,
+      state: 1,
+      round: Math.floor(i / 64) + 1,
+      fullRoundText: `Winners Round ${Math.floor(i / 64) + 1}`,
+      totalGames: 3,
+      slots: [entrant((i * 2) % 16 + 1), entrant((i * 2 + 1) % 16 + 1)],
+      games: [],
+      stream: null,
+    });
+  }
+  return sets;
 }

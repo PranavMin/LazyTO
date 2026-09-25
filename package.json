@@ -2,15 +2,18 @@
   "name": "tournament-reporter-relay",
   "version": "0.1.0",
   "private": true,
+  "main": "dist/main.js",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "tsc --noEmit && tsx --test \"test/*.test.ts\"",
+    "check": "python tools/check_protocol.py",
+    "test": "npm run check && tsc --noEmit && tsx --test \"test/*.test.ts\"",
+    "build": "tsc -p tsconfig.build.json",
     "start": "tsx src/main.ts",
     "sim": "tsx scripts/sim-wii.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "fake": "tsx scripts/serve-fake.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

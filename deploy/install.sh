@@ -2,7 +2,8 @@
 # install.sh -- Pi-side installer for the Tournament Reporter relay.
 # Run as root on the Pi from an extracted bundle made by deploy/push.ps1:
 #   sudo bash /tmp/tr/deploy/install.sh /tmp/tr
-# The bundle holds dist/ (compiled relay), deploy/ (this dir) and config.json.
+# The bundle holds dist/ (compiled relay), package.json ("type": "module",
+# which dist/*.js needs beside it), deploy/ (this dir) and config.json.
 # Idempotent: re-running upgrades the relay and config and restarts it.
 set -euo pipefail
 
@@ -16,8 +17,9 @@ DATA_DIR=/var/lib/tournament-reporter
 UNIT=tournament-reporter
 
 [[ $EUID -eq 0 ]] || { echo "install.sh: run with sudo" >&2; exit 1; }
-[[ -f "$BUNDLE/dist/src/main.js" ]] || { echo "install.sh: $BUNDLE/dist/src/main.js missing (bundle not built?)" >&2; exit 1; }
-[[ -f "$BUNDLE/config.json" ]] || { echo "install.sh: $BUNDLE/config.json missing" >&2; exit 1; }
+for f in dist/main.js package.json config.json deploy/$UNIT.service; do
+  [[ -f "$BUNDLE/$f" ]] || { echo "install.sh: $BUNDLE/$f missing (bundle not built by push.ps1?)" >&2; exit 1; }
+done
 [[ "$(uname -m)" == "aarch64" ]] || { echo "install.sh: expected a 64-bit OS (aarch64), got $(uname -m)" >&2; exit 1; }
 
 # --- Node: pinned official tarball at /opt/node-<ver>, symlinked to /opt/node ---
@@ -46,6 +48,8 @@ chmod 750 "$DATA_DIR"
 rm -rf "$APP/dist" "$APP/deploy"
 cp -r "$BUNDLE/dist" "$APP/dist"
 cp -r "$BUNDLE/deploy" "$APP/deploy"
+cp "$BUNDLE/package.json" "$APP/package.json"
+[[ -f "$BUNDLE/README.md" ]] && cp "$BUNDLE/README.md" "$APP/README.md"
 chown -R root:root "$APP"
 
 # --- config: holds the start.gg token, so root-owned and readable by relay only ---
