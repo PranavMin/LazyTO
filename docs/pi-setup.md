@@ -25,7 +25,12 @@ shows the removable disks; then
 .\deploy\backup-sd.ps1
 ```
 
-(or `-DiskNumber N -Out <path>.img.gz`) relaunches itself as Administrator, asks you to confirm the disk, and writes `P:\Projects\pi-backups\pi-sd-<date>.img.gz`. A 32 GB card takes roughly 10 to 25 minutes depending on the reader. To use that system again later: Imager → Operating System → Use custom → the `.img.gz` → a card of the same size or larger → Write.
+(or `-DiskNumber N -Out <path>.img.gz`) relaunches itself as Administrator, asks you to confirm the disk, and writes `P:\Projects\pi-backups\pi-sd-<date>.img.gz`. It ends with a `done:` line giving the bytes read and the compressed size. To use that system again later: Imager → Operating System → Use custom → the `.img.gz` → a card of the same size or larger → Write.
+
+Two things learned the first time (2026-09-24, 128 GB card, USB 2.0 reader: 2 hours, 1.7 GB compressed):
+
+- Do not click inside the elevated window. A click puts the console in select mode (the title starts with "Select") and freezes the script at its next progress update. Press Esc in that window to resume.
+- The reader is the bottleneck; the whole card is read no matter how full it is. A USB 3 reader takes about a quarter of the time. If the old system has ssh enabled, booting it in the Pi and pulling the image over Ethernet is faster still, about 25 minutes for 128 GB: `ssh pi@<host>.local "sudo dd if=/dev/mmcblk0 bs=4M status=none | gzip -1" > <path>.img.gz` from your own terminal (it asks for the Pi's password).
 
 ## 1. One-time, on the PC: an SSH key
 
@@ -51,17 +56,17 @@ Install Imager from https://www.raspberrypi.com/software/ (or `winget install Ra
 | Operating System | Raspberry Pi OS (other) → **Raspberry Pi OS Lite (64-bit)** |
 | Storage | the microSD card |
 
-Click Next, then **Edit Settings** when asked about OS customisation. Fill in:
+Click Next. Imager 2.x then walks through customisation pages (in Imager 1.x the same fields sit behind an **Edit Settings** button under two tabs, General and Services). Fill in:
 
-| Tab | Field | Value |
-|-----|-------|-------|
-| General | Hostname | `relay` (the guide and scripts assume `relay.local`) |
-| General | Username / password | `pi` and a password of your choice (only needed if you ever plug in a keyboard) |
-| General | Wireless LAN | leave **unchecked** |
-| General | Locale | your timezone and keyboard |
-| Services | Enable SSH | checked, **Allow public-key authentication only**, paste the key from your clipboard |
+| Page | Field | Value |
+|------|-------|-------|
+| Hostname | Hostname | `relay` (the guide and scripts assume `relay.local`) |
+| Localisation | Timezone / keyboard | yours |
+| User | Username / password | `pi` and a password of your choice (only needed if you ever plug in a keyboard) |
+| Wi-Fi | | leave it **off** or skip; the Pi is wired |
+| Remote Access | Enable SSH | on, **Use public key authentication**, paste the key from your clipboard (`Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard` puts it there again) |
 
-Save, Yes to apply the settings, Yes to erase the card, wait for "Write successful". Imager's tab names moved around between versions (newer ones call these Hostname / User / Remote Access); the fields are the same.
+Confirm, Yes to erase the card, wait for "Write successful". The storage entry for a card in a USB reader shows up under the reader's name (for example "Mass Storage Device USB Device"), not the card's.
 
 ## 3. First boot
 
