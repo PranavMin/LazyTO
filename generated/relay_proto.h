@@ -44,6 +44,9 @@ typedef unsigned long uint32_t;
 #define TAG_LEN            16  /* player tag */
 #define BEACON_PORT        7778  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
 #define BEACON_INTERVAL_MS 2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
+#define SECRET_LEN         16  /* relay shared secret, printable ASCII, NUL-padded (design R16) */
+#define AUTH_MAGIC_0       77  /* 'M', first byte of relay_auth */
+#define AUTH_MAGIC_1       75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
 
 /* request/response command, echoed back in the response header */
 enum relay_cmd {
@@ -64,6 +67,7 @@ enum relay_status {
     ST_STARTGG_ERROR = 5,  /* upstream rejected; see status page */
     ST_RATE_LIMITED  = 6,
     ST_INTERNAL      = 7,
+    ST_BAD_SECRET    = 8,  /* relay_auth missing or its secret wrong; check secret= on the SD card (design R16) */
 };
 
 /* Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY in EXI_DeviceSlippi.h). */
@@ -128,6 +132,27 @@ RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, _pad) == 3, relay_beacon__pad)
 RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, tcp_port) == 4, relay_beacon_tcp_port);
 RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, _pad2) == 6, relay_beacon__pad2);
 RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, event_id) == 8, relay_beacon_event_id);
+
+/* Relay shared secret (design R16). Not part of the game's messages: the host
+ * of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder) writes
+ * it on the TCP connection before the game's relay_hdr + payload, with the
+ * secret from its own config (tournament.cfg secret=, Dolphin
+ * SlippiRelaySecret). The relay compares the secret with its config in
+ * constant time and answers a missing or wrong one with ST_BAD_SECRET without
+ * acting on the request. Responses carry no relay_auth. Plaintext on the LAN:
+ * it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi
+ * traffic.
+ */
+struct relay_auth {
+    uint8_t  magic[2];  /* AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K') */
+    uint16_t _pad;
+    char     secret[SECRET_LEN];  /* the shared secret, NUL-padded */
+};  /* 20 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct relay_auth) == 20, relay_auth_size);
+RELAY_STATIC_ASSERT(offsetof(struct relay_auth, magic) == 0, relay_auth_magic);
+RELAY_STATIC_ASSERT(offsetof(struct relay_auth, _pad) == 2, relay_auth__pad);
+RELAY_STATIC_ASSERT(offsetof(struct relay_auth, secret) == 4, relay_auth_secret);
 
 /* Every message (request and response) begins with this header. */
 struct relay_hdr {

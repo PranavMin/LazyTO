@@ -11,6 +11,7 @@ const VALID = {
   tournament: 'tournament/sf-melee-discord-test',
   eventName: 'Melee Singles',
   streamName: 'SFMelee',
+  secret: 'abcd-EFGH_1234xy',
   streamStation: 1,
   tcpPort: 7777,
   httpPort: 8080,
@@ -79,6 +80,7 @@ test('every missing field is reported at once', () => {
     'missing field "tournament"',
     'missing field "eventName"',
     'missing field "streamName"',
+    'missing field "secret"',
     'missing field "streamStation"',
     'missing field "tcpPort"',
     'missing field "httpPort"',
@@ -105,6 +107,13 @@ test('tournament is a short URL or a full tournament slug, nothing else', () => 
   assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'abbey' }))).tournament, 'abbey');
   for (const bad of ['', 'https://start.gg/abbey', 'tournament/x/event/melee-singles', 'start.gg/abbey', 905882]) {
     expectProblems(JSON.stringify({ ...VALID, tournament: bad }), 'tournament must be a start.gg short URL');
+  }
+});
+
+test('secret is 8-16 letters, digits, - or _', () => {
+  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, secret: 'abcdefgh' }))).secret, 'abcdefgh');
+  for (const bad of ['short', 'x'.repeat(17), 'has space here', 'semi;colon', 'equals=sign', 1234567890]) {
+    expectProblems(JSON.stringify({ ...VALID, secret: bad }), 'secret must be 8-16 letters');
   }
 });
 

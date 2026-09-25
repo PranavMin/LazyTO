@@ -17,6 +17,9 @@ export const ROUND_LEN = 24; // round name as the players see it, upper case: "W
 export const TAG_LEN = 16; // player tag
 export const BEACON_PORT = 7778; // UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address)
 export const BEACON_INTERVAL_MS = 2000; // the relay sends one relay_beacon per interval on every IPv4 interface
+export const SECRET_LEN = 16; // relay shared secret, printable ASCII, NUL-padded (design R16)
+export const AUTH_MAGIC_0 = 77; // 'M', first byte of relay_auth
+export const AUTH_MAGIC_1 = 75; // 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so
 
 /** request/response command, echoed back in the response header */
 export enum RelayCmd {
@@ -37,6 +40,7 @@ export enum RelayStatus {
   ST_STARTGG_ERROR = 5, // upstream rejected; see status page
   ST_RATE_LIMITED = 6,
   ST_INTERNAL = 7,
+  ST_BAD_SECRET = 8, // relay_auth missing or its secret wrong; check secret= on the SD card (design R16)
 }
 
 /** Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY in EXI_DeviceSlippi.h). */
@@ -141,6 +145,33 @@ export function decodeRelayBeacon(buf: Uint8Array, off = 0): RelayBeacon {
     version: dv.getUint8(off + 2),
     tcp_port: dv.getUint16(off + 4, false),
     event_id: dv.getUint32(off + 8, false),
+  };
+}
+
+
+// ---- relay_auth (20 bytes) ----
+
+/** Relay shared secret (design R16). Not part of the game's messages: the host of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder) writes it on the TCP connection before the game's relay_hdr + payload, with the secret from its own config (tournament.cfg secret=, Dolphin SlippiRelaySecret). The relay compares the secret with its config in constant time and answers a missing or wrong one with ST_BAD_SECRET without acting on the request. Responses carry no relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi traffic. */
+export interface RelayAuth {
+  magic: Uint8Array; // AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')
+  secret: string; // the shared secret, NUL-padded
+}
+export const RELAY_AUTH_SIZE = 20;
+
+export function encodeRelayAuth(v: RelayAuth): Uint8Array {
+  const bytes = new Uint8Array(RELAY_AUTH_SIZE);
+  const dv = new DataView(bytes.buffer);
+  bytes.set(v.magic.subarray(0, 2), 0);
+  putAscii(bytes, 4, SECRET_LEN, v.secret);
+  return bytes;
+}
+
+export function decodeRelayAuth(buf: Uint8Array, off = 0): RelayAuth {
+  checkLen(buf, off, RELAY_AUTH_SIZE, 'relay_auth');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: buf.slice(off + 0, off + 0 + 2),
+    secret: getAscii(buf, off + 4, SECRET_LEN),
   };
 }
 

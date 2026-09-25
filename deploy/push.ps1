@@ -22,8 +22,8 @@ Steps: npm run build -> write config.json (token from .env, the rest from the
 parameters; startggEndpoint is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
 README.md, config.json) -> scp to the Pi -> run deploy/install.sh
 there over ssh. Needs Windows' built-in ssh/scp/tar and an ssh key the Pi
-trusts (docs/pi-setup.md). The token is read from .env and never leaves this
-machine except over ssh to the Pi.
+trusts (docs/pi-setup.md). The token and RELAY_SECRET are read from .env and
+never leave this machine except over ssh to the Pi.
 #>
 [CmdletBinding()]
 param(
@@ -48,6 +48,11 @@ foreach ($line in Get-Content $envPath) {
   if ($line -match '^\s*([A-Z_]+)=(.*)$') { $dotenv[$Matches[1]] = $Matches[2].Trim() }
 }
 if (-not $dotenv['STARTGG_TOKEN']) { throw 'STARTGG_TOKEN missing from .env' }
+# The relay's shared secret (design R16): the same value is secret= on every
+# Wii's SD card and SlippiRelaySecret in Dolphin. 8-16 letters, digits, - or _.
+if ($dotenv['RELAY_SECRET'] -notmatch '^[A-Za-z0-9_-]{8,16}$') {
+  throw 'RELAY_SECRET in .env must be 8-16 letters, digits, - or _ (it goes on every SD card as secret=)'
+}
 $Tournament = if ($Test) { 'tournament/sf-melee-discord-test' } else { 'abbey' }
 
 # --- build ---
@@ -72,6 +77,7 @@ $config = [ordered]@{
   tournament    = $Tournament
   eventName     = $EventName
   streamName    = $StreamName
+  secret        = $dotenv['RELAY_SECRET']
   streamStation = $StreamStation
   tcpPort       = $TcpPort
   httpPort      = $HttpPort

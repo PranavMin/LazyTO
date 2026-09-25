@@ -5,9 +5,19 @@
 //
 // Run: npx tsx scripts/smoke.ts relay.local          (ports 7777 / 8080)
 //      npx tsx scripts/smoke.ts 192.168.1.10 7777 8080
+// Sends RELAY_SECRET from .env as its relay_auth, like a Wii (design R16).
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { RelayCmd, RelayStatus, decodeListSetsResp } from '../generated/wire.js';
 import { rawRequest } from '../test/wii-client.js';
+
+function relaySecret(): string {
+  const text = readFileSync(resolve(import.meta.dirname, '..', '.env'), 'utf8');
+  const m = /^RELAY_SECRET=(.*)$/m.exec(text);
+  if (!m || !m[1]!.trim()) throw new Error('RELAY_SECRET missing from .env');
+  return m[1]!.trim();
+}
 
 const host = process.argv[2] ?? 'relay.local';
 const tcpPort = Number(process.argv[3] ?? 7777);
@@ -15,7 +25,7 @@ const httpPort = Number(process.argv[4] ?? 8080);
 const STATION = 999;
 
 async function main(): Promise<void> {
-  const reply = await rawRequest(tcpPort, STATION, RelayCmd.CMD_LIST_SETS, undefined, { host });
+  const reply = await rawRequest(tcpPort, STATION, RelayCmd.CMD_LIST_SETS, undefined, { host, secret: relaySecret() });
   const status = RelayStatus[reply.resp.status] ?? String(reply.resp.status);
   if (reply.resp.status !== RelayStatus.ST_OK) {
     throw new Error(`LIST_SETS -> ${status} "${reply.resp.msg}"`);

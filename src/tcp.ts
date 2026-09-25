@@ -6,10 +6,15 @@
 // response, and upstream call is audited.
 
 import { createServer, type Server, type Socket, type AddressInfo } from 'node:net';
+import { timingSafeEqual } from 'node:crypto';
 import {
+  AUTH_MAGIC_0,
+  AUTH_MAGIC_1,
   MAGIC_0,
   MAGIC_1,
   MAX_SETS,
+  RELAY_AUTH_SIZE,
+  SECRET_LEN,
   PROTO_VERSION,
   RELAY_HDR_SIZE,
   RelayCmd,
@@ -43,6 +48,17 @@ export interface RelayDeps {
   audit: AuditSink;
   streamStation: number;
   streamId: number;
+  /** Shared secret every request's relay_auth must carry (design R16). */
+  secret: string;
+}
+
+/** Requests refused for a missing or wrong secret, for the status page. */
+export interface RefusedStatus {
+  count: number;
+  lastAt: number;
+  lastFrom: string;
+  lastStation: number; // as claimed by the request; unauthenticated
+  lastReason: string;
 }
 
 /** A dead connection must not hold the one-request socket open forever. */
@@ -56,9 +72,18 @@ interface Reply {
 
 export class RelayTcpServer {
   private readonly server: Server;
+  private readonly expectedSecret: Buffer; // SECRET_LEN bytes, NUL-padded, as relay_auth carries it
+  private refusals: RefusedStatus | null = null;
 
   constructor(private readonly deps: RelayDeps) {
+    this.expectedSecret = Buffer.alloc(SECRET_LEN);
+    this.expectedSecret.write(deps.secret, 'ascii');
     this.server = createServer((socket) => this.onConnection(socket));
+  }
+
+  /** null until a request has been refused for its secret. */
+  refused(): RefusedStatus | null {
+    return this.refusals && { ...this.refusals };
   }
 
   async listen(port: number, host = '0.0.0.0'): Promise<void> {
@@ -81,6 +106,10 @@ export class RelayTcpServer {
 
   // ---- framing ----
 
+  // A request is relay_auth (the host's shared secret, design R16), then the
+  // game's relay_hdr + payload. A host that sends no relay_auth starts with
+  // relay_hdr's 'M','T' instead of 'M','K': it is answered ST_BAD_SECRET
+  // within its own framing, so the kiosk can say what is wrong.
   private onConnection(socket: Socket): void {
     const chunks: Buffer[] = [];
     let received = 0;
@@ -91,19 +120,32 @@ export class RelayTcpServer {
       if (handled) return;
       chunks.push(chunk);
       received += chunk.length;
-      if (received < RELAY_HDR_SIZE) return;
+      if (received < 2) return;
 
       const buf = Buffer.concat(chunks);
-      if (buf[0] !== MAGIC_0 || buf[1] !== MAGIC_1) {
+      const authed = buf[0] === AUTH_MAGIC_0 && buf[1] === AUTH_MAGIC_1;
+      const bare = buf[0] === MAGIC_0 && buf[1] === MAGIC_1;
+      if (!authed && !bare) {
         // Not our protocol; there is no framing to answer within.
         socket.destroy();
         return;
       }
-      const hdr = decodeRelayHdr(buf);
-      if (received < RELAY_HDR_SIZE + hdr.len) return;
+      const hdrOff = authed ? RELAY_AUTH_SIZE : 0;
+      if (received < hdrOff + RELAY_HDR_SIZE) return;
+      if (buf[hdrOff] !== MAGIC_0 || buf[hdrOff + 1] !== MAGIC_1) {
+        socket.destroy();
+        return;
+      }
+      const hdr = decodeRelayHdr(buf, hdrOff);
+      const payloadOff = hdrOff + RELAY_HDR_SIZE;
+      if (received < payloadOff + hdr.len) return;
 
       handled = true;
-      void this.handle(hdr.cmd, hdr.version, hdr.station, buf.subarray(RELAY_HDR_SIZE, RELAY_HDR_SIZE + hdr.len))
+      const secretOk = authed && timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
+      const pending: Promise<Reply> = secretOk
+        ? this.handle(hdr.cmd, hdr.version, hdr.station, buf.subarray(payloadOff, payloadOff + hdr.len))
+        : Promise.resolve(this.refuse(hdr.cmd, hdr.station, authed, socket.remoteAddress ?? '?'));
+      void pending
         .then((reply) => {
           const payload = reply.payload ?? new Uint8Array(0);
           const resp = encodeRelayResp({ status: reply.status, msg: reply.msg });
@@ -122,6 +164,17 @@ export class RelayTcpServer {
         })
         .catch(() => socket.destroy()); // handle() never throws; belt and braces
     });
+  }
+
+  // ---- refused: missing or wrong secret ----
+
+  /** Answer without acting. The claimed station is not trusted, so no station row is touched. */
+  private refuse(cmd: number, station: number, sentSecret: boolean, from: string): Reply {
+    const reason = sentSecret ? 'wrong relay secret' : 'no relay secret sent';
+    const prev = this.refusals?.count ?? 0;
+    this.refusals = { count: prev + 1, lastAt: Date.now(), lastFrom: from, lastStation: station, lastReason: reason };
+    this.deps.audit.record({ type: 'refused', reason, from, station, cmd: RelayCmd[cmd] ?? cmd });
+    return { status: RelayStatus.ST_BAD_SECRET, msg: reason };
   }
 
   // ---- dispatch ----

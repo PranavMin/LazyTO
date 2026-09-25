@@ -16,6 +16,7 @@ import type { SetCache } from './cache.js';
 import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
+import type { RefusedStatus } from './tcp.js';
 
 export interface StatusDeps {
   state: StationState;
@@ -26,6 +27,8 @@ export interface StatusDeps {
   eventLabel: string;
   /** Discovery beacon (design R15): where it is announcing the relay, and any send error. */
   beacon: { status(): BeaconStatus };
+  /** Requests refused for their secret (design R16): a mis-copied SD card, or someone else on the Wi-Fi. */
+  tcp: { refused(): RefusedStatus | null };
 }
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
@@ -81,7 +84,7 @@ export class StatusServer {
   }
 
   render(): string {
-    const { state, cache, startgg, streamStation, eventLabel, beacon } = this.deps;
+    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp } = this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -132,6 +135,10 @@ export class StatusServer {
     const staleLine = stale
       ? `<p class="warn">⚠ cache is stale (last refresh ${age(cs.refreshedAt)} ago; expected every 20 s) — is start.gg reachable?</p>`
       : '';
+    const rf = tcp.refused();
+    const refusedLine = rf
+      ? `<p class="warn">✗ ${rf.count} request(s) refused: ${escapeHtml(rf.lastReason)} — last ${age(rf.lastAt)} ago from ${escapeHtml(rf.lastFrom)} claiming station ${rf.lastStation}. A Wii there needs the relay's secret= on its SD card.</p>`
+      : '';
     const bs = beacon.status();
     const beaconLine = bs.lastError
       ? `<p class="warn">✗ discovery beacon: ${escapeHtml(bs.lastError)} — Wiis cannot find the relay</p>`
@@ -169,6 +176,7 @@ ${rows.join('\n')}
 </table></div>
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${beaconLine}
+${refusedLine}
 ${staleLine}${errorLine}${warningLines}
 </body></html>`;
   }

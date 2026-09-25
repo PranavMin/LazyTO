@@ -13,7 +13,7 @@ import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
 import { StartggClient } from '../src/startgg.js';
 import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
-import { WiiClient, game } from './wii-client.js';
+import { WiiClient, game, TEST_SECRET } from './wii-client.js';
 
 let dir: string;
 test.before(() => {
@@ -75,7 +75,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     await cache.refresh();
     const state = new StationState();
     const audit = new AuditLog(path);
-    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079 });
+    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
     await server.listen(0, '127.0.0.1');
     const port = server.address().port;
 
@@ -105,7 +105,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     for (const [station, c] of claims) if (cache.get(c.setId)) state.claim(station, c);
 
     const audit = new AuditLog(path);
-    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079 });
+    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
     await server.listen(0, '127.0.0.1');
     const port = server.address().port;
     const wii3 = new WiiClient(port, 3);

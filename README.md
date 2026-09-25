@@ -25,7 +25,7 @@ npm run build
 npm run fake -- --port=18081
 ```
 
-then a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`, `"tournament": "tournament/sf-melee-discord-test"`, `"eventName": "Melee Singles"`, `"streamName": "SFMelee"` (the fake's copy of the test tournament) and non-default ports, `CONFIG=that.json node dist/main.js`, and `npm run sim -- --relay=127.0.0.1:<tcpPort>`. The sim reports Wii-side request rate and errors; the fake reports the upstream call rate.
+then a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`, `"tournament": "tournament/sf-melee-discord-test"`, `"eventName": "Melee Singles"`, `"streamName": "SFMelee"` (the fake's copy of the test tournament), a `"secret"` of your choice and non-default ports, `CONFIG=that.json node dist/main.js`, and `npx tsx scripts/sim-wii.ts --relay=127.0.0.1:<tcpPort> --secret=<that secret>`. The sim reports Wii-side request rate and errors; the fake reports the upstream call rate.
 
 ## Config
 
@@ -38,6 +38,7 @@ One JSON file, every field required, unknown fields rejected, every problem repo
 | `tournament` | The tournament, as its start.gg short URL (`abbey`, looked up among the token owner's admin tournaments) or full slug (`tournament/<slug>`, fetched directly; needed for an unpublished tournament). Resolved once at startup (design §6.3). | `abbey` in production; `tournament/sf-melee-discord-test` until go-live. `npx tsx scripts/probe.ts --resolve=<value>` shows what it resolves to. |
 | `eventName` | Picks the event: the one Melee singles event whose name contains this, case-insensitively. Zero or several matches stops the relay with the list. | `Melee Singles` (matches "Melee Singles! (7:30 Start)", not Doubles or the waitlist). |
 | `streamName` | Picks the stream to assign stream-station sets to, by exact name (case-insensitive). | `SFMelee`. |
+| `secret` | Shared secret every Wii request must carry (design R16); 8-16 of `A-Z a-z 0-9 - _`. Refusals are counted on the status page. | `RELAY_SECRET` in `.env`; the same value is `secret=` on every SD card and `SlippiRelaySecret` in Dolphin. |
 | `streamStation` | Station number (1–65535) of the Wii whose `tournament.cfg` has `stream=1`. | Physical station label. |
 | `tcpPort` | Port the Wiis connect to; matches `tournament.cfg` on every SD card. | `7777` unless something else owns it. |
 | `httpPort` | Status page port; must differ from `tcpPort`. | `8080`. |
@@ -81,6 +82,7 @@ What the status page shows, what it means, what to do. Rows with ✗ stay until 
 | `⚠ cache is stale` and/or `✗ last refresh failed: start.gg unreachable` | The venue's internet is down or the Pi lost it. Wiis keep seeing the last list; every START/REPORT will fail until it is back. | Check the uplink and the Pi's cable. Nothing to do on the relay; it recovers on the next successful refresh. |
 | `✗ last refresh failed: start.gg rejected: Invalid authentication token` | Token revoked or expired. | New token into the config, restart. |
 | `✗ discovery beacon: …` | The relay cannot broadcast its beacon (no network interface, or sending failed), so the Wiis cannot find it (design R15). | Check the Pi is on the Wi-Fi (`ip -4 addr`); it recovers on the next beacon, every 2 s. |
+| `✗ N request(s) refused: wrong relay secret …` (or `no relay secret sent`) | A Wii's SD card has a missing or wrong `secret=`, or something else on the Wi-Fi is trying the relay. Nothing was sent to start.gg. | Compare the named address/station with your Wiis; fix that card's `secret=` from `.env` `RELAY_SECRET`. A stranger: change the secret, push, update the cards. |
 | `no station has connected yet` after a Wii is booted | The Wii cannot reach the relay: it is on another network or VLAN, or the Wi-Fi isolates clients. The Wii shows `no relay found yet` (no beacon heard) or `relay timeout` (beacon heard, connection refused). | Fix the card or the cable. If the address is right, the venue Wi-Fi may isolate clients (design R15). |
 | Station row: `✗ assignStream failed: …` | The set **is** in progress on start.gg but not on the stream, so TSH has no names. | Assign the set to the stream by hand in start.gg, press ack. |
 | Station row: `✗ reportBracketSet failed: start.gg rejected: …` (last action `ST_STARTGG_ERROR: start.gg rejected - ask TO`) | start.gg refused the score — usually the TO already reported or reset that set by hand (R6). The Wii showed "start.gg rejected — ask TO". | Sort it out on start.gg; press ack. The station clears itself on its next LIST_SETS once the set is gone from the cache. |

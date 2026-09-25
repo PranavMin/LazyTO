@@ -16,6 +16,9 @@ import {
   encodeAbandonSetReq,
   encodeEndSetReq,
   encodeRelayHdr,
+  encodeRelayAuth,
+  AUTH_MAGIC_0,
+  AUTH_MAGIC_1,
   encodeReportScoreReq,
   encodeStartSetReq,
   type GameResult,
@@ -23,6 +26,9 @@ import {
   type RelayHdr,
   type RelayResp,
 } from '../generated/wire.js';
+
+/** The secret tests and the sim use; a relay under test is configured with it. */
+export const TEST_SECRET = 'test-secret-1234';
 
 export interface WireReply {
   hdr: RelayHdr;
@@ -35,9 +41,18 @@ export function rawRequest(
   station: number,
   cmd: number,
   payload: Uint8Array = new Uint8Array(0),
-  { version = PROTO_VERSION, host = '127.0.0.1', timeoutMs = 3000 } = {},
+  {
+    version = PROTO_VERSION,
+    host = '127.0.0.1',
+    timeoutMs = 3000,
+    secret = TEST_SECRET as string | null, // null: send no relay_auth at all, like a pre-R16 host
+  } = {},
 ): Promise<WireReply> {
+  const auth = secret === null
+    ? new Uint8Array(0)
+    : encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
   const req = Buffer.concat([
+    auth,
     encodeRelayHdr({ magic: new Uint8Array([MAGIC_0, MAGIC_1]), version, cmd, station, len: payload.length }),
     payload,
   ]);
@@ -72,10 +87,11 @@ export class WiiClient {
     readonly station: number,
     private readonly stream: 0 | 1 = 0,
     private readonly host = '127.0.0.1',
+    private readonly secret: string = TEST_SECRET,
   ) {}
 
   private request(cmd: number, payload?: Uint8Array): Promise<WireReply> {
-    return rawRequest(this.port, this.station, cmd, payload, { host: this.host });
+    return rawRequest(this.port, this.station, cmd, payload, { host: this.host, secret: this.secret });
   }
 
   async listSets(): Promise<{ resp: RelayResp; sets: ListSetsResp['sets'] }> {

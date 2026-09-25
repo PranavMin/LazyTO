@@ -129,12 +129,15 @@ It asks for the password (press Enter for an open network) and lists the saved n
 
 **Check once at the venue that a Wii can reach the Pi at all.** Guest Wi-Fi often has client isolation, which blocks device-to-device traffic: a Wii would then never reach the relay, whatever its address. With the Pi and this PC both on the venue Wi-Fi, `npx tsx scripts/smoke.ts relay.local` passing means the network allows it.
 
-**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has only the station number and the stream flag:
+**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has the station number, the stream flag and the relay's secret:
 
 ```
 station=3
 stream=1
+secret=<your RELAY_SECRET>
 ```
+
+**The secret.** The relay only acts on requests that carry its shared secret, so nobody else on the venue Wi-Fi can report scores (design.md R16). It is the `RELAY_SECRET` line in this repo's `.env`; the push script sends it to the Pi, and the same value goes on every SD card as `secret=` and into Dolphin as `SlippiRelaySecret` under `[Core]` in `User/Config/Dolphin.ini` for testing. Treat it like a password. A card without it shows "no secret in tournament.cfg"; a card with the wrong one shows "wrong relay secret", and the status page counts it.
 
 A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no relay found yet"; it picks the relay up within 2 s of both being on the same network. Old cards with `relay_ip=`/`relay_port=` lines still work: those lines are ignored.
 
@@ -195,7 +198,7 @@ ssh -t abbey@<hostname>.local sudo bash /opt/tournament-reporter/deploy/uninstal
 | Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/tournament-reporter/deploy/add-wifi.sh "Name"` |
 | Shut down cleanly | `ssh pi@relay.local sudo poweroff` (pulling power is also fine; claims replay from the audit log on boot) |
 
-The relay starts on boot and restarts on failure. A wrong token, a short URL that has not moved to tonight's tournament yet, or an event name that matches no event or several makes it exit immediately, and systemd retries every 5 s. So `systemctl status` shows `activating (auto-restart)` and the journal shows the exact problem.
+The relay starts on boot and restarts on failure. A wrong token, no Wi-Fi yet, no findable Abbey tournament, or an event name that matches no event or several makes it exit immediately. systemd tries again after 10 s, stretching to every 2 min, and never gives up, so it recovers on its own once the problem clears while keeping its start.gg calls well under the rate limit. Meanwhile `systemctl status` shows `activating (auto-restart)` and the journal shows the exact problem. After fixing something, `sudo systemctl restart tournament-reporter` starts it at once.
 
 ## Troubleshooting
 
@@ -208,5 +211,7 @@ The relay starts on boot and restarts on failure. A wrong token, a short URL tha
 - **FAILED with "cannot read ..." or "must be ..." lines.** The generated config failed validation; fix the parameter you passed and push again.
 - **FAILED with a fetch or TLS error.** The Pi has no internet, or its clock is wrong right after first boot. Check `ssh pi@relay.local curl -sI https://api.start.gg` and `timedatectl`; then `sudo systemctl restart tournament-reporter`.
 - **Status page shows 0 sets.** No pool or phase is started on start.gg yet. The relay refreshes every 20 s; no restart needed after starting pools.
+- **A Wii shows "no secret in tournament.cfg" or "wrong relay secret".** Its SD card's `secret=` line is missing, mistyped, or from an old `.env`. Copy `RELAY_SECRET` from `.env` exactly. The status page footer shows refused requests with the Wii's address and station.
+- **The status page shows requests refused from an address that is not one of your Wiis.** Something else on the Wi-Fi is trying the relay. Nothing happened on start.gg; if it keeps up, change `RELAY_SECRET`, push, and update the cards.
 - **A Wii shows "no relay found yet" or relay 0.0.0.0.** It has not heard the relay's beacon: the Wii and the Pi are on different networks, or the Wi-Fi isolates clients. The status page footer shows where the beacon is going; `ssh pi@relay.local ip -4 addr show wlan0` shows the Pi's own address. Compare it with the Wii's network.
 - **A Wii shows "relay timeout".** It heard a beacon but cannot open a connection to that address: client isolation, or a firewall between the Wii's network and the Pi's.

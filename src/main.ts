@@ -53,6 +53,7 @@ async function main(): Promise<void> {
     audit,
     streamStation: config.streamStation,
     streamId: ev.streamId,
+    secret: config.secret,
   });
   await tcp.listen(config.tcpPort);
   // Stations find the relay from this broadcast (design R15); started only
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
     streamStation: config.streamStation,
     eventLabel: `${ev.tournamentName} · ${ev.eventName} (${ev.eventId})`,
     beacon,
+    tcp,
   });
   await status.listen(config.httpPort);
 

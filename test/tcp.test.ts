@@ -9,13 +9,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { RelayStatus, RelayCmd, MAX_SETS } from '../generated/wire.js';
+import { RelayStatus, RelayCmd, MAX_SETS, encodeStartSetReq } from '../generated/wire.js';
 import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
 import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
 import { StartggClient } from '../src/startgg.js';
 import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, entrant, type FakeSet } from './fake-startgg.js';
-import { WiiClient, rawRequest, game } from './wii-client.js';
+import { WiiClient, rawRequest, game, TEST_SECRET } from './wii-client.js';
 
 const STREAM_STATION = 1;
 const STREAM_ID = 1358079;
@@ -41,7 +41,7 @@ async function setup(opts: { sets?: FakeSet[]; limits?: { capacity: number; refi
   await cache.refresh();
   const state = new StationState();
   const audit = new ArrayAudit();
-  const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: STREAM_STATION, streamId: STREAM_ID });
+  const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: STREAM_STATION, streamId: STREAM_ID, secret: TEST_SECRET });
   await server.listen(0, '127.0.0.1');
   const port = server.address().port;
   return {
@@ -420,4 +420,51 @@ test('LIST_SETS caps at the wire limit of MAX_SETS rows', async (t) => {
   const { resp, sets: listed } = await env.wii(3).listSets();
   assert.equal(resp.status, RelayStatus.ST_OK);
   assert.equal(listed.length, MAX_SETS);
+});
+
+// ---- shared secret (design R16) ----
+
+test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream or on the status page', async () => {
+  const env = await setup();
+  try {
+    const before = env.fake.calls.length;
+    const r = await rawRequest(env.port, 3, RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: SET, stream: 0 }), {
+      secret: 'not-the-secret',
+    });
+    assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
+    assert.equal(r.resp.msg, 'wrong relay secret');
+    assert.equal(r.hdr.cmd, RelayCmd.CMD_START_SET, 'the reply echoes the command');
+    assert.equal(env.fake.calls.length, before, 'no start.gg call');
+    assert.equal(env.state.get(3), undefined, 'no claim');
+    assert.equal(env.state.lastAction(3), undefined, 'an unauthenticated station number makes no status row');
+    const rf = env.server.refused();
+    assert.equal(rf?.count, 1);
+    assert.equal(rf?.lastStation, 3);
+    assert.equal(rf?.lastReason, 'wrong relay secret');
+  } finally {
+    await env.close();
+  }
+});
+
+test('a host that sends no relay_auth at all is told so, within its own framing', async () => {
+  const env = await setup();
+  try {
+    const r = await rawRequest(env.port, 5, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), { secret: null });
+    assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
+    assert.equal(r.resp.msg, 'no relay secret sent');
+    assert.equal(r.hdr.station, 5);
+  } finally {
+    await env.close();
+  }
+});
+
+test('the right secret goes through (every other test here uses it)', async () => {
+  const env = await setup();
+  try {
+    const { resp } = await env.wii(3).listSets();
+    assert.equal(resp.status, RelayStatus.ST_OK);
+    assert.equal(env.server.refused(), null);
+  } finally {
+    await env.close();
+  }
 });

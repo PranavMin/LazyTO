@@ -23,6 +23,7 @@ export interface Config {
   tournament: string; // start.gg short URL ("abbey") or full slug ("tournament/<slug>")
   eventName: string; // e.g. "Melee Singles"
   streamName: string; // e.g. "SFMelee"
+  secret: string; // shared with every station's relay_auth (design R16)
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   tcpPort: number;
   httpPort: number;
@@ -35,6 +36,7 @@ const FIELDS = [
   'tournament',
   'eventName',
   'streamName',
+  'secret',
   'streamStation',
   'tcpPort',
   'httpPort',
@@ -91,7 +93,7 @@ export function loadConfig(path: string): Config {
     if (!(key in obj)) problems.push(`missing field "${key}"`);
   }
 
-  const { startggEndpoint, token, tournament, eventName, streamName, streamStation, tcpPort, httpPort, auditDir } = obj;
+  const { startggEndpoint, token, tournament, eventName, streamName, secret, streamStation, tcpPort, httpPort, auditDir } = obj;
 
   if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
     problems.push('startggEndpoint must be an http(s) URL');
@@ -109,6 +111,12 @@ export function loadConfig(path: string): Config {
     if (name in obj && (typeof v !== 'string' || v.trim().length === 0)) {
       problems.push(`${name} must be a non-empty string`);
     }
+  }
+  // Letters, digits, - and _ only: it is typed onto every SD card as
+  // secret=<value> and must survive the kernel's key=value parser. 8 to
+  // SECRET_LEN (16) characters.
+  if ('secret' in obj && (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{8,16}$/.test(secret))) {
+    problems.push('secret must be 8-16 letters, digits, - or _');
   }
   if ('streamStation' in obj && (!isPositiveInt(streamStation) || streamStation > 0xffff)) {
     problems.push('streamStation must be an integer in 1..65535');
@@ -136,6 +144,7 @@ export function loadConfig(path: string): Config {
     tournament: tournament as string,
     eventName: eventName as string,
     streamName: streamName as string,
+    secret: secret as string,
     streamStation: streamStation as number,
     tcpPort: tcpPort as number,
     httpPort: httpPort as number,

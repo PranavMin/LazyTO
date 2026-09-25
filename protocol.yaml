@@ -44,6 +44,15 @@ constants:
   BEACON_INTERVAL_MS:
     value: 2000
     doc: "the relay sends one relay_beacon per interval on every IPv4 interface"
+  SECRET_LEN:
+    value: 16
+    doc: "relay shared secret, printable ASCII, NUL-padded (design R16)"
+  AUTH_MAGIC_0:
+    value: 0x4D
+    doc: "'M', first byte of relay_auth"
+  AUTH_MAGIC_1:
+    value: 0x4B
+    doc: "'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so"
 
 enums:
   relay_cmd:
@@ -66,6 +75,7 @@ enums:
       ST_STARTGG_ERROR: {value: 5, doc: "upstream rejected; see status page"}
       ST_RATE_LIMITED:  {value: 6}
       ST_INTERNAL:      {value: 7}
+      ST_BAD_SECRET:    {value: 8, doc: "relay_auth missing or its secret wrong; check secret= on the SD card (design R16)"}
 
   exi_cmd:
     doc: >-
@@ -122,6 +132,23 @@ structs:
       - {name: tcp_port, type: u16,          doc: "the relay's TCP port for relay_hdr requests"}
       - {name: _pad2,    type: u16}
       - {name: event_id, type: u32,          doc: "start.gg event the relay serves; for logs and display only"}
+
+  relay_auth:
+    doc: >-
+      Relay shared secret (design R16). Not part of the game's messages: the
+      host of the fake EXI device (Nintendont kernel, Slippi Dolphin
+      forwarder) writes it on the TCP connection before the game's relay_hdr
+      + payload, with the secret from its own config (tournament.cfg secret=,
+      Dolphin SlippiRelaySecret). The relay compares the secret with its
+      config in constant time and answers a missing or wrong one with
+      ST_BAD_SECRET without acting on the request. Responses carry no
+      relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi
+      out, not someone capturing the Wi-Fi traffic.
+    size: 20
+    fields:
+      - {name: magic,  type: u8,   array: 2, doc: "AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')"}
+      - {name: _pad,   type: u16}
+      - {name: secret, type: char, array: SECRET_LEN, doc: "the shared secret, NUL-padded"}
 
   relay_hdr:
     doc: "Every message (request and response) begins with this header."

@@ -8,6 +8,10 @@ Description=Tournament Reporter relay (Wii <-> start.gg)
 Documentation=file:///opt/tournament-reporter/README.md
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
+# Never give up: a Pi that boots without Wi-Fi, or before tonight's
+# tournament is findable, must recover on its own once it is. The pacing
+# below keeps the retries off start.gg's back.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -19,8 +23,20 @@ ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/main.js
 # The relay exits non-zero on a bad config or an unreachable start.gg at
 # startup (fail fast). on-failure brings it back when the network returns;
 # a genuinely bad config shows up as a restart loop in `systemctl status`.
+#
+# Pacing: a failed start costs up to ~6 start.gg calls (every admin
+# tournament page when "abbey" cannot be found, then the tournament), and
+# start.gg allows 80 a minute per token. Restarts wait 10 s, stretching over
+# 5 steps to 2 min (RestartSteps/RestartMaxDelaySec, systemd >= 254:
+# Raspberry Pi OS Trixie). Worst case ~36 calls in the first two minutes,
+# then ~3 a minute. An older systemd ignores the two stretch keys with a
+# warning and waits 10 s every time: ~36 a minute, still under the limit.
+# The stretch does not reset until the unit is started by hand, so a crash
+# late in a night that began with failed starts waits up to 2 min.
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+RestartSteps=5
+RestartMaxDelaySec=120
 SyslogIdentifier=tournament-reporter
 NoNewPrivileges=true
 ProtectSystem=full

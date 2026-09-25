@@ -9,7 +9,7 @@
 // Two modes:
 //   npm run sim                          in-process: fake start.gg + the real
 //                                        client/cache/state/tcp/status stack
-//   npm run sim -- --relay=127.0.0.1:7777
+//   npx tsx scripts/sim-wii.ts --relay=127.0.0.1:7777 --secret=<relay's secret>
 //                                        external: drive an already-running
 //                                        relay (e.g. `node dist/main.js`
 //                                        pointed at `npm run fake`). The
@@ -30,7 +30,7 @@ import { AuditLog, auditPath } from '../src/audit.js';
 import { RelayTcpServer } from '../src/tcp.js';
 import { StatusServer } from '../src/status.js';
 import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
-import { WiiClient } from '../test/wii-client.js';
+import { WiiClient, TEST_SECRET } from '../test/wii-client.js';
 
 const STATIONS = 12;
 const ACTION_DELAY_MS = 12_000; // one player action every ~12 s, +/- 25% jitter
@@ -46,6 +46,9 @@ if (!Number.isFinite(DURATION_S) || DURATION_S <= 0) {
   console.error('bad --duration');
   process.exit(1);
 }
+
+// --secret=: the external relay's secret (its config.json); in-process uses TEST_SECRET.
+const SECRET = flag('secret') ?? TEST_SECRET;
 
 const relayArg = flag('relay');
 let external: { host: string; port: number } | null = null;
@@ -156,9 +159,9 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
   });
   await cache.refresh();
   const state = new StationState();
-  const tcp = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079 });
+  const tcp = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) } });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) }, tcp });
   await status.listen(0, '127.0.0.1');
   cache.start();
 
@@ -208,7 +211,7 @@ async function main(): Promise<void> {
 
   await Promise.all(
     Array.from({ length: STATIONS }, (_, i) =>
-      stationLoop(new WiiClient(stack.port, i + 1, 0, stack.host), deadline, tally),
+      stationLoop(new WiiClient(stack.port, i + 1, 0, stack.host, SECRET), deadline, tally),
     ),
   );
 
