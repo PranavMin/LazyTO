@@ -326,17 +326,29 @@ Payload: `uint32_t set_id`. Relay calls `resetSet(setId)` and clears the station
 - `tools/module_hooks.txt` — the patch table (`ptr`/`branch`/`word` per line, vanilla addresses); `tools/build_module.py` — compiles the TUs with the DOL's MWCC flags plus `-sdata 0 -sdata2 0 -DTOURNAMENT_MODULE`, links them at `0x817E0000` against `config/GALE01/symbols.txt` (every vanilla external becomes an absolute `sym = 0xADDR` in a generated LCF), refuses any patch/blob address that a venue codeset (`Nintendont/kernel/gecko/*.bin`) also writes, and packs `build/GALE01/tournament.bin`: `"TMOD"`, version 1, load address, blob length, patch count, guard `{0x8016D800, 0x7C0802A6}`, patches `{addr, u32}`, blob (.text+.rodata+.data+zeroed .bss). Loaders refuse the file unless the guard word is in RAM (stock 1.02) and the arena top is still above the load address; after copying they write the load address to `0x80000034`, which Melee's `OSInit` adopts as arenaHi, so the module sits above the heap.
 - `melee/lb/lbrelayexi.c` — EXI request/poll helpers. The decomp has **no Slippi code** (found 2026-09-19, session 5): this is a new EXI driver on the vanilla SDK API (`dolphin/os/OSExi`; template: `hio.c`), speaking the `exi_cmd` commands from `relay_proto.h` to the fake relay device that Slippi Dolphin (§9.3) and Nintendont (§6.2) implement.
 
-**Menu flow:**
+**Menu flow** (set list redesigned 2026-09-25 after the design pitch, "Direction B" - https://claude.ai/artifact/G5rAMHpcbk9gUNdmR9ca5H):
 
 ```
-Main menu ─► Tournament
-              ├─ [Loading…]  (LIST_SETS in flight)
-              ├─ Set list (scrollable; L/R filters by first letter of tag)
-              │    A ─► Confirm "WR2  Mango vs Zain — Bo3   START?"
-              │            A ─► START_SET ─► OK ─► CSS
-              │                              ERR ─► error screen, A retries, B back
-              └─ B ─► Main menu
+Boot ─► Tournament (auto-entered; B from the list shows the vanilla main menu, Z re-enters)
+          ├─ Loading    list area: LOADING SETS + a three-dot pulse; the pane shows
+          │             STATION n / RELAY a.b.c.d / PORT p from exi_poll_hdr (host-filled,
+          │             so it shows even while the relay is silent)
+          ├─ Set list   two panes inside the vanilla panel. Rows are "tag VS tag" on a
+          │             fixed VS axis, grouped under round-name headers (WINNERS
+          │             QUARTER-FINAL ...); the cursor row is yellow on a translucent bar.
+          │             The pane on the right describes the highlighted set: round, both
+          │             tags, BEST OF n, READY / PLAYING HERE, A START. Header: L ALL SETS R
+          │             (or NAMES: X) and the position "10-17 / 56", scroll cues above/below.
+          │             Up/down move, left/right page, L/R first-letter filter, X jumps to
+          │             the set this station is playing, Y refreshes (cursor stays on the
+          │             same set_id), Z friendlies, B main menu
+          │    A ─► Confirm  same frame: the list dims, the pane asks START THIS SET? with
+          │                  both tags; A ─► START_SET ─► OK ─► CSS; B back to the list
+          └─ Error      same frame: NO LINK TO THE RELAY or THE RELAY SAID NO, the message,
+                        YOUR LIST IS STILL HERE / NO SETS LOADED YET; A retries, B back
 ```
+
+Sizes follow the TV floor: rows at SIS scale 0.70 (18 px cap), headers 0.55, hints 0.50, nothing that matters below 0.50; long tags share one shrunk scale (floor 0.58) then get cut with a `-` tail. The scrims and the cursor bar are the module font's solid block glyph stretched by per-entry x/y scale inside translucent text objects (glyph alpha is per `HSD_Text`, so three texts: scrim, bar, opaque). Rounds arrive as full names (`ROUND_LEN` 24) and the relay sends sets earliest round first, so equal names are adjacent and headers fall out of the order.
 
 **CSS keybinds** (only active when a set is current):
 
@@ -582,6 +594,7 @@ Logs to journald; audit log to `/var/lib/tournament-reporter/<eventId>.jsonl` (o
 
 ## 12. What to revisit later
 
+- **Tournament screen redesign (2026-09-25).** Phase 1 of the pitch (https://claude.ai/artifact/G5rAMHpcbk9gUNdmR9ca5H, "Direction B") shipped in the module: two-pane set list, grouped rows on a VS axis, cursor bar, detail pane, in-frame confirm/loading/error, the wire changes (full round names, `exi_poll_hdr`). Verified in Dolphin: list (5 sets and 56 sets with scroll cues), error view; the confirm/starting views are drawn by the same code but were not captured (no controller input in the headless dev loop) - check them on the first Wii run, along with the bar's translucency on a CRT. Open: **phase 2** (a "TOURNAMENT" wordmark texture through the vanilla sprite helper `lb_800138EC`, 16 KB I8 in the module) and **phase 3** (a GET_ASSET relay-EXI command streaming a venue logo from the SD card). Also open: a SIS text object's `bg_color` quad and independent x/y scale are the only two SIS features the pitch found unused; the bar uses the second, the first is still free.
 - **Vanilla-module follow-ups (2026-09-24, §4.7).** (1) Hardware test of the loader: boot log shows `Patch:Apply Slippi core` *and* the module line, the set list comes up, `.slp` on USB, unplug/replug mid-session still records. (2) Behaviours the shifted build had from its own source that the venue codesets may not: the **SSS six-legal-stages-only filter** and the **Y un-strike** (`mnstagesel.c`, retired) and the **selection-hand shake** on the rumble toggle - check them on the venue Wii and edit the poster/checklist to whatever the venue code does. (3) Frozen Pokemon Stadium is listed but off in the Dolphin ini; keep it equal to the venue's Nintendont "stages" toggle. (4) `forceKioskDefaults` still pins rules/unlocks/stage mask live; if Slippi core's own default writes prove enough it can go. (5) A Tournament-menu redesign is being pitched (2026-09-24) - any new textures/models would ride in the module blob or be streamed over the relay EXI device from the SD card, never on the disc.
 - **Auto score from game end.** ~~Deferred~~ **Shipped 2026-09-22 (melee v37).** `lbTourney_MatchExit` runs the vanilla GS_VS exit (which fills the scene's `MatchEnd`: outcome + per-slot type/nametag/stocks/percent) and decides the game from it - KO or time-out only (LRA+Start is `NO CONTEST`, not scored), exactly two human slots, winner = more stocks then less damage, exact tie left to the players. Who-is-who comes from the seeded nametags with the user's rule: one picked tag among two players identifies both. The game is appended and REPORT_SCORE sent on the first CSS frame back; the status line says `GAME n TO <TAG>` or why nothing was scored. The C-stick binds are now the correction path (undo / re-score). Handwarmers are skipped by the flag. **v38 adds per-game characters and stage** from the same standings (R13 closed): `p1_char`/`p2_char` are the entrants' CharacterKind ids and `stage` the StKind; the relay maps them to start.gg `selections`/`stageId` (`chars.ts`, new `stages.ts`).
 - **Friendlies / handwarmer modes** (user, 2026-09-20). **Both shipped game-side (v14 friendlies via Z on the set list; v24 handwarmer, 2026-09-22):** on the CSS, **Z + X** flags the next game as a handwarmer (top-of-screen hint flips to `HANDWARMER NEXT - NOT SCORED`), the in-match overlay draws a **count-up clock in the top-left that turns red past 1:00** beside the native HUD timer, and the flag **clears itself once that game is played**. A `NEXT: GAME n` line was tried in v24 and removed at the user's request (2026-09-22): a "which game is next" indicator only earns its place once the game **detects the winner automatically** (the auto-score item above) - do the two together. It is informational — the C-stick score binds remain the one source of score truth — but it's the flag a future auto-score hook (above) must gate on. Still open from the original note: telling the *relay* about handwarmers/friendlies, which only matters once the replay-sink / auto-upload work (§9 in the runbook) carries match lifecycle over the game↔relay channel. The native timer itself still counts down (replacing it is a bigger HUD edit than the overlay warrants).
