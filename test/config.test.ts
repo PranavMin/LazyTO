@@ -8,8 +8,9 @@ import { loadConfig, ConfigError } from '../src/config.js';
 const VALID = {
   startggEndpoint: 'https://api.start.gg/gql/alpha',
   token: 'tok-abc',
-  eventId: 1613010,
-  streamId: 1358079,
+  tournament: 'tournament/sf-melee-discord-test',
+  eventName: 'Melee Singles',
+  streamName: 'SFMelee',
   streamStation: 1,
   tcpPort: 7777,
   httpPort: 8080,
@@ -75,8 +76,9 @@ test('every missing field is reported at once', () => {
     '{}',
     'missing field "startggEndpoint"',
     'missing field "token"',
-    'missing field "eventId"',
-    'missing field "streamId"',
+    'missing field "tournament"',
+    'missing field "eventName"',
+    'missing field "streamName"',
     'missing field "streamStation"',
     'missing field "tcpPort"',
     'missing field "httpPort"',
@@ -99,13 +101,16 @@ test('empty token', () => {
   expectProblems(JSON.stringify({ ...VALID, token: '' }), 'token must be a non-empty string');
 });
 
-test('non-integer eventId', () => {
-  expectProblems(JSON.stringify({ ...VALID, eventId: '1613010' }), 'eventId must be a positive integer');
-  expectProblems(JSON.stringify({ ...VALID, eventId: 1.5 }), 'eventId must be a positive integer');
+test('tournament is a short URL or a full tournament slug, nothing else', () => {
+  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'abbey' }))).tournament, 'abbey');
+  for (const bad of ['', 'https://start.gg/abbey', 'tournament/x/event/melee-singles', 'start.gg/abbey', 905882]) {
+    expectProblems(JSON.stringify({ ...VALID, tournament: bad }), 'tournament must be a start.gg short URL');
+  }
 });
 
-test('zero streamId', () => {
-  expectProblems(JSON.stringify({ ...VALID, streamId: 0 }), 'streamId must be a positive integer');
+test('eventName and streamName must be non-empty', () => {
+  expectProblems(JSON.stringify({ ...VALID, eventName: '  ' }), 'eventName must be a non-empty string');
+  expectProblems(JSON.stringify({ ...VALID, streamName: 1358079 }), 'streamName must be a non-empty string');
 });
 
 test('streamStation out of u16 range', () => {

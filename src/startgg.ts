@@ -50,6 +50,44 @@ export interface UpstreamSet {
   stream: { id: number } | null;
 }
 
+/** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
+export interface AdminTournament {
+  slug: string; // "tournament/melee-abbey-tavern-160-1"
+  shortSlug: string | null; // "abbey"; moves to the new tournament every week
+}
+
+/** A tournament's events and streams, for resolve.ts to pick from by name. */
+export interface TournamentDetail {
+  id: number;
+  name: string;
+  slug: string;
+  events: { id: number; name: string; type: number; videogame: { id: number } | null }[];
+  streams: { id: number; streamName: string }[];
+}
+
+// The token owner's admin tournaments, newest first. Short URLs are looked up
+// here rather than with tournament(slug: "abbey"): the API resolved one short
+// URL ("sfmeleetest") but returned null for "abbey" on 2026-09-25 while it
+// pointed at an upcoming tournament (probe.ts --tournament / --mine).
+const ADMIN_TOURNAMENTS_QUERY = `query AdminTournaments($page: Int!, $perPage: Int!) {
+  currentUser {
+    tournaments(query: { page: $page, perPage: $perPage, filter: { tournamentView: "admin" } }) {
+      pageInfo { totalPages }
+      nodes { slug shortSlug }
+    }
+  }
+}`;
+
+const TOURNAMENT_QUERY = `query Tournament($slug: String!) {
+  tournament(slug: $slug) {
+    id
+    name
+    slug
+    events { id name type videogame { id } }
+    streams { id streamName }
+  }
+}`;
+
 // The Game OUTPUT type has orderNum, not gameNum (probe, 2026-09-19);
 // gameNum exists only on BracketSetGameDataInput.
 const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
@@ -153,6 +191,23 @@ export class StartggClient {
     const cutoff = Date.now() - windowMs;
     while (this.callTimes.length > 0 && this.callTimes[0] < cutoff) this.callTimes.shift();
     return this.callTimes.length;
+  }
+
+  /** One page of the token owner's admin tournaments (1-based page). */
+  async getAdminTournaments(page: number, perPage: number): Promise<{ totalPages: number; nodes: AdminTournament[] }> {
+    const data = await this.gql(ADMIN_TOURNAMENTS_QUERY, { page, perPage });
+    const user = data.currentUser as {
+      tournaments: { pageInfo: { totalPages: number }; nodes: AdminTournament[] } | null;
+    } | null;
+    if (!user?.tournaments) throw new StartggError('rejected', 'start.gg returned no user for this token');
+    return { totalPages: user.tournaments.pageInfo.totalPages, nodes: user.tournaments.nodes };
+  }
+
+  async getTournament(slug: string): Promise<TournamentDetail> {
+    const data = await this.gql(TOURNAMENT_QUERY, { slug });
+    const t = data.tournament as TournamentDetail | null;
+    if (!t) throw new StartggError('rejected', `tournament ${slug} not found`);
+    return t;
   }
 
   async getEventSets(eventId: number): Promise<UpstreamSet[]> {

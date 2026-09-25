@@ -36,6 +36,15 @@ if [[ "$(/opt/node/bin/node --version 2>/dev/null || true)" != "$NODE_VERSION" ]
 fi
 echo "node $(/opt/node/bin/node --version) at /opt/node"
 
+# --- Wi-Fi power saving off: it adds latency spikes of hundreds of ms and
+#     drops mDNS, and the Wiis give up on the relay after 3 s ---
+install -o root -g root -m 0644 /dev/stdin /etc/NetworkManager/conf.d/tournament-reporter-wifi.conf <<'CONF'
+[connection]
+wifi.powersave = 2
+CONF
+# Takes effect when a Wi-Fi connection next comes up (at the latest, the next boot).
+systemctl reload NetworkManager
+
 # --- service user and directories ---
 if ! id -u relay >/dev/null 2>&1; then
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin relay

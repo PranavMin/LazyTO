@@ -1,12 +1,21 @@
 <#
 push.ps1 -- build the relay on this Windows machine and install it on the Pi.
 
-  .\deploy\push.ps1                               # bench: event/stream ids from .env
-  .\deploy\push.ps1 -EventId 1234 -StreamId 5678  # a real tournament
-  .\deploy\push.ps1 -DryRun                       # build the bundle, install nothing
+  .\deploy\push.ps1                     # install or update; tournament per the default below
+  .\deploy\push.ps1 -Tournament abbey   # production: the weekly short URL
+  .\deploy\push.ps1 -DryRun             # build the bundle, install nothing
 
-Steps: npm run build -> write config.json from .env (+ overrides; startggEndpoint
-is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
+The relay finds tonight's event itself: it looks up the tournament by its
+start.gg short URL (start.gg/<Tournament>) among your admin tournaments, or
+fetches it directly when given a full slug (tournament/<slug>; needed for an
+unpublished tournament, which no list returns), then the Melee singles event whose
+name contains -EventName and the stream named -StreamName, once, at startup
+(src/resolve.ts). A weekly series whose short URL moves to each new
+tournament needs no push per week; power the Pi on (or restart the relay) on
+the night. Push only to update the relay or change these names.
+
+Steps: npm run build -> write config.json (token from .env, the rest from the
+parameters; startggEndpoint is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
 README.md, config.json) -> scp to the Pi -> run deploy/install.sh
 there over ssh. Needs Windows' built-in ssh/scp/tar and an ssh key the Pi
 trusts (docs/pi-setup.md). The token is read from .env and never leaves this
@@ -16,8 +25,10 @@ machine except over ssh to the Pi.
 param(
   [string]$PiHost = 'relay.local',
   [string]$User = 'pi',
-  [int]$EventId = 0,
-  [int]$StreamId = 0,
+  # Production: 'abbey'. Kept on the (unpublished) test tournament until go-live.
+  [string]$Tournament = 'tournament/sf-melee-discord-test',
+  [string]$EventName = 'Melee Singles',
+  [string]$StreamName = 'SFMelee',
   [int]$StreamStation = 1,
   [int]$TcpPort = 7777,
   [int]$HttpPort = 8080,
@@ -34,11 +45,6 @@ foreach ($line in Get-Content $envPath) {
   if ($line -match '^\s*([A-Z_]+)=(.*)$') { $dotenv[$Matches[1]] = $Matches[2].Trim() }
 }
 if (-not $dotenv['STARTGG_TOKEN']) { throw 'STARTGG_TOKEN missing from .env' }
-if ($EventId -eq 0) { $EventId = [int]$dotenv['EVENT_ID'] }
-if ($StreamId -eq 0) { $StreamId = [int]$dotenv['STREAM_ID'] }
-if ($EventId -le 0 -or $StreamId -le 0) {
-  throw 'EventId and StreamId must be positive (pass -EventId/-StreamId or set EVENT_ID/STREAM_ID in .env)'
-}
 
 # --- build ---
 Push-Location $repo
@@ -59,8 +65,9 @@ Copy-Item (Join-Path $repo 'README.md') $stage      # night-of table, referenced
 $config = [ordered]@{
   startggEndpoint = 'https://api.start.gg/gql/alpha'
   token         = $dotenv['STARTGG_TOKEN']
-  eventId       = $EventId
-  streamId      = $StreamId
+  tournament    = $Tournament
+  eventName     = $EventName
+  streamName    = $StreamName
   streamStation = $StreamStation
   tcpPort       = $TcpPort
   httpPort      = $HttpPort
@@ -74,8 +81,8 @@ if (Test-Path $tgz) { Remove-Item -Force $tgz }
 if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
 
 Write-Host "bundle: $tgz"
-Write-Host ("config: event {0}, stream {1}, stream station {2}, tcp {3}, http {4}, token {5}..." -f `
-  $EventId, $StreamId, $StreamStation, $TcpPort, $HttpPort, $dotenv['STARTGG_TOKEN'].Substring(0, 4))
+Write-Host ("config: {0}, event ~ '{1}', stream '{2}', stream station {3}, tcp {4}, http {5}, token {6}..." -f `
+  $Tournament, $EventName, $StreamName, $StreamStation, $TcpPort, $HttpPort, $dotenv['STARTGG_TOKEN'].Substring(0, 4))
 if ($DryRun) { Write-Host 'dry run: not pushing'; exit 0 }
 
 # --- push and install ---

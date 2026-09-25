@@ -6,9 +6,12 @@
 // end; on a mid-run failure it attempts a cleanup resetSet before exiting.
 //
 // Run: node scripts/probe.ts
+//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL>   (read-only)
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { StartggClient } from "../src/startgg.js";
+import { resolveEvent } from "../src/resolve.js";
 
 const ENDPOINT = "https://api.start.gg/gql/alpha";
 const NEEDED_MUTATIONS = ["markSetInProgress", "assignStream", "reportBracketSet", "resetSet"];
@@ -166,7 +169,140 @@ async function listStages(): Promise<void> {
   }
 }
 
+// `node scripts/probe.ts --tournament=<slug>`: what a tournament slug (full
+// slug or short URL, e.g. "abbey") resolves to: its events with game and
+// entrant type, and its streams. Read-only. Source for the relay's
+// slug-based event discovery (design.md section 6.3).
+async function showTournament(slug: string): Promise<void> {
+  const data = await gql(
+    `tournament(slug: ${slug})`,
+    `query T($slug: String!) {
+      tournament(slug: $slug) {
+        id name slug shortSlug startAt state
+        events { id name slug type state numEntrants videogame { id name } }
+        streams { id streamName streamSource }
+      }
+    }`,
+    { slug },
+    false,
+  );
+  const t = data.tournament;
+  if (!t) throw new ProbeError(`no tournament for slug "${slug}"`);
+  const when = t.startAt ? new Date(t.startAt * 1000).toISOString() : "?";
+  console.log(`
+${t.name}  id=${t.id}  slug=${t.slug}  shortSlug=${t.shortSlug ?? "-"}  startAt=${when}  state=${t.state}`);
+  console.log("events (type 1 = singles, 5 = teams):");
+  for (const e of t.events ?? []) {
+    console.log(`  ${String(e.id).padStart(8)}  type=${e.type}  state=${e.state}  game=${e.videogame?.id} ${e.videogame?.name}  entrants=${e.numEntrants}  "${e.name}"  ${e.slug}`);
+  }
+  console.log("streams:");
+  for (const s of t.streams ?? []) console.log(`  ${String(s.id).padStart(8)}  ${s.streamSource}  ${s.streamName}`);
+}
+
+// `node scripts/probe.ts --mine`: tournaments the token's user administers,
+// soonest first, with their short URL. Read-only. Shows whether a short URL
+// such as "abbey" can be found without the API resolving it directly.
+async function showMine(): Promise<void> {
+  const schema = await gql(
+    "UserTournamentsPaginationFilter fields",
+    `query { __type(name: "UserTournamentsPaginationFilter") { inputFields { name type { name kind ofType { name } } } } }`,
+    {},
+    false,
+  );
+  console.log("\nUserTournamentsPaginationFilter: " + (schema.__type?.inputFields ?? []).map((f: any) => f.name).join(", "));
+  const data = await gql(
+    "currentUser tournaments (admin)",
+    `query Mine {
+      currentUser {
+        id slug
+        tournaments(query: { perPage: 15, filter: { tournamentView: "admin" } }) {
+          nodes { id name slug shortSlug startAt state }
+        }
+      }
+    }`,
+    {},
+    false,
+  );
+  const u = data.currentUser;
+  console.log(`user ${u?.slug} (${u?.id}), admin tournaments:`);
+  for (const t of u?.tournaments?.nodes ?? []) {
+    const when = t.startAt ? new Date(t.startAt * 1000).toISOString().slice(0, 16) : "?";
+    console.log(`  ${when}  state=${t.state}  short=${(t.shortSlug ?? "-").padEnd(12)}  ${t.slug}`);
+  }
+}
+
+// `node scripts/probe.ts --resolve=<short URL>`: run the relay's own startup
+// resolution (src/resolve.ts) against the real API with the relay's default
+// names, exactly as the Pi will. Read-only.
+async function showResolve(shortSlug: string): Promise<void> {
+  const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
+  const r = await resolveEvent(client, { tournament: shortSlug, eventName: "Melee Singles", streamName: "SFMelee" });
+  console.log(JSON.stringify(r, null, 2));
+}
+
+// `node scripts/probe.ts --find-short=<short URL>`: which list queries can see
+// a short URL -- the admin list under each tournamentView, and the global
+// tournaments() query with isCurrentUserAdmin. Read-only; for choosing how
+// src/resolve.ts looks tournaments up.
+async function findShort(short: string): Promise<void> {
+  const tf = await gql(
+    "TournamentPageFilter fields",
+    `query { __type(name: "TournamentPageFilter") { inputFields { name } } }`,
+    {},
+    false,
+  );
+  console.log("\nTournamentPageFilter: " + (tf.__type?.inputFields ?? []).map((f: any) => f.name).join(", "));
+  for (const view of ["admin", "competitor", "owner", "staff", null]) {
+    const found: string[] = [];
+    let seen = 0;
+    for (let page = 1; page <= 10; page++) {
+      const d = await gql(
+        `currentUser tournaments view=${view} page ${page}`,
+        `query M($page: Int!, $view: String) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: $view } }) {
+          pageInfo { totalPages } nodes { slug shortSlug } } } }`,
+        { page, view },
+        false,
+      );
+      const tt = d.currentUser?.tournaments;
+      if (!tt) break;
+      seen += tt.nodes.length;
+      for (const n of tt.nodes) if ((n.shortSlug ?? "").toLowerCase() === short.toLowerCase()) found.push(n.slug);
+      if (page >= tt.pageInfo.totalPages) break;
+    }
+    console.log(`  currentUser.tournaments view=${view}: ${seen} seen, match: ${found.join(", ") || "none"}`);
+  }
+  const g = await gql(
+    "tournaments(isCurrentUserAdmin)",
+    `query G { tournaments(query: { perPage: 50, filter: { isCurrentUserAdmin: true } }) { pageInfo { total } nodes { slug shortSlug } } }`,
+    {},
+    false,
+  ).catch((e) => { console.log(`  tournaments(isCurrentUserAdmin): ${e.message}`); return null; });
+  if (g) {
+    const hit = g.tournaments.nodes.filter((n: any) => (n.shortSlug ?? "").toLowerCase() === short.toLowerCase());
+    console.log(`  tournaments(isCurrentUserAdmin) first page: total ${g.tournaments.pageInfo.total}, match: ${hit.map((n: any) => n.slug).join(", ") || "none"}`);
+  }
+}
+
 async function main(): Promise<void> {
+  const fArg = process.argv.find((a) => a.startsWith("--find-short="));
+  if (fArg) {
+    await findShort(fArg.slice("--find-short=".length));
+    return;
+  }
+  const rArg = process.argv.find((a) => a.startsWith("--resolve="));
+  if (rArg) {
+    await showResolve(rArg.slice("--resolve=".length));
+    return;
+  }
+  if (process.argv.includes("--mine")) {
+    await showMine();
+    return;
+  }
+  const tArg = process.argv.find((a) => a.startsWith("--tournament="));
+  if (tArg) {
+    await showTournament(tArg.slice("--tournament=".length));
+    return;
+  }
   if (process.argv.includes("--stages")) {
     await listStages();
     return;

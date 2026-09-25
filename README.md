@@ -25,7 +25,7 @@ npm run build
 npm run fake -- --port=18081
 ```
 
-then a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`, `"eventId": 1613010` and non-default ports, `CONFIG=that.json node dist/main.js`, and `npm run sim -- --relay=127.0.0.1:<tcpPort>`. The sim reports Wii-side request rate and errors; the fake reports the upstream call rate.
+then a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`, `"tournament": "tournament/sf-melee-discord-test"`, `"eventName": "Melee Singles"`, `"streamName": "SFMelee"` (the fake's copy of the test tournament) and non-default ports, `CONFIG=that.json node dist/main.js`, and `npm run sim -- --relay=127.0.0.1:<tcpPort>`. The sim reports Wii-side request rate and errors; the fake reports the upstream call rate.
 
 ## Config
 
@@ -35,8 +35,9 @@ One JSON file, every field required, unknown fields rejected, every problem repo
 |-------|---------|---------------------|
 | `startggEndpoint` | GraphQL URL, http(s). | `https://api.start.gg/gql/alpha` in production; the `npm run fake` URL in a rehearsal. |
 | `token` | start.gg API token. | start.gg → Developer Settings → Personal Access Tokens. Lives only in `/etc/tournament-reporter/config.json` (root:relay, mode 0640) on the Pi and in `.env` on the dev machine. Never in the repo. |
-| `eventId` | Numeric id of the event (e.g. Melee Singles), not the tournament. | GraphQL `event(slug: "tournament/<t>/event/<e>") { id }`, or the id in the event's admin URL. |
-| `streamId` | Numeric id of the stream to assign sets to. | GraphQL `tournament(slug: "<t>") { streams { id streamName } }` (the stream must exist in the tournament's stream settings). |
+| `tournament` | The tournament, as its start.gg short URL (`abbey`, looked up among the token owner's admin tournaments) or full slug (`tournament/<slug>`, fetched directly; needed for an unpublished tournament). Resolved once at startup (design §6.3). | `abbey` in production; `tournament/sf-melee-discord-test` until go-live. `npx tsx scripts/probe.ts --resolve=<value>` shows what it resolves to. |
+| `eventName` | Picks the event: the one Melee singles event whose name contains this, case-insensitively. Zero or several matches stops the relay with the list. | `Melee Singles` (matches "Melee Singles! (7:30 Start)", not Doubles or the waitlist). |
+| `streamName` | Picks the stream to assign stream-station sets to, by exact name (case-insensitive). | `SFMelee`. |
 | `streamStation` | Station number (1–65535) of the Wii whose `tournament.cfg` has `stream=1`. | Physical station label. |
 | `tcpPort` | Port the Wiis connect to; matches `tournament.cfg` on every SD card. | `7777` unless something else owns it. |
 | `httpPort` | Status page port; must differ from `tcpPort`. | `8080`. |
@@ -44,13 +45,13 @@ One JSON file, every field required, unknown fields rejected, every problem repo
 
 ## Pi install
 
-Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-setup.md). The short version: flash Raspberry Pi OS Lite (64-bit) with Imager (hostname `relay`, user `pi`, your ssh public key), plug in Ethernet, then from this repo:
+Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-setup.md). The short version: flash Raspberry Pi OS Lite (64-bit) with Imager (hostname `relay`, user `pi`, your Wi-Fi, your ssh public key), power it on, then from this repo:
 
 ```bash
 .\deploy\push.ps1
 ```
 
-[deploy/push.ps1](deploy/push.ps1) runs `npm run build` here, writes `config.json` from `.env` (or `-EventId`/`-StreamId`), and ships `dist/`, `package.json`, `deploy/` and the config to the Pi over scp, where [deploy/install.sh](deploy/install.sh) (sudo, idempotent) installs a pinned Node 22 tarball at `/opt/node`, creates the unprivileged `relay` user, installs [deploy/tournament-reporter.service](deploy/tournament-reporter.service), restarts it and waits for the relay's `relay up:` line, reporting `OK` with the status page URL or `FAILED` with the journal. The Pi never needs git, npm or a GitHub credential. `npx tsx scripts/smoke.ts relay.local` then lists sets over the real wire protocol from the PC. [deploy/set-static-ip.sh](deploy/set-static-ip.sh) adds the fixed venue address the Wiis' `tournament.cfg` points at.
+[deploy/push.ps1](deploy/push.ps1) runs `npm run build` here, writes `config.json` (token from `.env`; `-Tournament`/`-EventName`/`-StreamName`, defaulting to the test tournament until go-live), and ships `dist/`, `package.json`, `deploy/` and the config to the Pi over scp, where [deploy/install.sh](deploy/install.sh) (sudo, idempotent) installs a pinned Node 22 tarball at `/opt/node`, creates the unprivileged `relay` user, installs [deploy/tournament-reporter.service](deploy/tournament-reporter.service), restarts it and waits for the relay's `relay up:` line, reporting `OK` with the status page URL or `FAILED` with the journal. The Pi never needs git, npm or a GitHub credential. `npx tsx scripts/smoke.ts relay.local` then lists sets over the real wire protocol from the PC. [deploy/add-wifi.sh](deploy/add-wifi.sh) saves the venue's Wi-Fi; [deploy/set-static-ip.sh](deploy/set-static-ip.sh) adds a fixed address the Wiis' `tournament.cfg` can point at (how Wiis find the relay without a fixed address is open, design R15).
 
 | On the Pi | |
 |-----------|--|
@@ -63,7 +64,7 @@ Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-
 
 ## Per-tournament checklist (design §10)
 
-1. From the dev PC: `.\deploy\push.ps1 -EventId <id> -StreamId <id>` (add `-StreamStation N` if the stream setup moved). It rebuilds, rewrites the config, restarts the relay and prints the cached set count. Open the status page on your phone: the header shows the event id, the footer shows `Cache: N sets`. N must be > 0 and the id must be tonight's event.
+1. Power the Pi on at the venue (or `sudo systemctl restart tournament-reporter`); the relay finds tonight's tournament from its short URL at startup, so nothing is pushed per tournament. Open the status page on your phone: the header names the tournament and event, the footer shows `Cache: N sets`. N must be > 0 and the header must be tonight's. If the relay will not start, `journalctl -u tournament-reporter -n 20` says why (short URL not moved yet, event name matching zero or several events, stream missing).
 2. **Start every pool and every phase on start.gg** (bracket page → each phase, later phases included). Unstarted ones have preview-id sets the relay cannot represent and drops (design R8); the status page shows `⚠ N preview-id set(s) dropped -- start all pools on start.gg` until they are all started (it clears within 20 s).
 3. Every SD card's `tournament.cfg` has the station number on the physical label, the Pi's IP and `tcpPort`. Exactly one card has `stream=1`, and it is the one at station `streamStation`.
 4. Boot one Wii, open the Tournament menu, confirm the set list loads. Its station row appears on the status page with `LIST_SETS … ago`.
@@ -75,11 +76,11 @@ What the status page shows, what it means, what to do. Rows with ✗ stay until 
 | Status page shows | Meaning | Do |
 |-------------------|---------|----|
 | Page does not load | Relay not running, Pi off, or wrong IP. | On the Pi: `systemctl status tournament-reporter`, then `journalctl -u tournament-reporter -n 50`. A config problem is listed there line by line; fix it and `sudo systemctl restart tournament-reporter`. |
-| `Cache: 0 sets` | Wrong `eventId`, or no set in the event has both entrants yet (bracket not started). | Check the event id in the header against start.gg; start the bracket. |
+| `Cache: 0 sets` | No set in the event has both entrants yet (bracket not started), or the header names the wrong week (the short URL had not moved when the relay started). | Start the bracket. For a wrong week: move the short URL on start.gg, restart the relay. |
 | `⚠ N preview-id set(s) dropped` | A pool or later phase is not started on start.gg (R8). | Start it. The warning clears on the next refresh. |
 | `⚠ cache is stale` and/or `✗ last refresh failed: start.gg unreachable` | The venue's internet is down or the Pi lost it. Wiis keep seeing the last list; every START/REPORT will fail until it is back. | Check the uplink and the Pi's cable. Nothing to do on the relay; it recovers on the next successful refresh. |
 | `✗ last refresh failed: start.gg rejected: Invalid authentication token` | Token revoked or expired. | New token into the config, restart. |
-| `no station has connected yet` after a Wii is booted | The Wii cannot reach the relay: wrong IP or port in `tournament.cfg`, wrong VLAN, Wi-Fi. The Wii shows `relay timeout`. | Fix the card or the cable; the Pi and the stream Wii must be on Ethernet. |
+| `no station has connected yet` after a Wii is booted | The Wii cannot reach the relay: wrong IP or port in `tournament.cfg`, wrong VLAN, Wi-Fi. The Wii shows `relay timeout`. | Fix the card or the cable. If the address is right, the venue Wi-Fi may isolate clients (design R15). |
 | Station row: `✗ assignStream failed: …` | The set **is** in progress on start.gg but not on the stream, so TSH has no names. | Assign the set to the stream by hand in start.gg, press ack. |
 | Station row: `✗ reportBracketSet failed: start.gg rejected: …` (last action `ST_STARTGG_ERROR: start.gg rejected - ask TO`) | start.gg refused the score — usually the TO already reported or reset that set by hand (R6). The Wii showed "start.gg rejected — ask TO". | Sort it out on start.gg; press ack. The station clears itself on its next LIST_SETS once the set is gone from the cache. |
 | Station row: `✗ … start.gg HTTP 5xx after 3 attempts` (last action `start.gg error - retry`) | start.gg outage; the relay already retried twice. | Player retries the score later; every report is a full overwrite, so nothing is lost. ack when it goes through. |

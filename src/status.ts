@@ -21,7 +21,8 @@ export interface StatusDeps {
   cache: SetCache;
   startgg: StartggClient;
   streamStation: number;
-  eventId: number;
+  /** Tonight's tournament and event as resolve.ts found them, shown in the header so the TO can see it is the right week. */
+  eventLabel: string;
 }
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
@@ -77,7 +78,7 @@ export class StatusServer {
   }
 
   render(): string {
-    const { state, cache, startgg, streamStation, eventId } = this.deps;
+    const { state, cache, startgg, streamStation, eventLabel } = this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -154,7 +155,7 @@ export class StatusServer {
   }
 </style></head><body>
 <h1>Tournament Reporter</h1>
-<p class="sub">Event <b>${eventId}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
+<p class="sub"><b>${escapeHtml(eventLabel)}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
 <div class="scroll"><table>
 <tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
 ${rows.join('\n')}

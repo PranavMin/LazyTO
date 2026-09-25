@@ -5,14 +5,18 @@
 //   npm run fake -- --port=18080
 //
 // serves the load-test fixture (400 pending Bo3 sets) on
-// http://127.0.0.1:18080/gql/alpha with token "test-token" and event id
-// 1613010; point a config.json's startggEndpoint/token/eventId at those,
-// start the relay, then `npm run sim -- --relay=127.0.0.1:<tcpPort>`.
+// http://127.0.0.1:18080/gql/alpha with token "test-token", as event 1613010
+// of the fixture's tournament list (test/fake-startgg.ts defaultTournaments).
+// Point a config.json's startggEndpoint/token at those with tournament
+// "tournament/sf-melee-discord-test", eventName "Melee Singles", streamName
+// "SFMelee" (or tournament "abbey" to exercise the short-URL lookup, which
+// resolves to a different event id and so to no sets), start the relay, then
+// `npm run sim -- --relay=127.0.0.1:<tcpPort>`.
 //
 // Prints the upstream call rate every 30 s and a summary (total calls, peak
 // calls in any 60 s window -- the N2 number) on SIGINT/SIGTERM.
 
-import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
+import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, FIXTURE_TOURNAMENT, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
 
 const portArg = process.argv.find((a) => a.startsWith('--port='));
 const PORT = Number(portArg?.slice('--port='.length));
@@ -35,7 +39,10 @@ function summary(): void {
 
 async function main(): Promise<void> {
   await fake.start(PORT);
-  console.log(`serve-fake: ${fake.url}  token=${FIXTURE_TOKEN}  eventId=${FIXTURE_EVENT_ID}  sets=${fake.sets.length}`);
+  console.log(
+    `serve-fake: ${fake.url}  token=${FIXTURE_TOKEN}  tournament=${FIXTURE_TOURNAMENT} ` +
+      `(event ${FIXTURE_EVENT_ID})  sets=${fake.sets.length}`,
+  );
   const ticker = setInterval(summary, 30_000);
   const stop = async (signal: string) => {
     clearInterval(ticker);

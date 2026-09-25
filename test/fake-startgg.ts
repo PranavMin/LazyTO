@@ -16,6 +16,10 @@
 //   - resetSet: state -> 1, games cleared, stream assignment KEPT (verified
 //     live 2026-09-20, design.md section 5.6).
 //
+//   - currentUser.tournaments(filter: {tournamentView: "admin"}): paged
+//     {slug, shortSlug} of the token owner's tournaments (resolve.ts).
+//   - tournament(slug): events {id name type videogame {id}} and streams.
+//
 // Test hooks: failNext() injects 5xx or GraphQL errors, calls[] records
 // every upstream call with a timestamp for retry-count and rate assertions.
 
@@ -46,6 +50,16 @@ export interface FakeSet {
   stream: { id: number; streamName: string; streamSource: string } | null;
 }
 
+export interface FakeTournament {
+  slug: string; // "tournament/sf-melee-discord-test"
+  shortSlug: string | null;
+  published: boolean; // unpublished tournaments are absent from every list query (probe.ts --find-short)
+  id: number;
+  name: string;
+  events: { id: number; name: string; type: number; videogame: { id: number } }[];
+  streams: { id: number; streamName: string }[];
+}
+
 export interface RecordedCall {
   op: string;
   at: number; // Date.now()
@@ -54,7 +68,7 @@ export interface RecordedCall {
 
 type FailMode = '5xx' | 'gqlError';
 
-const OPS = ['eventSets', 'markSetInProgress', 'assignStream', 'reportBracketSet', 'resetSet'] as const;
+const OPS = ['eventSets', 'markSetInProgress', 'assignStream', 'reportBracketSet', 'resetSet', 'adminTournaments', 'tournament'] as const;
 type Op = (typeof OPS)[number];
 
 function gqlErrorBody(message: string): string {
@@ -72,6 +86,7 @@ export class FakeStartgg {
     private readonly token: string,
     private readonly eventId: number,
     readonly sets: FakeSet[],
+    readonly tournaments: FakeTournament[] = defaultTournaments(),
   ) {
     this.server = createServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -173,12 +188,18 @@ export class FakeStartgg {
         return this.reportBracketSet(variables);
       case 'resetSet':
         return this.resetSet(variables);
+      case 'adminTournaments':
+        return this.adminTournaments(variables);
+      case 'tournament':
+        return this.tournament(variables);
     }
   }
 
   private classify(query: string): Op | null {
+    if (query.includes('currentUser')) return 'adminTournaments';
+    if (/\btournament\s*\(\s*slug\s*:/.test(query)) return 'tournament';
     for (const op of OPS) {
-      if (op === 'eventSets') continue;
+      if (op === 'eventSets' || op === 'adminTournaments' || op === 'tournament') continue;
       if (query.includes(op)) return op;
     }
     if (/event\s*\(/.test(query) && query.includes('sets')) return 'eventSets';
@@ -297,6 +318,27 @@ export class FakeStartgg {
     };
   }
 
+  private adminTournaments(variables: Record<string, unknown>): { status: number; body: string } {
+    const page = Number(variables.page);
+    const perPage = Number(variables.perPage);
+    const listed = this.tournaments.filter((t) => t.published);
+    const totalPages = Math.max(1, Math.ceil(listed.length / perPage));
+    const nodes = listed
+      .slice((page - 1) * perPage, page * perPage)
+      .map((t) => ({ slug: t.slug, shortSlug: t.shortSlug }));
+    return {
+      status: 200,
+      body: JSON.stringify({ data: { currentUser: { tournaments: { pageInfo: { totalPages }, nodes } } } }),
+    };
+  }
+
+  private tournament(variables: Record<string, unknown>): { status: number; body: string } {
+    // Full slugs only: the relay never asks this query to resolve a short URL.
+    const t = this.tournaments.find((x) => x.slug === variables.slug) ?? null;
+    const body = t && { id: t.id, name: t.name, slug: t.slug, events: t.events, streams: t.streams };
+    return { status: 200, body: JSON.stringify({ data: { tournament: body } }) };
+  }
+
   private resetSet(variables: Record<string, unknown>): { status: number; body: string } {
     const set = this.findSet(variables);
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
@@ -362,6 +404,58 @@ export function defaultFixture(): FakeSet[] {
     // Unstarted pool 2: preview ids, both entrants known but unreportable (R8).
     set('preview_3292311_1_1', 1, 'Winners Quarter-Final', 9, 10),
     set('preview_3292311_1_2', 1, 'Winners Quarter-Final', 11, 12),
+  ];
+}
+
+// ---- admin tournaments: the shape probe.ts --mine / --tournament recorded ----
+// 2026-09-25. The test tournament has three Melee singles events and two
+// streams, so "Melee Singles" + "SFMelee" is the unambiguous pick; it is
+// unpublished, so no list returns it and the relay is given its full slug.
+// The weekly Abbey tournaments are in the admin list (newest first) and each
+// week's gets the "abbey" short URL.
+
+export const FIXTURE_TOURNAMENT = 'tournament/sf-melee-discord-test';
+export const FIXTURE_EVENT_NAME = 'Melee Singles';
+export const FIXTURE_STREAM_NAME = 'SFMelee';
+export const FIXTURE_STREAM_ID = 1358079;
+
+export function defaultTournaments(): FakeTournament[] {
+  const abbey = (n: number, short: string): FakeTournament => ({
+    slug: `tournament/melee-abbey-tavern-${n}`,
+    shortSlug: short,
+    published: true,
+    id: 956000 + n,
+    name: `Melee @ Abbey Tavern #${n}`,
+    events: [
+      { id: 1717000 + n * 3, name: 'Melee Doubles (6:30 pm Start)', type: 5, videogame: { id: 1 } },
+      { id: 1717001 + n * 3, name: 'Melee Singles! (7:30 Start)', type: 1, videogame: { id: 1 } },
+      { id: 1717002 + n * 3, name: 'Melee Waitlist', type: 1, videogame: { id: 1 } },
+    ],
+    streams: [
+      { id: 1420000 + n * 2, streamName: 'SFMelee' },
+      { id: 1420001 + n * 2, streamName: 'sidestream' },
+    ],
+  });
+  return [
+    abbey(160, 'abbey'),
+    abbey(159, 'abbey159'),
+    abbey(158, 'abbey158'),
+    {
+      slug: 'tournament/sf-melee-discord-test',
+      shortSlug: 'sfmeleetest',
+      published: false,
+      id: 905882,
+      name: 'SF Melee Discord Test',
+      events: [
+        { id: FIXTURE_EVENT_ID, name: 'Melee Singles! (7:30 Start)', type: 1, videogame: { id: 1 } },
+        { id: 1613012, name: 'Melee Ladder (9:30pm)', type: 1, videogame: { id: 1 } },
+        { id: 1613011, name: 'Melee Waitlist', type: 1, videogame: { id: 1 } },
+      ],
+      streams: [
+        { id: FIXTURE_STREAM_ID, streamName: 'SFMelee' },
+        { id: 1358080, streamName: 'sidestream' },
+      ],
+    },
   ];
 }
 

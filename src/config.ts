@@ -3,6 +3,11 @@
 // there are no defaults; any problem is a ConfigError listing everything
 // wrong so one restart fixes it all. main.ts turns that into a non-zero exit.
 //
+// The event and stream are named, not numbered: tournament is the start.gg
+// short URL ("abbey") or, for an unpublished tournament, its full slug, eventName and streamName pick from it by name, and
+// resolve.ts turns them into ids at startup, because the ids change every
+// week and the names do not.
+//
 // Two fields beyond the design's example: auditDir, the directory the audit
 // log <eventId>.jsonl is written to (section 10 hardcodes a Linux path; a
 // hardcoded path is a hidden default, so it lives in the config instead),
@@ -15,8 +20,9 @@ import { readFileSync } from 'node:fs';
 export interface Config {
   startggEndpoint: string; // GraphQL URL, http(s)
   token: string;
-  eventId: number;
-  streamId: number;
+  tournament: string; // start.gg short URL ("abbey") or full slug ("tournament/<slug>")
+  eventName: string; // e.g. "Melee Singles"
+  streamName: string; // e.g. "SFMelee"
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   tcpPort: number;
   httpPort: number;
@@ -26,8 +32,9 @@ export interface Config {
 const FIELDS = [
   'startggEndpoint',
   'token',
-  'eventId',
-  'streamId',
+  'tournament',
+  'eventName',
+  'streamName',
   'streamStation',
   'tcpPort',
   'httpPort',
@@ -84,7 +91,7 @@ export function loadConfig(path: string): Config {
     if (!(key in obj)) problems.push(`missing field "${key}"`);
   }
 
-  const { startggEndpoint, token, eventId, streamId, streamStation, tcpPort, httpPort, auditDir } = obj;
+  const { startggEndpoint, token, tournament, eventName, streamName, streamStation, tcpPort, httpPort, auditDir } = obj;
 
   if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
     problems.push('startggEndpoint must be an http(s) URL');
@@ -92,11 +99,16 @@ export function loadConfig(path: string): Config {
   if ('token' in obj && (typeof token !== 'string' || token.length === 0)) {
     problems.push('token must be a non-empty string');
   }
-  if ('eventId' in obj && !isPositiveInt(eventId)) {
-    problems.push('eventId must be a positive integer');
+  if ('tournament' in obj && (typeof tournament !== 'string' || !/^(tournament\/)?[A-Za-z0-9-]+$/.test(tournament))) {
+    problems.push('tournament must be a start.gg short URL ("abbey") or full slug ("tournament/<slug>")');
   }
-  if ('streamId' in obj && !isPositiveInt(streamId)) {
-    problems.push('streamId must be a positive integer');
+  for (const [name, v] of [
+    ['eventName', eventName],
+    ['streamName', streamName],
+  ] as const) {
+    if (name in obj && (typeof v !== 'string' || v.trim().length === 0)) {
+      problems.push(`${name} must be a non-empty string`);
+    }
   }
   if ('streamStation' in obj && (!isPositiveInt(streamStation) || streamStation > 0xffff)) {
     problems.push('streamStation must be an integer in 1..65535');
@@ -121,8 +133,9 @@ export function loadConfig(path: string): Config {
   return {
     startggEndpoint: startggEndpoint as string,
     token: token as string,
-    eventId: eventId as number,
-    streamId: streamId as number,
+    tournament: tournament as string,
+    eventName: eventName as string,
+    streamName: streamName as string,
     streamStation: streamStation as number,
     tcpPort: tcpPort as number,
     httpPort: httpPort as number,
