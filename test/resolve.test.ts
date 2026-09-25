@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { StartggClient } from '../src/startgg.js';
-import { resolveEvent, ResolveError, ADMIN_PAGE_SIZE } from '../src/resolve.js';
+import { resolveEvent, ResolveError, ADMIN_PAGE_SIZE, nearestAbbeyWeekly } from '../src/resolve.js';
 import {
   FakeStartgg,
   FIXTURE_TOKEN,
@@ -16,6 +16,7 @@ import {
   FIXTURE_STREAM_ID,
   defaultFixture,
   defaultTournaments,
+  ABBEY_160_START,
   type FakeTournament,
 } from './fake-startgg.js';
 
@@ -45,6 +46,7 @@ test('the test tournament resolves to its singles event and the SFMelee stream',
       streamName: FIXTURE_STREAM_NAME,
     });
     assert.deepEqual(r, {
+      foundBy: 'full slug',
       tournamentName: 'SF Melee Discord Test',
       tournamentSlug: 'tournament/sf-melee-discord-test',
       eventId: FIXTURE_EVENT_ID,
@@ -58,6 +60,7 @@ test('the test tournament resolves to its singles event and the SFMelee stream',
 test('"abbey" picks the week that currently holds the short URL, skipping doubles and the waitlist', async () => {
   await withFake(defaultTournaments(), async (client) => {
     const r = await resolveEvent(client, { tournament: 'abbey', eventName: 'melee singles', streamName: 'sfmelee' });
+    assert.equal(r.foundBy, 'short URL');
     assert.equal(r.tournamentSlug, 'tournament/melee-abbey-tavern-160');
     assert.equal(r.eventName, 'Melee Singles! (7:30 Start)');
     assert.equal(r.streamName, 'SFMelee');
@@ -69,6 +72,7 @@ test('the short URL is found past the first page of admin tournaments', async ()
     slug: `tournament/old-${i}`,
     shortSlug: `old${i}`,
     published: true,
+    startAt: null,
     id: 800000 + i,
     name: `Old #${i}`,
     events: [],
@@ -135,6 +139,80 @@ test('a missing stream fails and lists the streams that exist', async () => {
       resolveEvent(client, { tournament: FIXTURE_TOURNAMENT, eventName: FIXTURE_EVENT_NAME, streamName: 'SFMeleeTV' }),
       'no streams named "SFMeleeTV"',
       '"sidestream" (id 1358080)',
+    );
+  });
+});
+
+// ---- the Abbey weekly when the short URL has not moved (taken from matchcaller) ----
+
+const HOUR = 60 * 60;
+const DAY = 24 * HOUR;
+
+function withoutAbbeyShortUrl(): FakeTournament[] {
+  // Tonight's #160 exists but the TO has not moved "abbey" onto it yet.
+  return defaultTournaments().map((t) => (t.shortSlug === 'abbey' ? { ...t, shortSlug: null } : t));
+}
+
+test('short URL "abbey" not on any tournament: tonight\'s weekly is found by name and start time', async () => {
+  await withFake(withoutAbbeyShortUrl(), async (client) => {
+    const r = await resolveEvent(
+      client,
+      { tournament: 'abbey', eventName: FIXTURE_EVENT_NAME, streamName: FIXTURE_STREAM_NAME },
+      ABBEY_160_START - 2 * HOUR, // 5:30 pm on the night, doors open
+    );
+    assert.equal(r.foundBy, 'nearest Abbey weekly');
+    assert.equal(r.tournamentSlug, 'tournament/melee-abbey-tavern-160');
+    assert.equal(r.eventName, 'Melee Singles! (7:30 Start)');
+  });
+});
+
+test('the short URL wins over the nearest weekly when both exist', async () => {
+  await withFake(defaultTournaments(), async (client) => {
+    // Two days after #159, so #159 is nearer than #160, but "abbey" is on #160.
+    const r = await resolveEvent(
+      client,
+      { tournament: 'abbey', eventName: FIXTURE_EVENT_NAME, streamName: FIXTURE_STREAM_NAME },
+      ABBEY_160_START - 5 * DAY,
+    );
+    assert.equal(r.foundBy, 'short URL');
+    assert.equal(r.tournamentSlug, 'tournament/melee-abbey-tavern-160');
+  });
+});
+
+test('nearest weekly: closest start wins, a future one breaks a tie, non-weekly names and far dates never count', () => {
+  const t = (name: string, startAt: number | null, slug = name) => ({ slug, shortSlug: null, name, startAt });
+  const now = 1_000_000_000;
+  const list = [
+    t('Melee @ Abbey Tavern #1', now - 3 * DAY, 'past'),
+    t('Melee @ Abbey Tavern #2', now + 3 * DAY, 'future'),
+    t('Weekend Doubles @ Abbey Tavern', now + HOUR, 'doubles'),
+    t('The Big Abbey 3: HUGE', now, 'big'),
+    t('Melee @ Abbey Tavern #9', null, 'no-date'),
+  ];
+  assert.equal(nearestAbbeyWeekly(list, now)?.slug, 'future', 'equal distance: the future one');
+  assert.equal(nearestAbbeyWeekly(list, now - DAY)?.slug, 'past');
+  assert.equal(nearestAbbeyWeekly([t('Melee @ Abbey Tavern #1', now - 31 * DAY)], now), null, 'outside 30 days');
+});
+
+test('no short URL and no weekly in range: a clear failure naming the clock', async () => {
+  await withFake(withoutAbbeyShortUrl(), async (client) => {
+    await expectResolveError(
+      resolveEvent(
+        client,
+        { tournament: 'abbey', eventName: FIXTURE_EVENT_NAME, streamName: FIXTURE_STREAM_NAME },
+        ABBEY_160_START + 60 * DAY,
+      ),
+      'no tournament with short URL "abbey"',
+      "the Pi's clock",
+    );
+  });
+});
+
+test('the weekly-by-name rule is Abbey only: another short URL still fails exactly', async () => {
+  await withFake(withoutAbbeyShortUrl(), async (client) => {
+    await expectResolveError(
+      resolveEvent(client, { tournament: 'abbey161', eventName: FIXTURE_EVENT_NAME, streamName: FIXTURE_STREAM_NAME }, ABBEY_160_START),
+      'no tournament with short URL "abbey161"',
     );
   });
 });

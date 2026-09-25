@@ -5,12 +5,24 @@
 # The bundle holds dist/ (compiled relay), package.json ("type": "module",
 # which dist/*.js needs beside it), deploy/ (this dir) and config.json.
 # Idempotent: re-running upgrades the relay and config and restarts it.
+#
+# Runs on a Pi of its own or next to other software on a shared one (the
+# venue's matchcaller Pi Zero 2 W): everything lives under /opt/node*,
+# /opt/tournament-reporter, /etc/tournament-reporter, /var/lib/tournament-reporter,
+# one system user "relay" and one unit; deploy/uninstall.sh removes exactly that.
 set -euo pipefail
 
 BUNDLE="${1:?usage: install.sh <bundle dir>}"
 NODE_VERSION="v22.23.3"
-NODE_SHA256="a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f"
-NODE_TARBALL="node-${NODE_VERSION}-linux-arm64.tar.xz"
+# Official tarball for the OS's architecture: 64-bit Raspberry Pi OS is
+# aarch64, 32-bit is armv7l (a shared Pi may run either). Checksums from
+# https://nodejs.org/dist/v22.23.3/SHASUMS256.txt.
+case "$(uname -m)" in
+  aarch64) NODE_ARCH=arm64;  NODE_SHA256="a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f" ;;
+  armv7l)  NODE_ARCH=armv7l; NODE_SHA256="590a2768199bdd0b848648a81cd7f07f88a5ceb27949f0c70d5e6652c3eaca69" ;;
+  *) echo "install.sh: unsupported architecture $(uname -m) (want aarch64 or armv7l)" >&2; exit 1 ;;
+esac
+NODE_TARBALL="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
 APP=/opt/tournament-reporter
 CONF_DIR=/etc/tournament-reporter
 DATA_DIR=/var/lib/tournament-reporter
@@ -20,7 +32,6 @@ UNIT=tournament-reporter
 for f in dist/main.js package.json config.json deploy/$UNIT.service; do
   [[ -f "$BUNDLE/$f" ]] || { echo "install.sh: $BUNDLE/$f missing (bundle not built by push.ps1?)" >&2; exit 1; }
 done
-[[ "$(uname -m)" == "aarch64" ]] || { echo "install.sh: expected a 64-bit OS (aarch64), got $(uname -m)" >&2; exit 1; }
 
 # --- Node: pinned official tarball at /opt/node-<ver>, symlinked to /opt/node ---
 if [[ "$(/opt/node/bin/node --version 2>/dev/null || true)" != "$NODE_VERSION" ]]; then
@@ -44,6 +55,13 @@ wifi.powersave = 2
 CONF
 # Takes effect when a Wi-Fi connection next comes up (at the latest, the next boot).
 systemctl reload NetworkManager
+
+# --- wait for a synced clock before the relay starts: a Pi without a battery
+#     RTC boots with last shutdown's time, and the Abbey fallback picks the
+#     weekly nearest to "now" (src/resolve.ts). The unit orders after
+#     time-sync.target; this service is what makes that target wait. ---
+systemctl enable systemd-time-wait-sync.service >/dev/null 2>&1 \
+  || echo "install.sh: note: systemd-time-wait-sync not available; the relay may start before the clock syncs"
 
 # --- service user and directories ---
 if ! id -u relay >/dev/null 2>&1; then

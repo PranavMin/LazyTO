@@ -1,18 +1,22 @@
 <#
 push.ps1 -- build the relay on this Windows machine and install it on the Pi.
 
-  .\deploy\push.ps1                     # install or update; tournament per the default below
-  .\deploy\push.ps1 -Tournament abbey   # production: the weekly short URL
-  .\deploy\push.ps1 -DryRun             # build the bundle, install nothing
+  .\deploy\push.ps1                  # production: follows start.gg/abbey every week
+  .\deploy\push.ps1 -Test            # testing: the unpublished SF Melee Discord Test
+  .\deploy\push.ps1 -DryRun          # build the bundle, install nothing
+  .\deploy\push.ps1 -PiHost <name> -User <user>   # another Pi, e.g. the matchcaller one
 
-The relay finds tonight's event itself: it looks up the tournament by its
-start.gg short URL (start.gg/<Tournament>) among your admin tournaments, or
-fetches it directly when given a full slug (tournament/<slug>; needed for an
-unpublished tournament, which no list returns), then the Melee singles event whose
-name contains -EventName and the stream named -StreamName, once, at startup
-(src/resolve.ts). A weekly series whose short URL moves to each new
-tournament needs no push per week; power the Pi on (or restart the relay) on
-the night. Push only to update the relay or change these names.
+Two modes, one config field (tournament):
+  production  "abbey". The relay finds the tournament the start.gg/abbey
+              short URL is on, among your admin tournaments; if the TO has
+              not moved it yet, the "Melee @ Abbey Tavern #N" nearest to now
+              (src/resolve.ts). Nothing to push per week: power the Pi on (or
+              restart the relay) on the night.
+  -Test       "tournament/sf-melee-discord-test", fetched by its full slug
+              (it is unpublished, so no list query returns it).
+Either way the event is the Melee singles event whose name contains
+-EventName and the stream is the one named -StreamName. Switching modes is a
+push; the relay's first log line says which tournament it found and how.
 
 Steps: npm run build -> write config.json (token from .env, the rest from the
 parameters; startggEndpoint is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
@@ -25,8 +29,7 @@ machine except over ssh to the Pi.
 param(
   [string]$PiHost = 'relay.local',
   [string]$User = 'pi',
-  # Production: 'abbey'. Kept on the (unpublished) test tournament until go-live.
-  [string]$Tournament = 'tournament/sf-melee-discord-test',
+  [switch]$Test,
   [string]$EventName = 'Melee Singles',
   [string]$StreamName = 'SFMelee',
   [int]$StreamStation = 1,
@@ -45,6 +48,7 @@ foreach ($line in Get-Content $envPath) {
   if ($line -match '^\s*([A-Z_]+)=(.*)$') { $dotenv[$Matches[1]] = $Matches[2].Trim() }
 }
 if (-not $dotenv['STARTGG_TOKEN']) { throw 'STARTGG_TOKEN missing from .env' }
+$Tournament = if ($Test) { 'tournament/sf-melee-discord-test' } else { 'abbey' }
 
 # --- build ---
 Push-Location $repo
@@ -81,8 +85,9 @@ if (Test-Path $tgz) { Remove-Item -Force $tgz }
 if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
 
 Write-Host "bundle: $tgz"
-Write-Host ("config: {0}, event ~ '{1}', stream '{2}', stream station {3}, tcp {4}, http {5}, token {6}..." -f `
-  $Tournament, $EventName, $StreamName, $StreamStation, $TcpPort, $HttpPort, $dotenv['STARTGG_TOKEN'].Substring(0, 4))
+Write-Host ("config: {0} ({7}), event ~ '{1}', stream '{2}', stream station {3}, tcp {4}, http {5}, token {6}..." -f `
+  $Tournament, $EventName, $StreamName, $StreamStation, $TcpPort, $HttpPort, $dotenv['STARTGG_TOKEN'].Substring(0, 4),
+  $(if ($Test) { 'TEST' } else { 'production' }))
 if ($DryRun) { Write-Host 'dry run: not pushing'; exit 0 }
 
 # --- push and install ---
@@ -93,7 +98,7 @@ if ($LASTEXITCODE -ne 0) { throw "scp to $target failed" }
 Write-Host 'installing (sudo on the Pi) ...'
 $remote = 'rm -rf /tmp/tr && mkdir -p /tmp/tr && tar -xzf /tmp/tournament-reporter.tgz -C /tmp/tr ' +
   '&& sudo bash /tmp/tr/deploy/install.sh /tmp/tr && rm -rf /tmp/tr /tmp/tournament-reporter.tgz'
-& ssh $target $remote
+& ssh -t $target $remote
 if ($LASTEXITCODE -ne 0) { throw 'install on the Pi failed (see output above)' }
 # The bundle carries the token; don't leave it lying in %TEMP%.
 Remove-Item -Recurse -Force $stage

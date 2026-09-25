@@ -54,6 +54,7 @@ export interface FakeTournament {
   slug: string; // "tournament/sf-melee-discord-test"
   shortSlug: string | null;
   published: boolean; // unpublished tournaments are absent from every list query (probe.ts --find-short)
+  startAt: number | null; // unix seconds
   id: number;
   name: string;
   events: { id: number; name: string; type: number; videogame: { id: number } }[];
@@ -325,7 +326,7 @@ export class FakeStartgg {
     const totalPages = Math.max(1, Math.ceil(listed.length / perPage));
     const nodes = listed
       .slice((page - 1) * perPage, page * perPage)
-      .map((t) => ({ slug: t.slug, shortSlug: t.shortSlug }));
+      .map((t) => ({ slug: t.slug, shortSlug: t.shortSlug, name: t.name, startAt: t.startAt }));
     return {
       status: 200,
       body: JSON.stringify({ data: { currentUser: { tournaments: { pageInfo: { totalPages }, nodes } } } }),
@@ -415,6 +416,10 @@ export function defaultFixture(): FakeSet[] {
 // week's gets the "abbey" short URL.
 
 export const FIXTURE_TOURNAMENT = 'tournament/sf-melee-discord-test';
+
+/** Melee @ Abbey Tavern #160's real start (2026-09-30T01:30:00Z, probe.ts --tournament); weeks step back from it. */
+export const ABBEY_160_START = 1790731800;
+const WEEK = 7 * 24 * 60 * 60;
 export const FIXTURE_EVENT_NAME = 'Melee Singles';
 export const FIXTURE_STREAM_NAME = 'SFMelee';
 export const FIXTURE_STREAM_ID = 1358079;
@@ -424,6 +429,8 @@ export function defaultTournaments(): FakeTournament[] {
     slug: `tournament/melee-abbey-tavern-${n}`,
     shortSlug: short,
     published: true,
+    // Weekly on Tuesdays: #160 starts at ABBEY_160_START, each earlier week 7 days before.
+    startAt: ABBEY_160_START - (160 - n) * WEEK,
     id: 956000 + n,
     name: `Melee @ Abbey Tavern #${n}`,
     events: [
@@ -444,6 +451,7 @@ export function defaultTournaments(): FakeTournament[] {
       slug: 'tournament/sf-melee-discord-test',
       shortSlug: 'sfmeleetest',
       published: false,
+      startAt: 1777316400, // 2026-04-27T19:00:00Z, as the probe recorded
       id: 905882,
       name: 'SF Melee Discord Test',
       events: [

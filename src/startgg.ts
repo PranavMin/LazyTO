@@ -54,6 +54,8 @@ export interface UpstreamSet {
 export interface AdminTournament {
   slug: string; // "tournament/melee-abbey-tavern-160-1"
   shortSlug: string | null; // "abbey"; moves to the new tournament every week
+  name: string; // "Melee @ Abbey Tavern #160"
+  startAt: number | null; // unix seconds
 }
 
 /** A tournament's events and streams, for resolve.ts to pick from by name. */
@@ -73,7 +75,7 @@ const ADMIN_TOURNAMENTS_QUERY = `query AdminTournaments($page: Int!, $perPage: I
   currentUser {
     tournaments(query: { page: $page, perPage: $perPage, filter: { tournamentView: "admin" } }) {
       pageInfo { totalPages }
-      nodes { slug shortSlug }
+      nodes { slug shortSlug name startAt }
     }
   }
 }`;

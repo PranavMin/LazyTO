@@ -6,12 +6,13 @@
 // end; on a mid-run failure it attempts a cleanup resetSet before exiting.
 //
 // Run: node scripts/probe.ts
-//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL>   (read-only)
+//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL> | --abbey-weekly   (read-only)
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { StartggClient } from "../src/startgg.js";
-import { resolveEvent } from "../src/resolve.js";
+import { resolveEvent, nearestAbbeyWeekly, ADMIN_PAGE_SIZE } from "../src/resolve.js";
+import type { AdminTournament } from "../src/startgg.js";
 
 const ENDPOINT = "https://api.start.gg/gql/alpha";
 const NEEDED_MUTATIONS = ["markSetInProgress", "assignStream", "reportBracketSet", "resetSet"];
@@ -283,7 +284,28 @@ async function findShort(short: string): Promise<void> {
   }
 }
 
+// `node scripts/probe.ts --abbey-weekly`: the relay's fallback rule (nearest
+// "Melee @ Abbey Tavern #N" by start time) run over the real admin list, as
+// if the "abbey" short URL had not been moved. Read-only.
+async function showAbbeyWeekly(): Promise<void> {
+  const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
+  const all: AdminTournament[] = [];
+  for (let page = 1; ; page++) {
+    const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
+    all.push(...nodes);
+    if (page >= totalPages || nodes.length === 0) break;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const w = nearestAbbeyWeekly(all, now);
+  console.log(`${all.length} admin tournaments; nearest Abbey weekly to now: ` +
+    (w ? `${w.name} (${w.slug}) starting ${new Date(w.startAt! * 1000).toISOString()}, short URL ${w.shortSlug ?? "-"}` : "none"));
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes("--abbey-weekly")) {
+    await showAbbeyWeekly();
+    return;
+  }
   const fArg = process.argv.find((a) => a.startsWith("--find-short="));
   if (fArg) {
     await findShort(fArg.slice("--find-short=".length));

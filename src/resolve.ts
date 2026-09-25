@@ -14,11 +14,22 @@
 //   - a full slug ("tournament/sf-melee-discord-test"): fetched directly. For
 //     an unpublished tournament, which no list query returns (checked with
 //     probe.ts --find-short on 2026-09-25): the test tournament.
-// Then the event and stream are picked from that tournament by name. Exactly one of each must match;
+// Then the event and stream are picked from that tournament by name.
+//
+// One exception to "no fallbacks", for the Abbey weekly only (user,
+// 2026-09-25, taken from matchcaller's resolver): if no admin tournament
+// carries the short URL "abbey" -- the TO has not moved it to tonight's
+// tournament yet -- the relay takes the admin tournament named
+// "Melee @ Abbey Tavern #N" whose start time is nearest to now, within
+// ABBEY_WINDOW_DAYS, a future one winning a tie. It comes from the same admin
+// list already fetched, so it costs no extra call and never scrapes the
+// website (matchcaller also follows the start.gg/abbey redirect, which sits
+// behind Cloudflare's bot challenge). The startup log says which rule found
+// the tournament. It needs a correct clock: the unit waits for time sync. Exactly one of each must match;
 // zero or several is a startup failure that lists what was there, so the fix
 // is obvious from the journal. No guessing, no "closest match".
 
-import type { StartggClient, TournamentDetail } from './startgg.js';
+import type { AdminTournament, StartggClient, TournamentDetail } from './startgg.js';
 
 /** Melee's videogame id and start.gg's singles event type. */
 export const MELEE_VIDEOGAME_ID = 1;
@@ -27,6 +38,11 @@ export const SINGLES_EVENT_TYPE = 1;
 /** Admin tournaments fetched per page while looking for the short URL. */
 export const ADMIN_PAGE_SIZE = 50;
 
+/** The Abbey weekly: its short URL, its name pattern, and how far from now a week may be. */
+export const ABBEY_SHORT_URL = 'abbey';
+export const ABBEY_WEEKLY_NAME = /^Melee @ Abbey Tavern #\d+$/i;
+export const ABBEY_WINDOW_DAYS = 30;
+
 export interface ResolveInput {
   tournament: string; // short URL ("abbey") or full slug ("tournament/sf-melee-discord-test")
   eventName: string; // matched case-insensitively as a substring, e.g. "Melee Singles"
@@ -34,6 +50,8 @@ export interface ResolveInput {
 }
 
 export interface Resolved {
+  /** Which rule found the tournament: the full slug given, the short URL, or the nearest Abbey weekly. */
+  foundBy: 'full slug' | 'short URL' | 'nearest Abbey weekly';
   tournamentName: string;
   tournamentSlug: string;
   eventId: number;
@@ -49,16 +67,48 @@ export class ResolveError extends Error {
   }
 }
 
-/** Page through the admin tournaments until one has this short URL. */
-export async function findTournamentSlug(client: StartggClient, shortSlug: string): Promise<string> {
+/** The Abbey weekly whose start is nearest to `nowSec`, within the window; a future one wins a tie. */
+export function nearestAbbeyWeekly(tournaments: AdminTournament[], nowSec: number): AdminTournament | null {
+  const window = ABBEY_WINDOW_DAYS * 24 * 60 * 60;
+  let best: AdminTournament | null = null;
+  let bestRank: [number, number] | null = null;
+  for (const t of tournaments) {
+    if (!ABBEY_WEEKLY_NAME.test(t.name) || t.startAt === null) continue;
+    const distance = Math.abs(t.startAt - nowSec);
+    if (distance > window) continue;
+    const rank: [number, number] = [distance, t.startAt >= nowSec ? 0 : 1];
+    if (!bestRank || rank[0] < bestRank[0] || (rank[0] === bestRank[0] && rank[1] < bestRank[1])) {
+      best = t;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
+/** Page through the admin tournaments until one has this short URL (for "abbey", else the nearest weekly). */
+export async function findTournamentSlug(
+  client: StartggClient,
+  shortSlug: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): Promise<{ slug: string; foundBy: 'short URL' | 'nearest Abbey weekly' }> {
   const want = shortSlug.toLowerCase();
-  let seen = 0;
+  const all: AdminTournament[] = [];
   for (let page = 1; ; page++) {
     const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
-    seen += nodes.length;
+    all.push(...nodes);
     const hit = nodes.find((t) => t.shortSlug?.toLowerCase() === want);
-    if (hit) return hit.slug;
+    if (hit) return { slug: hit.slug, foundBy: 'short URL' };
     if (page >= totalPages || nodes.length === 0) break;
+  }
+  const seen = all.length;
+  if (want === ABBEY_SHORT_URL) {
+    const weekly = nearestAbbeyWeekly(all, nowSec);
+    if (weekly) return { slug: weekly.slug, foundBy: 'nearest Abbey weekly' };
+    throw new ResolveError(
+      `no tournament with short URL "abbey", and no "Melee @ Abbey Tavern #N" starting within ` +
+        `${ABBEY_WINDOW_DAYS} days of now, among the ${seen} tournaments this token's user administers ` +
+        `(check the token belongs to an Abbey admin, and the Pi's clock)`,
+    );
   }
   throw new ResolveError(
     `no tournament with short URL "${shortSlug}" among the ${seen} tournaments this token's user administers ` +
@@ -96,14 +146,19 @@ export function pickStream(t: TournamentDetail, streamName: string): TournamentD
   );
 }
 
-export async function resolveEvent(client: StartggClient, input: ResolveInput): Promise<Resolved> {
-  const slug = input.tournament.startsWith('tournament/')
-    ? input.tournament
-    : await findTournamentSlug(client, input.tournament);
-  const t = await client.getTournament(slug);
+export async function resolveEvent(
+  client: StartggClient,
+  input: ResolveInput,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): Promise<Resolved> {
+  const found = input.tournament.startsWith('tournament/')
+    ? { slug: input.tournament, foundBy: 'full slug' as const }
+    : await findTournamentSlug(client, input.tournament, nowSec);
+  const t = await client.getTournament(found.slug);
   const event = pickEvent(t, input.eventName);
   const stream = pickStream(t, input.streamName);
   return {
+    foundBy: found.foundBy,
     tournamentName: t.name,
     tournamentSlug: t.slug,
     eventId: Number(event.id),

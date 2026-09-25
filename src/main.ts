@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const startgg = new StartggClient({ endpoint: config.startggEndpoint, token: config.token });
   const ev = await resolveEvent(startgg, config); // fail fast: unknown short URL / event / stream dies here
   console.log(
-    `resolved "${config.tournament}": ${ev.tournamentName} (${ev.tournamentSlug}), ` +
+    `resolved "${config.tournament}" by ${ev.foundBy}: ${ev.tournamentName} (${ev.tournamentSlug}), ` +
       `event "${ev.eventName}" ${ev.eventId}, stream "${ev.streamName}" ${ev.streamId}`,
   );
 

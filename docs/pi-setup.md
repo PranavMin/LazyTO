@@ -89,10 +89,17 @@ From the repo root in PowerShell:
 
 This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 7777/8080, the production start.gg endpoint, audit dir `/var/lib/tournament-reporter`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
 
-Until go-live the tournament parameter defaults to the unpublished test tournament (`tournament/sf-melee-discord-test`). The relay's first log lines show what it found:
+The relay has two modes, chosen at push time:
+
+| Push | Tournament | For |
+|------|------------|-----|
+| `.\deploy\push.ps1` | start.gg/abbey, whichever week it is | production, the default |
+| `.\deploy\push.ps1 -Test` | the unpublished SF Melee Discord Test | testing with fake entrants |
+
+While you are still testing, push with `-Test`, so a Wii can't touch a real bracket. The relay's first log lines show what it found and how:
 
 ```
-resolved "tournament/sf-melee-discord-test": SF Melee Discord Test (...), event "Melee Singles! (7:30 Start)" 1613010, stream "SFMelee" 1358079
+resolved "tournament/sf-melee-discord-test" by full slug: SF Melee Discord Test (...), event "Melee Singles! (7:30 Start)" 1613010, stream "SFMelee" 1358079
 relay up: event 1613010, N sets cached, ...
 ```
 
@@ -138,13 +145,43 @@ A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no
 3. Check each Wii's `tournament.cfg` station number against its physical label; exactly one has `stream=1`, and that station number is the relay's `streamStation` (1 unless you pass `-StreamStation`).
 4. Boot one Wii and confirm the set list loads, or run the smoke test again.
 
-**Going live on Abbey** is one push, once:
+**Going live on Abbey** is one push without `-Test`:
 
 ```bash
-.\deploy\push.ps1 -Tournament abbey
+.\deploy\push.ps1
 ```
 
-(or change the `-Tournament` default in `push.ps1` so later pushes keep it). From then on the relay follows start.gg/abbey: every week's tournament gets that short URL, and the relay picks its Melee singles event whose name contains "Melee Singles" and the stream named "SFMelee". Verified against the real API on 2026-09-25: `abbey` resolved to Melee @ Abbey Tavern #160. Two things it depends on: the token belongs to an admin of the Abbey tournaments, and the short URL has moved to tonight's tournament before the relay starts.
+From then on the relay follows start.gg/abbey with no push per week. At every start it finds the tournament the `abbey` short URL is on, and picks its Melee singles event whose name contains "Melee Singles" and the stream named "SFMelee". If the short URL has not been moved to tonight's tournament yet, it takes the "Melee @ Abbey Tavern #N" whose start time is nearest to now instead (the log says `by nearest Abbey weekly`). That backup only picks the right week on or near the night, which is when the Pi boots. Verified against the real API on 2026-09-25: `abbey` resolved to Melee @ Abbey Tavern #160. It depends on the token belonging to an admin of the Abbey tournaments.
+
+## Sharing the matchcaller Pi instead
+
+The venue already has a Pi on a monitor running matchcaller (a Pi Zero 2 W that shows start.gg/abbey's sets). The relay can live on it instead of a second Pi: it has no screen, listens on its own ports (7777 TCP, 8080 web), and installs into its own folders, a `relay` system user and one service, without touching matchcaller or its user. What sharing costs: the Zero 2 W's Wi-Fi is 2.4 GHz only (fine for Wiis), its 512 MB of RAM is enough for both (the relay uses well under 100 MB), and if both use the same start.gg token their calls add up against start.gg's limit of 80 a minute, so give the relay its own token.
+
+You need three things from that Pi, found once with a keyboard on it or by asking its owner: its hostname, the user it runs matchcaller as (matchcaller's scripts use `abbey`), and that user's password. Then, from this PC:
+
+1. Put your ssh key on it (asks for that user's password once):
+
+   ```bash
+   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh abbey@<hostname>.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+   ```
+
+2. Check it is a supported system; it prints `aarch64` (64-bit) or `armv7l` (32-bit), and the installer handles both:
+
+   ```bash
+   ssh abbey@<hostname>.local uname -m
+   ```
+
+3. Install, pointing the push at it (it may ask for the user's sudo password):
+
+   ```bash
+   .\deploy\push.ps1 -Test -PiHost <hostname>.local -User abbey
+   ```
+
+Everything else in this guide then applies with `<hostname>.local` in place of `relay.local`. To take the relay off that Pi again, leaving matchcaller as it was:
+
+```bash
+ssh -t abbey@<hostname>.local sudo bash /opt/tournament-reporter/deploy/uninstall.sh
+```
 
 ## Day-to-day commands
 
@@ -154,7 +191,7 @@ A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no
 | Live log | `ssh pi@relay.local journalctl -u tournament-reporter -f` |
 | Restart (also re-finds tonight's tournament) | `ssh pi@relay.local sudo systemctl restart tournament-reporter` |
 | Audit log of the current event | `ssh pi@relay.local sudo cat /var/lib/tournament-reporter/<eventId>.jsonl` |
-| Update the relay after a code change | `.\deploy\push.ps1` (pass `-Tournament abbey` after go-live unless you changed the default) |
+| Update the relay after a code change | `.\deploy\push.ps1` (add `-Test` while testing) |
 | Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/tournament-reporter/deploy/add-wifi.sh "Name"` |
 | Shut down cleanly | `ssh pi@relay.local sudo poweroff` (pulling power is also fine; claims replay from the audit log on boot) |
 
