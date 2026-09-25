@@ -507,16 +507,17 @@ start.gg states: `1` not started → `2` in progress → `3` complete. The relay
 
 ## 10. Deployment
 
-**Pi:** Raspberry Pi 4 (or Zero 2 W), wired Ethernet, static IP. Node 22 via `nvm` pinned in a systemd unit:
+**Pi:** Raspberry Pi 5 (a 4 or Zero 2 W also works), Raspberry Pi OS Lite 64-bit, wired Ethernet. Step-by-step in `docs/pi-setup.md`; the kit is `deploy/`:
 
-```
-[Service]
-ExecStart=/home/pi/.nvm/versions/node/v22.x/bin/node /opt/tournament-reporter/dist/main.js
-Restart=on-failure
-Environment=CONFIG=/etc/tournament-reporter/config.json
-```
+| File | Role |
+|------|------|
+| `deploy/push.ps1` | Run on the Windows dev PC: `npm run build` (tsc → `dist/`, no runtime npm deps), writes `config.json` from `.env` (+ `-EventId`/`-StreamId` overrides), scp's the bundle, runs the installer over ssh. |
+| `deploy/install.sh` | Run on the Pi by push.ps1 (sudo): pinned official Node 22 tarball at `/opt/node`, system user `relay`, code at `/opt/tournament-reporter`, config at `/etc/tournament-reporter/config.json` (root:relay 0640), unit installed and restarted, waits for `relay up:`. Idempotent. |
+| `deploy/tournament-reporter.service` | systemd unit: `ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/src/main.js`, `Environment=CONFIG=…`, `Restart=on-failure`, runs as `relay`. |
+| `deploy/set-static-ip.sh` | Adds the fixed venue address (what the Wiis' `relay_ip` points at) on top of DHCP via NetworkManager, so `relay.local` keeps working on any LAN. |
+| `scripts/smoke.ts` | From the PC: one LIST_SETS over the wire protocol plus a status-page fetch against the deployed relay. |
 
-Logs to journald; audit log to `/var/lib/tournament-reporter/audit.jsonl` (rotated per tournament by naming it `<eventId>.jsonl`).
+Logs to journald; audit log to `/var/lib/tournament-reporter/<eventId>.jsonl` (one file per tournament).
 
 **Per-tournament setup checklist** (this replaces nothing; it's added to the existing setup):
 1. Edit `config.json`: `eventId`, `streamId`. Restart service. Check status page shows the set count.

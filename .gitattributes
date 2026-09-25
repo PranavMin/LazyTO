@@ -3,3 +3,6 @@
 generated/** text eol=lf
 protocol.yaml text eol=lf
 tools/*.py    text eol=lf
+# Shell scripts and the systemd unit are copied to the Pi as-is; bash needs LF.
+deploy/*.sh      text eol=lf
+deploy/*.service text eol=lf
