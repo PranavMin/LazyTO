@@ -330,9 +330,14 @@ Payload: `uint32_t set_id`. Relay calls `resetSet(setId)` and clears the station
 
 ```
 Boot ─► Tournament (auto-entered; B from the list shows the vanilla main menu, Z re-enters)
+          ├─ Searching  the host has not heard the relay's beacon yet (R15): LOOKING FOR THE
+          │             RELAY + pulse, pane STATION n / SEARCHING; the first request waits
+          │             for it (lbRelayExi_Peek reads exi_poll_hdr with nothing in flight).
+          │             10 s without a beacon -> NO RELAY FOUND, "is this setup on the
+          │             relay's network?"; A searches again, B backs out
           ├─ Loading    list area: LOADING SETS + a three-dot pulse; the pane shows
-          │             STATION n / RELAY a.b.c.d / PORT p from exi_poll_hdr (host-filled,
-          │             so it shows even while the relay is silent)
+          │             STATION n / RELAY a.b.c.d / PORT p from exi_poll_hdr (host-filled
+          │             from the beacon, so it shows even while the relay is silent)
           ├─ Set list   two panes inside the vanilla panel. Rows are "tag VS tag" on a
           │             fixed VS axis, grouped under round-name headers (WINNERS
           │             QUARTER-FINAL ...); the cursor row is yellow on a translucent bar.
