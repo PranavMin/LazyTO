@@ -73,7 +73,8 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
 $first = $null
 try {
   while ($done -lt $total) {
-    $want = [int][math]::Min($buf.Length, $total - $done)
+    # Both operands int64, or PowerShell binds the Int32 overload and a >2 GB disk size fails to convert.
+    $want = [int][math]::Min([int64]$buf.Length, [int64]($total - $done))
     $n = $in.Read($buf, 0, $want)
     if ($n -le 0) { break }
     if ($null -eq $first) { $first = $buf[510, 511] }
