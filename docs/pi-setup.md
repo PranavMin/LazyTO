@@ -122,20 +122,14 @@ It asks for the password (press Enter for an open network) and lists the saved n
 
 **Check once at the venue that a Wii can reach the Pi at all.** Guest Wi-Fi often has client isolation, which blocks device-to-device traffic: a Wii would then never reach the relay, whatever its address. With the Pi and this PC both on the venue Wi-Fi, `npx tsx scripts/smoke.ts relay.local` passing means the network allows it.
 
-**The address the Wiis use.** Decided 2026-09-25 (design.md R15): the Wiis will find the relay themselves. The relay already broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on; the status page footer shows where ("Discovery beacon to 192.168.1.255, last sent 1s ago"). Once the Wii side listens for it (Nintendont kernel and the Dolphin forwarder, not done yet), `tournament.cfg` drops `relay_ip` and `relay_port` and the Pi's address stops mattering.
+**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has only the station number and the stream flag:
 
-Until then each Wii's `tournament.cfg` still needs `relay_ip=`, so the stopgaps are:
+```
+station=3
+stream=1
+```
 
-- A DHCP reservation for the Pi on the venue router, if you can get it set once (it is the same venue every week). Nothing to do on the Pi.
-- A fixed second address the Pi adds on top of DHCP. Pick one inside the venue's subnet and outside its DHCP pool, and run this at the venue, on the venue Wi-Fi:
-
-  ```bash
-  ssh pi@relay.local sudo bash /opt/tournament-reporter/deploy/set-static-ip.sh 192.168.1.10/24 wlan0
-  ```
-
-  It is saved with that Wi-Fi network, so it comes back every week; `relay.local` keeps working because DHCP stays on. Re-run with a different address to change it, or with `none` to drop it.
-
-Put the address in each SD card's `tournament.cfg` (`relay_ip=192.168.1.10`, `relay_port=7777`).
+A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no relay found yet"; it picks the relay up within 2 s of both being on the same network. Old cards with `relay_ip=`/`relay_port=` lines still work: those lines are ignored.
 
 ## 6. Per tournament
 
@@ -177,4 +171,5 @@ The relay starts on boot and restarts on failure. A wrong token, a short URL tha
 - **FAILED with "cannot read ..." or "must be ..." lines.** The generated config failed validation; fix the parameter you passed and push again.
 - **FAILED with a fetch or TLS error.** The Pi has no internet, or its clock is wrong right after first boot. Check `ssh pi@relay.local curl -sI https://api.start.gg` and `timedatectl`; then `sudo systemctl restart tournament-reporter`.
 - **Status page shows 0 sets.** No pool or phase is started on start.gg yet. The relay refreshes every 20 s; no restart needed after starting pools.
-- **A Wii shows "relay timeout".** The Wii's `relay_ip` does not match the Pi's address, the Wi-Fi isolates clients, or they are on different networks. `ssh pi@relay.local ip -4 addr show wlan0` shows what the Pi has.
+- **A Wii shows "no relay found yet" or relay 0.0.0.0.** It has not heard the relay's beacon: the Wii and the Pi are on different networks, or the Wi-Fi isolates clients. The status page footer shows where the beacon is going; `ssh pi@relay.local ip -4 addr show wlan0` shows the Pi's own address. Compare it with the Wii's network.
+- **A Wii shows "relay timeout".** It heard a beacon but cannot open a connection to that address: client isolation, or a firewall between the Wii's network and the Pi's.
