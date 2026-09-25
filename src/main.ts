@@ -14,6 +14,8 @@ import { AuditLog, auditPath, replayClaims } from './audit.js';
 import { RelayTcpServer } from './tcp.js';
 import { StatusServer } from './status.js';
 import { resolveEvent } from './resolve.js';
+import { RelayBeacon } from './beacon.js';
+import { BEACON_PORT, BEACON_INTERVAL_MS } from '../generated/wire.js';
 
 async function main(): Promise<void> {
   const configPath = process.env.CONFIG;
@@ -53,12 +55,17 @@ async function main(): Promise<void> {
     streamId: ev.streamId,
   });
   await tcp.listen(config.tcpPort);
+  // Stations find the relay from this broadcast (design R15); started only
+  // once TCP is listening, so a station never learns an address that refuses.
+  const beacon = new RelayBeacon({ tcpPort: config.tcpPort, eventId: ev.eventId });
+  await beacon.start();
   const status = new StatusServer({
     state,
     cache,
     startgg,
     streamStation: config.streamStation,
     eventLabel: `${ev.tournamentName} · ${ev.eventName} (${ev.eventId})`,
+    beacon,
   });
   await status.listen(config.httpPort);
 
@@ -67,11 +74,12 @@ async function main(): Promise<void> {
     `relay up: event ${ev.eventId}, ${cache.status().count} sets cached, ` +
       `tcp :${config.tcpPort}, status http://localhost:${config.httpPort}`,
   );
+  console.log(`beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`);
 
   const shutdown = async (signal: string) => {
     console.log(`${signal}: shutting down`);
     cache.stop();
-    await Promise.all([tcp.close(), status.close()]);
+    await Promise.all([beacon.stop(), tcp.close(), status.close()]);
     audit.record({ type: 'shutdown', signal });
     audit.close();
     process.exit(0);

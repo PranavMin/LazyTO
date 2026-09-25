@@ -15,6 +15,7 @@ import type { AddressInfo } from 'node:net';
 import type { SetCache } from './cache.js';
 import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
+import type { BeaconStatus } from './beacon.js';
 
 export interface StatusDeps {
   state: StationState;
@@ -23,6 +24,8 @@ export interface StatusDeps {
   streamStation: number;
   /** Tonight's tournament and event as resolve.ts found them, shown in the header so the TO can see it is the right week. */
   eventLabel: string;
+  /** Discovery beacon (design R15): where it is announcing the relay, and any send error. */
+  beacon: { status(): BeaconStatus };
 }
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
@@ -78,7 +81,7 @@ export class StatusServer {
   }
 
   render(): string {
-    const { state, cache, startgg, streamStation, eventLabel } = this.deps;
+    const { state, cache, startgg, streamStation, eventLabel, beacon } = this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -129,6 +132,10 @@ export class StatusServer {
     const staleLine = stale
       ? `<p class="warn">⚠ cache is stale (last refresh ${age(cs.refreshedAt)} ago; expected every 20 s) — is start.gg reachable?</p>`
       : '';
+    const bs = beacon.status();
+    const beaconLine = bs.lastError
+      ? `<p class="warn">✗ discovery beacon: ${escapeHtml(bs.lastError)} — Wiis cannot find the relay</p>`
+      : `<p class="muted">Discovery beacon to ${bs.targets.map(escapeHtml).join(', ') || '—'}, last sent ${bs.lastSentAt ? `${age(bs.lastSentAt)} ago` : 'never'}.</p>`;
     const errorLine = cs.error ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>` : '';
     const warningLines = cs.warnings.map((w) => `<p class="warn">⚠ ${escapeHtml(w)}</p>`).join('');
 
@@ -161,6 +168,7 @@ export class StatusServer {
 ${rows.join('\n')}
 </table></div>
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
+${beaconLine}
 ${staleLine}${errorLine}${warningLines}
 </body></html>`;
   }

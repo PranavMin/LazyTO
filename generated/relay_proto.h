@@ -37,11 +37,13 @@ typedef unsigned long uint32_t;
 #define RELAY_MAGIC_0 'M'
 #define RELAY_MAGIC_1 'T'
 
-#define MAX_GAMES 5  /* games per set (best of 5) */
-#define MAX_SETS  56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
-#define MSG_LEN   30  /* human-readable status text in relay_resp */
-#define ROUND_LEN 24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
-#define TAG_LEN   16  /* player tag */
+#define MAX_GAMES          5  /* games per set (best of 5) */
+#define MAX_SETS           56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
+#define MSG_LEN            30  /* human-readable status text in relay_resp */
+#define ROUND_LEN          24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
+#define TAG_LEN            16  /* player tag */
+#define BEACON_PORT        7778  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_INTERVAL_MS 2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
 
 /* request/response command, echoed back in the response header */
 enum relay_cmd {
@@ -101,6 +103,31 @@ RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, station) == 2, exi_poll_hdr_st
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_ip) == 4, exi_poll_hdr_relay_ip);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_port) == 8, exi_poll_hdr_relay_port);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, _pad2) == 10, exi_poll_hdr__pad2);
+
+/* Relay discovery (design R15). Not on the TCP wire: one UDP datagram,
+ * broadcast by the relay every BEACON_INTERVAL_MS to each IPv4 interface's
+ * directed broadcast address, port BEACON_PORT. A station (Nintendont kernel,
+ * Slippi Dolphin forwarder) listens on BEACON_PORT, ignores datagrams whose
+ * size, magic or version do not match, and takes the datagram's SOURCE address
+ * plus tcp_port as the relay; the latest valid beacon wins, so a relay that
+ * changes address is followed. One relay per LAN.
+ */
+struct relay_beacon {
+    uint8_t  magic[2];  /* 'M','T' */
+    uint8_t  version;  /* PROTO_VERSION */
+    uint8_t  _pad;
+    uint16_t tcp_port;  /* the relay's TCP port for relay_hdr requests */
+    uint16_t _pad2;
+    uint32_t event_id;  /* start.gg event the relay serves; for logs and display only */
+};  /* 12 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct relay_beacon) == 12, relay_beacon_size);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, magic) == 0, relay_beacon_magic);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, version) == 2, relay_beacon_version);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, _pad) == 3, relay_beacon__pad);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, tcp_port) == 4, relay_beacon_tcp_port);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, _pad2) == 6, relay_beacon__pad2);
+RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, event_id) == 8, relay_beacon_event_id);
 
 /* Every message (request and response) begins with this header. */
 struct relay_hdr {

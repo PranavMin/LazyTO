@@ -19,7 +19,7 @@ test('status page', async (t) => {
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit: nullAudit, streamStation: 1, streamId: 1358079 });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `SF Melee Discord Test · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})` });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `SF Melee Discord Test · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: ['192.168.1.255'], sent: 1, lastSentAt: Date.now(), lastError: null }) } });
   await status.listen(0, '127.0.0.1');
   const statusUrl = `http://127.0.0.1:${status.address().port}`;
   t.after(async () => {

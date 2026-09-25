@@ -38,6 +38,12 @@ constants:
   TAG_LEN:
     value: 16
     doc: "player tag"
+  BEACON_PORT:
+    value: 7778
+    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address)"
+  BEACON_INTERVAL_MS:
+    value: 2000
+    doc: "the relay sends one relay_beacon per interval on every IPv4 interface"
 
 enums:
   relay_cmd:
@@ -97,6 +103,25 @@ structs:
       - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
       - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
       - {name: _pad2,      type: u16}
+
+  relay_beacon:
+    doc: >-
+      Relay discovery (design R15). Not on the TCP wire: one UDP datagram,
+      broadcast by the relay every BEACON_INTERVAL_MS to each IPv4
+      interface's directed broadcast address, port BEACON_PORT. A station
+      (Nintendont kernel, Slippi Dolphin forwarder) listens on BEACON_PORT,
+      ignores datagrams whose size, magic or version do not match, and
+      takes the datagram's SOURCE address plus tcp_port as the relay; the
+      latest valid beacon wins, so a relay that changes address is followed.
+      One relay per LAN.
+    size: 12
+    fields:
+      - {name: magic,    type: u8, array: 2, doc: "'M','T'"}
+      - {name: version,  type: u8,           doc: "PROTO_VERSION"}
+      - {name: _pad,     type: u8}
+      - {name: tcp_port, type: u16,          doc: "the relay's TCP port for relay_hdr requests"}
+      - {name: _pad2,    type: u16}
+      - {name: event_id, type: u32,          doc: "start.gg event the relay serves; for logs and display only"}
 
   relay_hdr:
     doc: "Every message (request and response) begins with this header."

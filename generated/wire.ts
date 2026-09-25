@@ -15,6 +15,8 @@ export const MAX_SETS = 56; // cap on set_entry rows in a LIST_SETS response; 56
 export const MSG_LEN = 30; // human-readable status text in relay_resp
 export const ROUND_LEN = 24; // round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit)
 export const TAG_LEN = 16; // player tag
+export const BEACON_PORT = 7778; // UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address)
+export const BEACON_INTERVAL_MS = 2000; // the relay sends one relay_beacon per interval on every IPv4 interface
 
 /** request/response command, echoed back in the response header */
 export enum RelayCmd {
@@ -106,6 +108,39 @@ export function decodeExiPollHdr(buf: Uint8Array, off = 0): ExiPollHdr {
     station: dv.getUint16(off + 2, false),
     relay_ip: dv.getUint32(off + 4, false),
     relay_port: dv.getUint16(off + 8, false),
+  };
+}
+
+
+// ---- relay_beacon (12 bytes) ----
+
+/** Relay discovery (design R15). Not on the TCP wire: one UDP datagram, broadcast by the relay every BEACON_INTERVAL_MS to each IPv4 interface's directed broadcast address, port BEACON_PORT. A station (Nintendont kernel, Slippi Dolphin forwarder) listens on BEACON_PORT, ignores datagrams whose size, magic or version do not match, and takes the datagram's SOURCE address plus tcp_port as the relay; the latest valid beacon wins, so a relay that changes address is followed. One relay per LAN. */
+export interface RelayBeacon {
+  magic: Uint8Array; // 'M','T'
+  version: number; // PROTO_VERSION
+  tcp_port: number; // the relay's TCP port for relay_hdr requests
+  event_id: number; // start.gg event the relay serves; for logs and display only
+}
+export const RELAY_BEACON_SIZE = 12;
+
+export function encodeRelayBeacon(v: RelayBeacon): Uint8Array {
+  const bytes = new Uint8Array(RELAY_BEACON_SIZE);
+  const dv = new DataView(bytes.buffer);
+  bytes.set(v.magic.subarray(0, 2), 0);
+  dv.setUint8(2, v.version);
+  dv.setUint16(4, v.tcp_port, false);
+  dv.setUint32(8, v.event_id, false);
+  return bytes;
+}
+
+export function decodeRelayBeacon(buf: Uint8Array, off = 0): RelayBeacon {
+  checkLen(buf, off, RELAY_BEACON_SIZE, 'relay_beacon');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: buf.slice(off + 0, off + 0 + 2),
+    version: dv.getUint8(off + 2),
+    tcp_port: dv.getUint16(off + 4, false),
+    event_id: dv.getUint32(off + 8, false),
   };
 }
 

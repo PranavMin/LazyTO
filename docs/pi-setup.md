@@ -122,7 +122,9 @@ It asks for the password (press Enter for an open network) and lists the saved n
 
 **Check once at the venue that a Wii can reach the Pi at all.** Guest Wi-Fi often has client isolation, which blocks device-to-device traffic: a Wii would then never reach the relay, whatever its address. With the Pi and this PC both on the venue Wi-Fi, `npx tsx scripts/smoke.ts relay.local` passing means the network allows it.
 
-**The address the Wiis use.** Each Wii's `tournament.cfg` has `relay_ip=`, so the Wiis need an address for the Pi that does not change. How to get one when static IPs cannot be guaranteed is an open decision (design.md R15). Until it is made, the working options are:
+**The address the Wiis use.** Decided 2026-09-25 (design.md R15): the Wiis will find the relay themselves. The relay already broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on; the status page footer shows where ("Discovery beacon to 192.168.1.255, last sent 1s ago"). Once the Wii side listens for it (Nintendont kernel and the Dolphin forwarder, not done yet), `tournament.cfg` drops `relay_ip` and `relay_port` and the Pi's address stops mattering.
+
+Until then each Wii's `tournament.cfg` still needs `relay_ip=`, so the stopgaps are:
 
 - A DHCP reservation for the Pi on the venue router, if you can get it set once (it is the same venue every week). Nothing to do on the Pi.
 - A fixed second address the Pi adds on top of DHCP. Pick one inside the venue's subnet and outside its DHCP pool, and run this at the venue, on the venue Wi-Fi:
