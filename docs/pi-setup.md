@@ -11,6 +11,22 @@ Assumption: the Pi runs Raspberry Pi OS Lite (64-bit). Windows on the Pi itself 
 - Ethernet cable from the Pi to the same switch/router as this PC. The Pi never uses Wi-Fi.
 - This repo with a filled `.env` (`STARTGG_TOKEN`, `EVENT_ID`, `STREAM_ID`), Node 22+ and npm, which you already have.
 
+## 0. If the card already has something on it
+
+Flashing erases the card. To keep the old system, image it first; Imager cannot read cards, so [deploy/backup-sd.ps1](deploy/backup-sd.ps1) does it (raw sector read, gzipped on the fly, nothing on the card is touched):
+
+```bash
+.\deploy\backup-sd.ps1 -List
+```
+
+shows the removable disks; then
+
+```bash
+.\deploy\backup-sd.ps1
+```
+
+(or `-DiskNumber N -Out <path>.img.gz`) relaunches itself as Administrator, asks you to confirm the disk, and writes `P:\Projects\pi-backups\pi-sd-<date>.img.gz`. A 32 GB card takes roughly 10 to 25 minutes depending on the reader. To use that system again later: Imager → Operating System → Use custom → the `.img.gz` → a card of the same size or larger → Write.
+
 ## 1. One-time, on the PC: an SSH key
 
 Windows 11 ships `ssh`, `scp`, `ssh-keygen` and `tar`. In PowerShell:
