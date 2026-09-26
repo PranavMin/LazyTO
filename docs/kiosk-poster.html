@@ -173,7 +173,7 @@
   <div class="mast">
     <div>
       <h1>Tournament <span>Kiosk</span><br>How to play your set</h1>
-      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, pick your tag, play: each game is scored automatically when it ends. The controller binds are there to fix mistakes. Any port can use them.</p>
+      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, say who is who, play: each game is scored automatically when it ends. The controller binds are there to fix mistakes. Any port can use them.</p>
     </div>
     <div class="flow">
       <div><b>1</b> Set list</div>
@@ -192,7 +192,7 @@
         <div class="bind"><div class="keys"><span class="k stick">&uarr;&darr;</span></div><div class="does">Move up / down<small>&larr; &rarr; jump a page</small></div></div>
         <div class="bind"><div class="keys"><span class="k l">L</span><span class="k l">R</span></div><div class="does">Filter by first letter of a tag</div></div>
         <div class="bind"><div class="keys"><span class="k x">X</span></div><div class="does">Jump to the set this setup is playing</div></div>
-        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does"><b>Start the set</b><small>Check both tags in the panel, then A again to accept</small></div></div>
+        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does"><b>Start the set</b><small>Check both names in the panel, then A again to accept</small></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span></div><div class="does"><b>Friendlies</b><small>Play without a set. Nothing is reported.</small></div></div>
         <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Refresh the list<small>Your place is kept</small></div></div>
         <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to the main menu</div></div>
@@ -205,10 +205,11 @@
     <section class="screen">
       <header><span class="n">2</span> Character select</header>
       <div class="body">
-        <p class="lead"><b>Pick your name tag first.</b> The two players' tags are the top two entries in the tag list. One of you picking is enough: the other port is then the other player.</p>
+        <p class="lead"><b>Say who is who first.</b> The player named on the <b>left</b> of the set holds L + R on their own controller; the other port is then the other player. Picking your name tag from the top of the tag list works too.</p>
+        <div class="bind"><div class="keys"><span class="k l">L</span><span class="plus">+</span><span class="k l">R</span></div><div class="does"><b>I am the player named first</b> (hold 1 second)<small>Wrong player? The right one holds L + R and it moves. L + R + B clears it.</small></div></div>
         <div class="sep"></div>
         <span class="tag">Corrections only &mdash; hold Z + flick the C-stick</span>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b><small>Only if the auto-score got it wrong or was skipped</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b><small>Left as shown on the banner. Only if the auto-score got it wrong or was skipped</small></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Give the right player a game</b></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game<small>Also removes an auto-scored game</small></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 second)<small>Only once someone has the winning score</small></div></div>
@@ -240,12 +241,13 @@
 
   <div class="band">
     <div>
-      <h3>What the bottom of the screen means</h3>
+      <h3>What the banner under MELEE / VS says</h3>
       <div class="status">
-        <div><code>MANGO P1 &nbsp;2 - 1&nbsp; P3 ZAIN</code> the score, in the banner under MELEE / VS (where the game normally names the mode), with the port each player's tag is on</div>
-        <div class="red"><code>HANDWARMER NEXT - NOT SCORED</code> at the top: the next game won't count (armed because someone wasn't ready yet)</div>
-        <div><code>GAME 2 TO MANGO</code> auto-scored &nbsp;&middot;&nbsp; <code>PICK A TAG TO AUTO-SCORE</code> nobody picked a tag, score by hand</div>
-        <div><code>SCORE SENT</code> (green) start.gg has it &nbsp;&middot;&nbsp; <code>SENDING...</code> wait &nbsp;&middot;&nbsp; <code>SEND FAILED</code> (red) flick again, or tell the TO</div>
+        <div><code>ZAIN P1 &nbsp;1 - 2&nbsp; P3 MANGO</code> the score, with each player's port. The lower port is always on the left, so the sides can swap once both ports are known</div>
+        <div><code>HOLD L+R IF YOU ARE MANGO</code> nobody is placed yet &nbsp;&middot;&nbsp; <code>MANGO IS P3</code> the hold was seen &nbsp;&middot;&nbsp; <code>PORTS CLEARED</code> after L + R + B</div>
+        <div><code>GAME 2 TO MANGO</code> auto-scored &nbsp;&middot;&nbsp; <code>PICK A TAG OR HOLD L+R TO AUTO-SCORE</code> the game couldn't tell who won, score by hand</div>
+        <div>Score digits: yellow normal &nbsp;&middot;&nbsp; amber sending &nbsp;&middot;&nbsp; green start.gg has it &nbsp;&middot;&nbsp; <span class="red"><code>SEND FAILED - TELL THE TO</code></span> flick again, or tell the TO</div>
+        <div><code>HANDWARMER - NOT SCORED</code> the next game won't count (top-right <code>Z+X CANCELS</code> turns it off)</div>
       </div>
     </div>
     <div>
@@ -269,6 +271,6 @@
 
   <div class="foot">
     <span>Wrong set started, or a score you can't fix with undo? Get the TO before ending the set.</span>
-    <span>Tournament Reporter kiosk &middot; module build 2026-09-25b (set list and CSS cards match the shipped screens; SSS card unverified on the venue code)</span>
+    <span>Tournament Reporter kiosk &middot; module build 2026-09-25c (set list and CSS cards match the shipped screens; SSS card unverified on the venue code)</span>
   </div>
 </main>
