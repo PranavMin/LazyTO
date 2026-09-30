@@ -57,7 +57,12 @@ Two network conditions:
 The status page's footer shows the beacon going out and the set count; the per-station
 table shows every request the Wii makes.
 
-## 3. Nintendont settings on the Wii
+## 3. Before Nintendont: the Wii must be online and have IOS58
+
+- **Internet connection.** The Wii keeps one saved connection profile, and only Wii Settings (Wiimote required) can create it; Nintendont's Network option reuses it. The router's 2.4 GHz band must allow 802.11b/g: on an AT&T BGW320 the Wii only joined with mode **B/G/N** and a separate 2.4 GHz network name (error 51330 otherwise). Not the guest network: it isolates the Wii from the relay.
+- **IOS58.** Nintendont refuses to start without it (`Failed to load IOS58 from NAND`). Any Wii that already runs Slippi Nintendont has it; otherwise install it once with an IOS58 installer app from the Homebrew Channel.
+
+## 4. Nintendont settings on the Wii
 
 Start our `Slippi Nintendont` from the Homebrew Channel. In its settings:
 
@@ -66,13 +71,13 @@ Start our `Slippi Nintendont` from the Homebrew Channel. In its settings:
 - Leave the venue's own toggles (UCF, tournament mods, stages, music/mono) as the venue runs
   them. They are the venue's gecko sets and apply unchanged; the kiosk adds nothing to them.
 - Slippi replays: your call. Recording to USB is the Slippi default and is a check in
-  section 4.
+  section 5.
 
 If you keep a debug log (`SLIPPI_DEBUG`), the boot log should show the Slippi core patch
 line, then a `tournament.bin` line with its load address at 0x817E0000, then
 `RelayEXI: relay is a.b.c.d:7780 (event N)` once the beacon is heard.
 
-## 4. What to expect, in order
+## 5. What to expect, in order
 
 1. **Boot.** No intro, no title: the main menu comes up and the Tournament screen opens on its
    own with `LOOKING FOR THE RELAY` pulsing. Within about 4 s (two beacons) it should switch to
@@ -101,11 +106,13 @@ Also check while you are there (open items from design.md and the checklist):
 - The hint at the top-left (`Z+X WARMUP`) and the banner are visible on the venue TV.
 - Both translucent panes on the set list read well on a CRT.
 
-## 5. If it does not work
+## 6. If it does not work
 
 | Symptom | Meaning | First thing to check |
 |---|---|---|
 | `NO RELAY FOUND` after 10 s | No beacon heard | Same LAN? Relay log shows the beacon going out? If both yes, suspect the kernel's `recvfromAddr` (never run on hardware before, Nintendont docs/relay-exi-report.md section 3.7). |
+| Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
+| Nintendont: `Failed to load IOS58 from NAND` | The Wii has no IOS58 (System Menu older than 4.3) | Install IOS58 once with an IOS58 installer from the Homebrew Channel (needs the Wii online), or update to 4.3. Stock Nintendont check, not ours. |
 | `no network` on every action | Nintendont's Network option is off | Turn it on. |
 | `no tournament.cfg` | `sd:` not mounted, or the file is malformed | Boot the game from SD (or enable replays); check both `station=` and `stream=` are present with no spaces. |
 | `no secret in tournament.cfg` | `secret=` missing or bad characters | 8-16 of `A-Z a-z 0-9 - _`. |
