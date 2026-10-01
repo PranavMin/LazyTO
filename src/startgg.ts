@@ -55,9 +55,9 @@ export interface UpstreamSet {
 
 /** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
 export interface AdminTournament {
-  slug: string; // "tournament/melee-abbey-tavern-160-1"
-  shortSlug: string | null; // "abbey"; moves to the new tournament every week
-  name: string; // "Melee @ Abbey Tavern #160"
+  slug: string; // "tournament/my-bar-weekly-160"
+  shortSlug: string | null; // "mybar"; a weekly moves it to the new tournament each week
+  name: string; // "My Bar Weekly #160"
   startAt: number | null; // unix seconds
 }
 
@@ -71,8 +71,8 @@ export interface TournamentDetail {
 }
 
 // The token owner's admin tournaments, newest first. Short URLs are looked up
-// here rather than with tournament(slug: "abbey"): the API resolved one short
-// URL ("sfmeleetest") but returned null for "abbey" on 2026-09-25 while it
+// here rather than with tournament(slug: <short URL>): the API resolved one
+// short URL but returned null for another on 2026-09-25 while it
 // pointed at an upcoming tournament (probe.ts --tournament / --mine).
 const ADMIN_TOURNAMENTS_QUERY = `query AdminTournaments($page: Int!, $perPage: Int!) {
   currentUser {

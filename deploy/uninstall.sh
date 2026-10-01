@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # uninstall.sh -- remove everything install.sh put on a Pi, and nothing else.
-# For a shared Pi (the venue's matchcaller one): leaves the other software,
+# For a shared Pi (one that also runs a bracket display): leaves the other software,
 # its user and its files alone.
 #
 #   ssh -t <user>@<pi> sudo bash /opt/lazyto/deploy/uninstall.sh

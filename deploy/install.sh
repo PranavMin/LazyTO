@@ -7,7 +7,7 @@
 # Idempotent: re-running upgrades the relay and config and restarts it.
 #
 # Runs on a Pi of its own or next to other software on a shared one (the
-# venue's matchcaller Pi Zero 2 W): everything lives under /opt/node*,
+# venue's bracket-display Pi): everything lives under /opt/node*,
 # /opt/lazyto, /etc/lazyto, /var/lib/lazyto,
 # one system user "relay" and one unit; deploy/uninstall.sh removes exactly that.
 set -euo pipefail
@@ -75,7 +75,7 @@ CONF
 systemctl reload NetworkManager
 
 # --- wait for a synced clock before the relay starts: a Pi without a battery
-#     RTC boots with last shutdown's time, and the Abbey fallback picks the
+#     RTC boots with last shutdown's time, and the weekly fallback picks the
 #     weekly nearest to "now" (src/resolve.ts). The unit orders after
 #     time-sync.target; this service is what makes that target wait. ---
 systemctl enable systemd-time-wait-sync.service >/dev/null 2>&1 \

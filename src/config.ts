@@ -4,7 +4,7 @@
 // wrong so one restart fixes it all. main.ts turns that into a non-zero exit.
 //
 // The event and stream are named, not numbered: tournament is the start.gg
-// short URL (e.g. "abbey") or, for an unpublished tournament, its full slug;
+// short URL (e.g. "mybar") or, for an unpublished tournament, its full slug;
 // eventName and streamName pick from it by name; resolve.ts turns them into
 // ids at startup, because the ids change every week and the names do not.
 // weeklyNamePrefix ("" for none) lets a numbered weekly series be found by
@@ -22,10 +22,10 @@ import { readFileSync } from 'node:fs';
 export interface Config {
   startggEndpoint: string; // GraphQL URL, http(s)
   token: string;
-  tournament: string; // start.gg short URL (e.g. "abbey") or full slug ("tournament/<slug>")
+  tournament: string; // start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")
   eventName: string; // e.g. "Melee Singles"
   streamName: string; // the stream's name in the tournament's stream settings
-  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "Melee @ Abbey Tavern #"
+  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
   secret: string; // shared with every station's relay_auth (decisions.md R16)
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   tcpPort: number;
@@ -106,7 +106,7 @@ export function loadConfig(path: string): Config {
     problems.push('token must be a non-empty string');
   }
   if ('tournament' in obj && (typeof tournament !== 'string' || !/^(tournament\/)?[A-Za-z0-9-]+$/.test(tournament))) {
-    problems.push('tournament must be a start.gg short URL (e.g. "abbey") or full slug ("tournament/<slug>")');
+    problems.push('tournament must be a start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")');
   }
   if ('weeklyNamePrefix' in obj && typeof weeklyNamePrefix !== 'string') {
     problems.push('weeklyNamePrefix must be a string ("" for no weekly fallback)');

@@ -1,15 +1,15 @@
 // resolve.ts -- turn the config's names into tonight's ids, once, at startup
 // (architecture.md Relay). The config names the tournament by its start.gg
-// short URL (e.g. "abbey"), which the TO moves to the new tournament every week,
+// short URL (e.g. "mybar"), which the TO moves to the new tournament every week,
 // and names the event and stream; their ids change every week, so the relay
 // looks them up instead of being re-pushed with new ids.
 //
 // The tournament is given in one of two forms, told apart by shape, never by
 // trying one and then the other:
-//   - a short URL (e.g. "abbey"): found among the token owner's admin tournaments
+//   - a short URL (e.g. "mybar"): found among the token owner's admin tournaments
 //     (the relay needs admin rights to report anyway). This is production: the
 //     TO moves the short URL to each week's tournament. The API's own
-//     tournament(slug: "abbey") returned null for it on 2026-09-25, so the
+//     tournament(slug: <short URL>) returned null for one on 2026-09-25, so the
 //     admin list is the lookup that works.
 //   - a full slug ("tournament/<slug>"): fetched directly. For
 //     an unpublished tournament, which no list query returns (checked with
@@ -17,15 +17,15 @@
 // Then the event and stream are picked from that tournament by name.
 //
 // One exception to "no fallbacks", for a numbered weekly series (user,
-// 2026-09-25, taken from matchcaller's resolver; a config field since
+// 2026-09-25, taken from the venue's bracket-display resolver; a config field since
 // 2026-09-30): if weeklyNamePrefix is set and no admin tournament carries the
 // short URL -- the TO has not moved it to tonight's tournament yet -- the
 // relay takes the admin tournament whose name is that prefix followed by a
-// number (prefix "Melee @ Abbey Tavern #" matches "Melee @ Abbey Tavern #160")
+// number (prefix "My Bar Weekly #" matches "My Bar Weekly #160")
 // and whose start time is nearest to now, within WEEKLY_WINDOW_DAYS, a future
 // one winning a tie. An empty prefix turns the fallback off. It comes from the same admin
 // list already fetched, so it costs no extra call and never scrapes the
-// website (matchcaller also follows the start.gg/abbey redirect, which sits
+// website (following the start.gg/<short URL> redirect would hit
 // behind Cloudflare's bot challenge). The startup log says which rule found
 // the tournament. It needs a correct clock: the unit waits for time sync. Exactly one of each must match;
 // zero or several is a startup failure that lists what was there, so the fix
@@ -44,10 +44,10 @@ export const ADMIN_PAGE_SIZE = 50;
 export const WEEKLY_WINDOW_DAYS = 30;
 
 export interface ResolveInput {
-  tournament: string; // short URL (e.g. "abbey") or full slug ("tournament/<slug>")
+  tournament: string; // short URL (e.g. "mybar") or full slug ("tournament/<slug>")
   eventName: string; // matched case-insensitively as a substring, e.g. "Melee Singles"
   streamName: string; // matched case-insensitively and exactly
-  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "Melee @ Abbey Tavern #"
+  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
 }
 
 export interface Resolved {

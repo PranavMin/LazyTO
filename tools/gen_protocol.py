@@ -585,7 +585,7 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 # The C header's other copies: the kiosk module builds with one, and the
 # Nintendont submodule's kernel builds the relay EXI device with the other.
 # Written and checked with generated/, so the three never drift.
-SUBMODULE_HEADERS = (ROOT / "kiosk" / "include" / "relay_proto.h",
+HEADER_COPIES = (ROOT / "kiosk" / "include" / "relay_proto.h",
                      ROOT / "Nintendont" / "kernel" / "relay_proto.h")
 
 
@@ -597,7 +597,7 @@ def generate(out_dir: Path) -> dict[Path, str]:
         out_dir / "wire.ts": emit_ts(p),
     }
     if out_dir == DEFAULT_OUT_DIR:
-        for path in SUBMODULE_HEADERS:
+        for path in HEADER_COPIES:
             files[path] = header
     return files
 

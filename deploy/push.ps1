@@ -7,10 +7,10 @@ push.ps1 -- build the relay on this Windows machine and install it on the Pi.
   .\deploy\push.ps1 -PiHost <name> -User <user>   # a Pi with another name or user
 
 Everything about your event comes from .env (see .env.example):
-  TOURNAMENT          your start.gg short URL (e.g. "abbey"). The relay finds
+  TOURNAMENT          your start.gg short URL (e.g. "mybar"). The relay finds
                       the tournament it is on among your admin tournaments, so
                       a weekly that moves its short URL needs no push per week.
-  WEEKLY_NAME_PREFIX  optional. With e.g. "Melee @ Abbey Tavern #", a short URL
+  WEEKLY_NAME_PREFIX  optional. With e.g. "My Bar Weekly #", a short URL
                       not moved yet falls back to the tournament named that
                       prefix plus a number, nearest to now (src/resolve.ts).
   EVENT_NAME          picks the Melee singles event whose name contains it.

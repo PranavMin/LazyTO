@@ -1,12 +1,14 @@
-// scripts/probe.ts — live start.gg probe for decisions.md R1 (assignStream
-// semantics) and R2 (reportBracketSet with gameData but no winnerId).
+// scripts/probe.ts -- read-only lookups against the real start.gg API, for
+// filling in .env and checking how the relay will resolve your event.
 //
-// Touches ONLY the test tournament configured in .env (see CLAUDE.md: the real
-// API is touched only by this script). Mutates TEST_SET_ID and resets it at the
-// end; on a mid-run failure it attempts a cleanup resetSet before exiting.
+// Reads STARTGG_TOKEN (and, for --resolve / --weekly, EVENT_NAME, STREAM_NAME
+// and WEEKLY_NAME_PREFIX) from .env. Changes nothing on start.gg.
 //
-// Run: node scripts/probe.ts
-//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL> | --weekly   (read-only)
+//   npx tsx scripts/probe.ts --mine                    tournaments your token administers, with short URLs
+//   npx tsx scripts/probe.ts --tournament=<slug>       a tournament's events and streams (full slug or short URL)
+//   npx tsx scripts/probe.ts --resolve=<tournament>    what the relay would pick at startup with your .env
+//   npx tsx scripts/probe.ts --weekly                  the weekly fallback's pick (WEEKLY_NAME_PREFIX)
+//   npx tsx scripts/probe.ts --stages                  Melee's stages with start.gg's ids (source of src/stages.ts)
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -15,7 +17,6 @@ import { resolveEvent, nearestWeekly, ADMIN_PAGE_SIZE } from "../src/resolve.js"
 import type { AdminTournament } from "../src/startgg.js";
 
 const ENDPOINT = "https://api.start.gg/gql/alpha";
-const NEEDED_MUTATIONS = ["markSetInProgress", "assignStream", "reportBracketSet", "resetSet"];
 
 class ProbeError extends Error {}
 
@@ -31,17 +32,13 @@ function loadEnv(): Record<string, string> {
     const m = /^([A-Z_]+)=(.*)$/.exec(line.trim());
     if (m) env[m[1]] = m[2];
   }
-  for (const key of ["STARTGG_TOKEN", "STREAM_ID", "TEST_SET_ID"]) {
-    if (!env[key]) fail(`missing ${key} in .env`);
-  }
+  if (!env.STARTGG_TOKEN) fail("missing STARTGG_TOKEN in .env");
   return env;
 }
 
 const env = loadEnv();
-const SET_ID = env.TEST_SET_ID;
-const STREAM_ID = env.STREAM_ID;
 
-async function gql(label: string, query: string, variables: Record<string, unknown>, printRaw = true): Promise<any> {
+async function gql(label: string, query: string, variables: Record<string, unknown>): Promise<any> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: {
@@ -57,111 +54,22 @@ async function gql(label: string, query: string, variables: Record<string, unkno
   } catch {
     /* handled below */
   }
-  const failed = !res.ok || json === null || json.errors;
-  if (printRaw || failed) {
+  if (!res.ok || json === null || json.errors) {
     console.log(`\n=== ${label} ===`);
     console.log(`--- variables: ${JSON.stringify(variables)}`);
     console.log(`--- HTTP ${res.status}, raw response:`);
     console.log(text);
-  }
-  if (failed) {
     throw new ProbeError(`${label} failed (HTTP ${res.status}${json?.errors ? ", GraphQL errors in raw response above" : ""})`);
   }
   return json.data;
 }
 
-// --- schema check: never guess at mutation names -----------------------------
-
-type IntroType = { kind: string; name: string | null; ofType: IntroType | null };
-
-function typeName(t: IntroType | null): string {
-  if (!t) return "?";
-  if (t.kind === "NON_NULL") return `${typeName(t.ofType)}!`;
-  if (t.kind === "LIST") return `[${typeName(t.ofType)}]`;
-  return t.name ?? "?";
-}
-
-function levenshtein(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0]++;
-    for (let j = 1; j <= b.length; j++) {
-      const cur = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = cur;
-    }
-  }
-  return row[b.length];
-}
-
-async function checkMutations(): Promise<void> {
-  // Raw introspection output is thousands of lines, so this prints the needed
-  // signatures (or closest candidates) instead of the raw response.
-  const data = await gql(
-    "introspect Mutation",
-    `query MutationFields {
-      __schema { mutationType { fields {
-        name
-        args { name type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } }
-      } } }
-    }`,
-    {},
-    false,
-  );
-  const fields: { name: string; args: { name: string; type: IntroType }[] }[] = data.__schema.mutationType.fields;
-  const byName = new Map(fields.map((f) => [f.name, f]));
-
-  console.log("\n=== schema check: required mutations ===");
-  let missing = false;
-  for (const wanted of NEEDED_MUTATIONS) {
-    const f = byName.get(wanted);
-    if (f) {
-      const sig = f.args.map((a) => `${a.name}: ${typeName(a.type)}`).join(", ");
-      console.log(`  ${wanted}(${sig})`);
-    } else {
-      missing = true;
-      const candidates = fields
-        .map((x) => ({ name: x.name, d: levenshtein(wanted.toLowerCase(), x.name.toLowerCase()) }))
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 5)
-        .map((x) => x.name);
-      console.log(`  ${wanted}: NOT IN SCHEMA — closest candidates: ${candidates.join(", ")}`);
-    }
-  }
-  if (missing) fail("required mutation(s) missing from schema; see candidates above");
-}
-
-// --- probe steps -------------------------------------------------------------
-
-const SET_QUERY = `query SetProbe($setId: ID!) {
-  set(id: $setId) {
-    id
-    state
-    fullRoundText
-    stream { id streamName streamSource }
-    slots { id entrant { id name } }
-    games { id orderNum winnerId }
-  }
-}`;
-
-const REPORT_MUTATION = `mutation Report($setId: ID!, $gameData: [BracketSetGameDataInput]) {
-  reportBracketSet(setId: $setId, gameData: $gameData) { id state }
-}`;
-
-async function resetSet(label: string): Promise<void> {
-  await gql(label, `mutation Reset($setId: ID!) { resetSet(setId: $setId) { id state } }`, { setId: SET_ID });
-}
-
-// --- read-only lookups (no mutations) ---------------------------------------
-
-// `node scripts/probe.ts --stages`: Melee's stage list with start.gg's ids, the
-// source for src/stages.ts (architecture.md Relay). Read-only; touches no set.
+// --stages: Melee's stage list with start.gg's ids, the source for src/stages.ts.
 async function listStages(): Promise<void> {
   const data = await gql(
     "videogame(id: 1) stages",
     `query MeleeStages { videogame(id: 1) { id name stages { id name } } }`,
     {},
-    false,
   );
   const stages = (data.videogame?.stages ?? []) as { id: number; name: string }[];
   console.log(`\n${data.videogame?.name}: ${stages.length} stages`);
@@ -170,10 +78,8 @@ async function listStages(): Promise<void> {
   }
 }
 
-// `node scripts/probe.ts --tournament=<slug>`: what a tournament slug (full
-// slug or short URL, e.g. "abbey") resolves to: its events with game and
-// entrant type, and its streams. Read-only. Source for the relay's
-// slug-based event discovery (architecture.md Relay).
+// --tournament=<slug>: a tournament's events (with game and entrant type) and
+// streams, to pick EVENT_NAME and STREAM_NAME from.
 async function showTournament(slug: string): Promise<void> {
   const data = await gql(
     `tournament(slug: ${slug})`,
@@ -185,10 +91,9 @@ async function showTournament(slug: string): Promise<void> {
       }
     }`,
     { slug },
-    false,
   );
   const t = data.tournament;
-  if (!t) throw new ProbeError(`no tournament for slug "${slug}"`);
+  if (!t) throw new ProbeError(`no tournament for slug "${slug}" (the API does not resolve every short URL; try --mine)`);
   const when = t.startAt ? new Date(t.startAt * 1000).toISOString() : "?";
   console.log(`
 ${t.name}  id=${t.id}  slug=${t.slug}  shortSlug=${t.shortSlug ?? "-"}  startAt=${when}  state=${t.state}`);
@@ -200,17 +105,9 @@ ${t.name}  id=${t.id}  slug=${t.slug}  shortSlug=${t.shortSlug ?? "-"}  startAt=
   for (const s of t.streams ?? []) console.log(`  ${String(s.id).padStart(8)}  ${s.streamSource}  ${s.streamName}`);
 }
 
-// `node scripts/probe.ts --mine`: tournaments the token's user administers,
-// soonest first, with their short URL. Read-only. Shows whether a short URL
-// such as "abbey" can be found without the API resolving it directly.
+// --mine: tournaments the token's user administers, soonest first, with their
+// short URL. This is the list the relay searches for TOURNAMENT.
 async function showMine(): Promise<void> {
-  const schema = await gql(
-    "UserTournamentsPaginationFilter fields",
-    `query { __type(name: "UserTournamentsPaginationFilter") { inputFields { name type { name kind ofType { name } } } } }`,
-    {},
-    false,
-  );
-  console.log("\nUserTournamentsPaginationFilter: " + (schema.__type?.inputFields ?? []).map((f: any) => f.name).join(", "));
   const data = await gql(
     "currentUser tournaments (admin)",
     `query Mine {
@@ -222,7 +119,6 @@ async function showMine(): Promise<void> {
       }
     }`,
     {},
-    false,
   );
   const u = data.currentUser;
   console.log(`user ${u?.slug} (${u?.id}), admin tournaments:`);
@@ -232,66 +128,22 @@ async function showMine(): Promise<void> {
   }
 }
 
-// `node scripts/probe.ts --resolve=<short URL>`: run the relay's own startup
-// resolution (src/resolve.ts) against the real API with EVENT_NAME,
-// STREAM_NAME and WEEKLY_NAME_PREFIX from .env, exactly as the Pi will. Read-only.
-async function showResolve(shortSlug: string): Promise<void> {
+// --resolve=<tournament>: the relay's own startup resolution (src/resolve.ts)
+// with EVENT_NAME, STREAM_NAME and WEEKLY_NAME_PREFIX from .env, exactly as
+// the Pi will run it.
+async function showResolve(tournament: string): Promise<void> {
   const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
   const r = await resolveEvent(client, {
-    tournament: shortSlug,
+    tournament,
     eventName: env.EVENT_NAME ?? fail("missing EVENT_NAME in .env"),
     streamName: env.STREAM_NAME ?? fail("missing STREAM_NAME in .env"),
-    weeklyNamePrefix: shortSlug.startsWith("tournament/") ? "" : (env.WEEKLY_NAME_PREFIX ?? ""),
+    weeklyNamePrefix: tournament.startsWith("tournament/") ? "" : (env.WEEKLY_NAME_PREFIX ?? ""),
   });
   console.log(JSON.stringify(r, null, 2));
 }
 
-// `node scripts/probe.ts --find-short=<short URL>`: which list queries can see
-// a short URL -- the admin list under each tournamentView, and the global
-// tournaments() query with isCurrentUserAdmin. Read-only; for choosing how
-// src/resolve.ts looks tournaments up.
-async function findShort(short: string): Promise<void> {
-  const tf = await gql(
-    "TournamentPageFilter fields",
-    `query { __type(name: "TournamentPageFilter") { inputFields { name } } }`,
-    {},
-    false,
-  );
-  console.log("\nTournamentPageFilter: " + (tf.__type?.inputFields ?? []).map((f: any) => f.name).join(", "));
-  for (const view of ["admin", "competitor", "owner", "staff", null]) {
-    const found: string[] = [];
-    let seen = 0;
-    for (let page = 1; page <= 10; page++) {
-      const d = await gql(
-        `currentUser tournaments view=${view} page ${page}`,
-        `query M($page: Int!, $view: String) { currentUser { tournaments(query: { page: $page, perPage: 50, filter: { tournamentView: $view } }) {
-          pageInfo { totalPages } nodes { slug shortSlug } } } }`,
-        { page, view },
-        false,
-      );
-      const tt = d.currentUser?.tournaments;
-      if (!tt) break;
-      seen += tt.nodes.length;
-      for (const n of tt.nodes) if ((n.shortSlug ?? "").toLowerCase() === short.toLowerCase()) found.push(n.slug);
-      if (page >= tt.pageInfo.totalPages) break;
-    }
-    console.log(`  currentUser.tournaments view=${view}: ${seen} seen, match: ${found.join(", ") || "none"}`);
-  }
-  const g = await gql(
-    "tournaments(isCurrentUserAdmin)",
-    `query G { tournaments(query: { perPage: 50, filter: { isCurrentUserAdmin: true } }) { pageInfo { total } nodes { slug shortSlug } } }`,
-    {},
-    false,
-  ).catch((e) => { console.log(`  tournaments(isCurrentUserAdmin): ${e.message}`); return null; });
-  if (g) {
-    const hit = g.tournaments.nodes.filter((n: any) => (n.shortSlug ?? "").toLowerCase() === short.toLowerCase());
-    console.log(`  tournaments(isCurrentUserAdmin) first page: total ${g.tournaments.pageInfo.total}, match: ${hit.map((n: any) => n.slug).join(", ") || "none"}`);
-  }
-}
-
-// `node scripts/probe.ts --weekly`: the relay's fallback rule (nearest
-// WEEKLY_NAME_PREFIX<number> by start time) run over the real admin list, as
-// if the short URL had not been moved. Read-only.
+// --weekly: the fallback rule (nearest WEEKLY_NAME_PREFIX<number> by start
+// time) run over the real admin list, as if the short URL had not been moved.
 async function showWeekly(): Promise<void> {
   const prefix = env.WEEKLY_NAME_PREFIX || fail("missing WEEKLY_NAME_PREFIX in .env");
   const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
@@ -308,93 +160,15 @@ async function showWeekly(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (process.argv.includes("--weekly")) {
-    await showWeekly();
-    return;
-  }
-  const fArg = process.argv.find((a) => a.startsWith("--find-short="));
-  if (fArg) {
-    await findShort(fArg.slice("--find-short=".length));
-    return;
-  }
-  const rArg = process.argv.find((a) => a.startsWith("--resolve="));
-  if (rArg) {
-    await showResolve(rArg.slice("--resolve=".length));
-    return;
-  }
-  if (process.argv.includes("--mine")) {
-    await showMine();
-    return;
-  }
-  const tArg = process.argv.find((a) => a.startsWith("--tournament="));
-  if (tArg) {
-    await showTournament(tArg.slice("--tournament=".length));
-    return;
-  }
-  if (process.argv.includes("--stages")) {
-    await listStages();
-    return;
-  }
-  await checkMutations();
-
-  const before = await gql("initial set query (entrant ids + starting state)", SET_QUERY, { setId: SET_ID });
-  const slots = before.set?.slots;
-  const entrant1 = slots?.[0]?.entrant;
-  const entrant2 = slots?.[1]?.entrant;
-  if (!entrant1?.id || !entrant2?.id) {
-    throw new ProbeError(`set ${SET_ID} does not have two entrants; cannot build gameData`);
-  }
-  console.log(`\nentrant 1 = ${entrant1.id} (${entrant1.name}), entrant 2 = ${entrant2.id} (${entrant2.name})`);
-
-  let dirty = false;
-  try {
-    dirty = true;
-    await gql(
-      "1. markSetInProgress",
-      `mutation Start($setId: ID!) { markSetInProgress(setId: $setId) { id state } }`,
-      { setId: SET_ID },
-    );
-
-    await gql(
-      "2. assignStream",
-      `mutation Assign($setId: ID!, $streamId: ID!) {
-        assignStream(setId: $setId, streamId: $streamId) { id state stream { id streamName streamSource } }
-      }`,
-      { setId: SET_ID, streamId: STREAM_ID },
-    );
-
-    await gql("3. reportBracketSet — 1 game, winner=entrant1, NO winnerId", REPORT_MUTATION, {
-      setId: SET_ID,
-      gameData: [{ gameNum: 1, winnerId: entrant1.id }],
-    });
-
-    await gql("4. set after one game", SET_QUERY, { setId: SET_ID });
-
-    // Game 2 goes to entrant 2 so the score stays undecided: this isolates the
-    // R2 question (does gameData without winnerId ever complete the set?).
-    await gql("5. reportBracketSet — 2 games (full overwrite), NO winnerId", REPORT_MUTATION, {
-      setId: SET_ID,
-      gameData: [
-        { gameNum: 1, winnerId: entrant1.id },
-        { gameNum: 2, winnerId: entrant2.id },
-      ],
-    });
-
-    await gql("5b. set after two games", SET_QUERY, { setId: SET_ID });
-
-    await resetSet("6. resetSet");
-  } catch (e) {
-    if (dirty) {
-      try {
-        await resetSet("cleanup: resetSet after failure");
-      } catch {
-        console.error("probe: cleanup resetSet also failed; set may be left in progress");
-      }
-    }
-    throw e;
-  }
-
-  console.log("\nprobe: all steps completed");
+  const arg = (name: string) => process.argv.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
+  if (process.argv.includes("--weekly")) return showWeekly();
+  const r = arg("--resolve");
+  if (r) return showResolve(r);
+  if (process.argv.includes("--mine")) return showMine();
+  const t = arg("--tournament");
+  if (t) return showTournament(t);
+  if (process.argv.includes("--stages")) return listStages();
+  fail("usage: npx tsx scripts/probe.ts --mine | --tournament=<slug> | --resolve=<tournament> | --weekly | --stages");
 }
 
 main().catch((e) => fail(e instanceof ProbeError ? e.message : String(e)));

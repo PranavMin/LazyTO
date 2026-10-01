@@ -4,7 +4,7 @@
 # NetworkManager keeps every saved network and connects to whichever is
 # present, so the Pi still joins your home Wi-Fi at home.
 #
-#   ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Abbey Tavern Guest"
+#   ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Venue Guest"
 #
 # Prompts for the password (not echoed, not in shell history). An open network:
 # press Enter at the prompt. Re-running with the same name replaces it.

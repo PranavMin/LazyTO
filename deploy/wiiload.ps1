@@ -2,7 +2,7 @@
 wiiload.ps1 -- boot a loader on the Wii over Wi-Fi, no SD card trip.
 
   powershell -ExecutionPolicy Bypass -File deploy/wiiload.ps1 -Wii 192.168.1.80
-  powershell -ExecutionPolicy Bypass -File deploy/wiiload.ps1 -Wii 192.168.1.80 -File P:\...\boot.dol
+  powershell -ExecutionPolicy Bypass -File deploy/wiiload.ps1 -Wii 192.168.1.80 -File C:\path\to\boot.dol
 
 The Wii must be sitting on the Homebrew Channel (it shows its IP bottom-left
 when it is online). Sends the newest successful GitHub build of the fork's

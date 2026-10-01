@@ -5,3 +5,6 @@ protocol.yaml text eol=lf
 tools/*.py    text eol=lf
 # Deployment files run on the Pi: keep them LF regardless of the checkout.
 deploy/**     text eol=lf
+# The kiosk's generated sources (relay_proto.h, texture and glyph tables) are written with LF.
+kiosk/include/** text eol=lf
+kiosk/src/**/*.inc text eol=lf
