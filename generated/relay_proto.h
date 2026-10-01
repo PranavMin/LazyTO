@@ -85,9 +85,10 @@ enum exi_cmd {
 
 /* bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg) */
 enum exi_poll_flags {
-    PF_NO_NETWORK = 1,  /* the host has no network: the loader's Network option is off, or the Wii failed to join the Wi-Fi at boot */
-    PF_NO_CFG     = 2,  /* no usable sd:/tournament.cfg */
-    PF_NO_SECRET  = 4,  /* tournament.cfg has no valid secret= */
+    PF_NO_NETWORK  = 1,  /* the host will never have a network: the loader's Network option is off */
+    PF_NO_CFG      = 2,  /* no usable sd:/tournament.cfg */
+    PF_NO_SECRET   = 4,  /* tournament.cfg has no valid secret= */
+    PF_NET_JOINING = 8,  /* Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it */
 };
 
 /* bit flags in exi_poll_hdr.host_opts: what the host's settings ask the kiosk to do with Melee's audio (the kiosk forces mono and music off unless told otherwise) */

@@ -109,7 +109,10 @@ line, then a `tournament.bin` line with its load address at 0x817E0000, then
 **First confirmed end to end on 2026-09-30** (loader from Nintendont `1851533`, module from melee
 `3f19a12b6`): station 1 heard the beacon, loaded the module, listed the sets in 55 ms and showed
 the Tournament screen. The Wi-Fi join is not always quick: one boot in four never associated and
-the kiosk timed out; a power cycle fixed it.
+the kiosk timed out; a power cycle fixed it. Since Nintendont host build 2 (2026-09-30 evening)
+the join no longer blocks the boot: Melee starts, the kiosk shows `JOINING THE WI-FI` while the
+kernel's network thread waits on IOS, and it gives up after 60 s with `THIS WII COULD NOT JOIN THE
+WI-FI`. Before that build the loader itself sat at `Slippi network init...` with no timeout.
 
 1. **Boot.** No intro, no title: the main menu comes up and the Tournament screen opens on its
    own with `LOOKING FOR THE RELAY` pulsing. Within about 4 s (two beacons) it should switch to
@@ -159,7 +162,9 @@ log: turn on **Log** in the loader's settings, boot once, and read `slippi_ndebu
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
 | Status page: `NOT LOADED: module overlaps game memory (arena top 0x0)`, or the SD log says `TMOD:arena top 00000000 below module end` | A kernel older than Nintendont 140bb77 | Use the current loader (sync-card.ps1 installs it). |
 | Crash `Illegal instruction at 817E88D8` (the module's first instruction) a second after boot; the RAM watch shows the module zeroed | A loader older than Nintendont f32740f: the apploader's arena top (the FST base) stayed above the module, so Melee's heap setup zeroed it. The kernel could not see or fix that word (it sits in the PPC's data cache), so the PPC entry stub lowers it now | Current loader. The status page's crash line and `melee/tools/resolve_crash.py` name the address if it ever recurs. |
-| `THIS WII IS NOT ONLINE` (kiosk) | The loader's Network option is off, or the Wi-Fi join failed at boot; the kernel tells the kiosk through the poll header's flags (protocol `exi_poll_flags`), so no 10 s wait | Power-cycle and retry; check Network in the loader settings. |
+| Loader stuck at `Slippi network init...` | A loader older than host build 2 (2026-09-30 evening): IOS's socket start-up blocked the boot until the Wi-Fi joined, with no timeout | Power cycle to get this boot going; put the current loader on the card. |
+| `JOINING THE WI-FI` pulsing (kiosk) | The kernel's network thread is still waiting on the Wi-Fi join / DHCP (poll flag `PF_NET_JOINING`); normal for 5-15 s after boot | Wait. After 60 s it becomes `THIS WII COULD NOT JOIN THE WI-FI`: power cycle, then check the router (2.4 GHz mode B/G/N, password). |
+| `NETWORK IS OFF IN THE LOADER` (kiosk) | The loader's Network option is off (poll flag `PF_NO_NETWORK`), so no beacon will ever come; said at once, no 10 s wait | Turn on Network in the loader settings (sync-card.ps1 sets it). |
 | `THIS CARD IS NOT SET UP` (kiosk) | No usable `tournament.cfg`, or no `secret=` in it | Fix the card (sync-card.ps1 writes it). |
 | `NO RELAY FOUND` with the Wii online | No beacon heard in 10 s | Relay down, or a different network / client isolation. The Wii shows on the status page only after a beacon. |
 | Boots to the VS character select, not the Tournament screen | A module older than melee 7f88d95f0: Slippi's core codes force VS mode at boot (`04 801BFA20 38600002`) | Use the current `tournament.bin`; it re-requests the main menu after the boot scene. |
