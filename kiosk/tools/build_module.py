@@ -9,7 +9,14 @@ comes from the unmodified Melee decompilation in the melee/ submodule: its
 headers, its compilers (set up by `python configure.py --non-matching` there
 once), config/GALE01/symbols.txt and the vanilla main.dol in orig/.
 
-    python kiosk/tools/build_module.py      # from the repo root
+    python kiosk/tools/build_module.py          # from the repo root
+    python kiosk/tools/build_module.py --check  # CI: no main.dol, writes no module
+
+--check compiles, links and runs every check that does not need main.dol
+(symbols, region, hook targets, gecko collisions). It never opens the DOL, so
+it skips the vanilla-address check of each hook and the guard word, and it
+writes no tournament.bin. It is a mode you ask for: without it a missing DOL
+stops the build.
 
 Output file format (all big-endian):
     "TMOD" u32 version=1  u32 load_addr  u32 blob_len  u32 n_patches
@@ -26,6 +33,7 @@ Fails fast on: an external that is not a vanilla symbol, a hook symbol missing
 from the module, the blob leaving its region, or any overlap with the gecko
 codesets Nintendont applies to the venue build.
 """
+import argparse
 import os
 import re
 import struct
@@ -283,7 +291,13 @@ def gecko_touches():
 
 
 def main():
-    for need in (DOL, SYMBOLS, MWCC, SJISWRAP, MWLD, NM):
+    ap = argparse.ArgumentParser(description="Build kiosk/build/tournament.bin.")
+    ap.add_argument("--check", action="store_true",
+                    help="build-check without main.dol: skip the DOL checks, write no module")
+    check = ap.parse_args().check
+
+    needs = (SYMBOLS, MWCC, SJISWRAP, MWLD, NM) if check else (DOL, SYMBOLS, MWCC, SJISWRAP, MWLD, NM)
+    for need in needs:
         if not need.exists():
             die(f"{need} missing: run `git submodule update --init`, put the vanilla "
                 "main.dol in melee/orig/GALE01/sys/, and run `python configure.py "
@@ -319,7 +333,8 @@ def main():
             patches.append((addr, 0x48000000 | delta))
         else:
             die("bad hook kind " + kind)
-        dol_word(addr)  # must be a vanilla DOL address
+        if not check:
+            dol_word(addr)  # must be a vanilla DOL address
 
     touched = gecko_touches()
     for addr, _ in patches:
@@ -329,6 +344,13 @@ def main():
     if inside:
         die("gecko codesets write inside the module region: " +
             ", ".join(f"0x{a:08X} {touched[a]}" for a in inside[:5]))
+
+    if check:
+        print(f"check: module 0x{lo:08X}-0x{end:08X} ({len(blob)} bytes, "
+              f"{REGION_END - end} spare), {len(ext)} externals, {len(patches)} patches")
+        print("check: hook addresses and the guard word NOT verified (no main.dol); "
+              "no tournament.bin written")
+        return
 
     guard_word = dol_word(GUARD_ADDR)
     out = bytearray(b"TMOD")

@@ -8,9 +8,14 @@ stock Melee image. Every card is the same except for its config file.
 - Wiis with the Homebrew Channel. Any Wii that runs Slippi Nintendont is ready.
 - One SD card per Wii, formatted FAT32.
 - A stock NTSC 1.02 Melee image (`GALE01`).
-- The LazyTO release files: the `apps/LazyTO` folder and `tournament.bin`. They come from the
-  release on GitHub. Until the first release is published, build them as described in
-  [development.md](development.md).
+- The LazyTO loader (the `apps/LazyTO` folder) and the kiosk module (`tournament.bin`). Until
+  the first release is published, `npm run sync-card` fetches the loader from the newest
+  successful CI build of the [Nintendont fork](https://github.com/PranavMin/Nintendont), and you
+  build `tournament.bin` yourself as described in [development.md](development.md). Never use a
+  loader you built yourself: it fails on a real Wii.
+- For `npm run sync-card`: a clone of this repo with Node 22, and the GitHub CLI
+  ([`gh`](https://cli.github.com/)) installed and logged in (`gh auth login`). It uses `gh` to
+  download the loader.
 - Your relay's secret, `RELAY_SECRET` in the `.env` you set up in [pi-setup.md](pi-setup.md).
 
 ## 1. The SD card
@@ -103,7 +108,7 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A firewall between them is blocking TCP 29470. |
 | `no tournament.cfg` on every action | The card isn't being read | Boot the game from the SD card. Check `station=`, `stream=` and `secret=` are all present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
-| Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the release loader. A loader you build yourself fails here. |
+| Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the CI loader that `npm run sync-card` downloads. A loader you build yourself fails here. |
 | Boots to the character select instead of the Tournament screen | An old `tournament.bin` | Copy the current one to the card. |
 
 If a Wii never appears on the status page, turn on **Log** in the loader's settings, boot once,

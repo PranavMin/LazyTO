@@ -3,6 +3,9 @@
 Bug reports from a venue are the most useful thing you can send. Use the issue templates: they
 ask for the status page lines and the Wii's message, which is usually enough to find the cause.
 Security problems go through [SECURITY.md](SECURITY.md) instead, never a public issue.
+Questions and ideas go in [Discussions](https://github.com/PranavMin/LazyTO/discussions).
+Looking for somewhere to start? Try an issue labelled
+[good first issue](https://github.com/PranavMin/LazyTO/labels/good%20first%20issue).
 
 ## Code
 

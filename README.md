@@ -37,10 +37,22 @@ It has not run a full night at a venue yet.
 - **start.gg stays the source of truth.** Anything the relay can't do, the TO does on start.gg
   as usual. A stream overlay that reads start.gg keeps working unchanged.
 
+## Screenshots
+
+<img src="docs/img/kiosk-set-list.png" alt="The kiosk's set list in Dolphin" width="480">
+
+The set list a Wii shows at boot: pick your set and press A to start it on start.gg.
+
+![The relay's status page](docs/img/status-page.png)
+
+The relay's status page during a test run: each station's set, score and last start.gg call.
+
 ## What you need
 
 - A Raspberry Pi (a Pi 5, or any Pi that runs 64-bit or 32-bit Raspberry Pi OS) and a PC with Node 22 (Windows, macOS or Linux)
   to set it up from.
+- On that PC, the GitHub CLI ([`gh`](https://cli.github.com/)), logged in with `gh auth login`.
+  `npm run sync-card` uses it to download the Wii loader.
 - Wiis with the Homebrew Channel, one SD card each, and a stock NTSC 1.02 Melee image.
 - A Wi-Fi network the Wiis and the Pi share, where devices can reach each other. Guest networks
   often block that.

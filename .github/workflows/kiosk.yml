@@ -1,0 +1,68 @@
+name: kiosk
+
+# Build-checks the kiosk module so a change that breaks kiosk/ fails the PR.
+# CI has no vanilla main.dol (a Nintendo file), so it runs
+# `build_module.py --check`: compile, link, symbol/region/hook-target/gecko
+# checks, no DOL checks and no tournament.bin. The shippable module is still
+# built by hand with the DOL (docs/kiosk.md).
+#
+# melee/'s `ninja tools` cannot run here: ninja first regenerates build.ninja,
+# which needs `dtk dol split` and so the DOL. The step below instead runs only
+# the download commands that build.ninja lists for the three tools the module
+# build uses (ninja -t commands does not regenerate the manifest).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "kiosk/**"
+      - "protocol.yaml"
+      - "generated/**"
+      - "melee"        # submodule bump
+      - "Nintendont"   # submodule bump (gecko codesets)
+      - ".github/workflows/kiosk.yml"
+  pull_request:
+    paths:
+      - "kiosk/**"
+      - "protocol.yaml"
+      - "generated/**"
+      - "melee"
+      - "Nintendont"
+      - ".github/workflows/kiosk.yml"
+
+jobs:
+  module:
+    runs-on: windows-latest   # the decomp's compilers are .exe files
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true   # melee (headers, symbols.txt, compilers) and Nintendont (gecko codesets)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ninja
+      - name: melee submodule commit
+        id: melee
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD:melee)" >> "$GITHUB_OUTPUT"
+      - name: Cache the decomp's tools
+        id: tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            melee/build/compilers
+            melee/build/binutils
+            melee/build/tools
+          key: kiosk-melee-tools-${{ runner.os }}-${{ steps.melee.outputs.sha }}
+      - name: Download the compilers, binutils and sjiswrap
+        if: steps.tools.outputs.cache-hit != 'true'
+        working-directory: melee
+        shell: pwsh
+        run: |
+          python configure.py --non-matching
+          python -m ninja -t commands build/compilers build/binutils build/tools/sjiswrap.exe | ForEach-Object {
+            cmd /c $_
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+      - name: Build-check the module (no main.dol)
+        run: python kiosk/tools/build_module.py --check

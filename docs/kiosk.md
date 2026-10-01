@@ -37,6 +37,18 @@ check and the file size.
 The build runs on Windows only: the decomp's compilers and `powerpc-eabi-nm` are `.exe` files,
 and the wordmark generator uses GDI+.
 
+```
+python kiosk/tools/build_module.py --check   # build-check without main.dol; writes no module
+```
+
+`--check` is for CI (`.github/workflows/kiosk.yml`), which has no `main.dol`. It compiles,
+links and runs every check that does not need the DOL: externals against `symbols.txt`, hook
+targets, the region, gecko collisions. It never opens the DOL, so it does not verify that each
+hook address is inside the vanilla DOL and does not read the guard word, and it writes no
+`tournament.bin`. It is never chosen automatically: without `--check` a missing DOL stops the
+build. CI fetches only the decomp's compilers, binutils and sjiswrap (`ninja tools` needs the
+DOL, see the workflow).
+
 ## Developer flags
 
 Three compile-time switches exist for development runs with no controller, such as a Dolphin

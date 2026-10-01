@@ -38,6 +38,10 @@ python kiosk/tools/build_module.py
 
 Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
+`--check` builds without `main.dol` (what CI's `kiosk` workflow runs): same compile, link and
+checks, minus the DOL address and guard checks, and no `tournament.bin`. Never use it for a
+module you will test or ship.
+
 Read the tail of the output:
 
 - the applied patch list (one line per `module_hooks.txt` entry),
