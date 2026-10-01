@@ -18,6 +18,7 @@
 // relay is exercised on a dev machine. Same reasoning: explicit, not hidden.
 
 import { readFileSync } from 'node:fs';
+import { SET_FORMATS, type SetFormat } from './format.js';
 
 export interface Config {
   startggEndpoint: string; // GraphQL URL, http(s)
@@ -28,6 +29,7 @@ export interface Config {
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
   secret: string; // shared with every station's relay_auth (decisions.md R16)
   streamStation: number; // station number (u16 on the wire) of the stream Wii
+  setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q": Bo3, Bo5 from the top-8 qualifiers (format.ts)
   tcpPort: number;
   httpPort: number;
   auditDir: string;
@@ -42,6 +44,7 @@ const FIELDS = [
   'weeklyNamePrefix',
   'secret',
   'streamStation',
+  'setFormat',
   'tcpPort',
   'httpPort',
   'auditDir',
@@ -97,7 +100,7 @@ export function loadConfig(path: string): Config {
     if (!(key in obj)) problems.push(`missing field "${key}"`);
   }
 
-  const { startggEndpoint, token, tournament, eventName, streamName, weeklyNamePrefix, secret, streamStation, tcpPort, httpPort, auditDir } = obj;
+  const { startggEndpoint, token, tournament, eventName, streamName, weeklyNamePrefix, secret, streamStation, setFormat, tcpPort, httpPort, auditDir } = obj;
 
   if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
     problems.push('startggEndpoint must be an http(s) URL');
@@ -132,6 +135,9 @@ export function loadConfig(path: string): Config {
   if ('streamStation' in obj && (!isPositiveInt(streamStation) || streamStation > 0xffff)) {
     problems.push('streamStation must be an integer in 1..65535');
   }
+  if ('setFormat' in obj && !(SET_FORMATS as readonly unknown[]).includes(setFormat)) {
+    problems.push(`setFormat must be one of ${SET_FORMATS.map((f) => `"${f}"`).join(', ')}`);
+  }
   for (const [name, v] of [
     ['tcpPort', tcpPort],
     ['httpPort', httpPort],
@@ -158,6 +164,7 @@ export function loadConfig(path: string): Config {
     weeklyNamePrefix: weeklyNamePrefix as string,
     secret: secret as string,
     streamStation: streamStation as number,
+    setFormat: setFormat as SetFormat,
     tcpPort: tcpPort as number,
     httpPort: httpPort as number,
     auditDir: auditDir as string,

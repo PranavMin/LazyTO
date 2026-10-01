@@ -16,6 +16,8 @@ Everything about your event comes from .env (see .env.example):
   EVENT_NAME          picks the Melee singles event whose name contains it.
   STREAM_NAME         the stream, by its exact name in the stream settings.
   STREAM_STATION      optional, default 1: the station number of the stream Wii.
+  SET_FORMAT          optional, default startgg: startgg = each set's best-of as start.gg
+                      has it; top8q = Bo3, Bo5 from the top-8 qualifiers onward.
   TEST_TOURNAMENT     for -Test: a full slug, "tournament/<slug>" (an
                       unpublished tournament is never listed, so it needs one).
 Switching modes is a push; the relay's first log line says which tournament it
@@ -60,6 +62,8 @@ function Need([string]$key) {
 $EventName = Need 'EVENT_NAME'
 $StreamName = Need 'STREAM_NAME'
 $StreamStation = if ($dotenv['STREAM_STATION']) { [int]$dotenv['STREAM_STATION'] } else { 1 }
+$SetFormat = if ($dotenv['SET_FORMAT']) { $dotenv['SET_FORMAT'] } else { 'startgg' }
+if ($SetFormat -notin @('startgg', 'top8q')) { throw "SET_FORMAT in .env must be startgg or top8q, not '$SetFormat'" }
 if ($Test) {
   $Tournament = Need 'TEST_TOURNAMENT'
   if ($Tournament -notmatch '^tournament/') { throw 'TEST_TOURNAMENT must be a full slug, tournament/<slug>' }
@@ -94,6 +98,7 @@ $config = [ordered]@{
   weeklyNamePrefix = $WeeklyPrefix
   secret        = $dotenv['RELAY_SECRET']
   streamStation = $StreamStation
+  setFormat     = $SetFormat
   tcpPort       = $TcpPort
   httpPort      = $HttpPort
   auditDir      = '/var/lib/lazyto'
@@ -106,9 +111,9 @@ if (Test-Path $tgz) { Remove-Item -Force $tgz }
 if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
 
 Write-Host "bundle: $tgz"
-Write-Host ("config: {0} ({7}), event ~ '{1}', stream '{2}', stream station {3}, tcp {4}, http {5}, token {6}..." -f `
+Write-Host ("config: {0} ({7}), event ~ '{1}', stream '{2}', stream station {3}, format {8}, tcp {4}, http {5}, token {6}..." -f `
   $Tournament, $EventName, $StreamName, $StreamStation, $TcpPort, $HttpPort, $dotenv['STARTGG_TOKEN'].Substring(0, 4),
-  $(if ($Test) { 'TEST' } else { 'production' }))
+  $(if ($Test) { 'TEST' } else { 'production' }), $SetFormat)
 if ($DryRun) { Write-Host 'dry run: not pushing'; exit 0 }
 
 # --- push and install ---

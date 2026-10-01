@@ -71,7 +71,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
 
   // ---- first relay process ----
   {
-    const cache = new SetCache(startgg, FIXTURE_EVENT_ID);
+    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
     await cache.refresh();
     const state = new StationState();
     const audit = new AuditLog(path);
@@ -99,7 +99,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
   assert.equal(claim.games[0]!.winner_slot, 1);
 
   {
-    const cache = new SetCache(startgg, FIXTURE_EVENT_ID);
+    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
     await cache.refresh();
     const state = new StationState();
     for (const [station, c] of claims) if (cache.get(c.setId)) state.claim(station, c);
@@ -135,7 +135,7 @@ test('a replayed claim whose set is gone from the cache is dropped by the boot f
     JSON.stringify({ type: 'claim', station: 5, setId: 999999, p1Id: 1, p2Id: 2, bestOf: 3, games: [] }) + '\n',
   );
 
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID);
+  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
   await cache.refresh();
   const state = new StationState();
   for (const [station, c] of replayClaims(path)) if (cache.get(c.setId)) state.claim(station, c);

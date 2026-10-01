@@ -7,6 +7,7 @@
 // per-tournament setup checklist says to start all pools before doors.
 
 import { ROUND_LEN } from '../generated/wire.js';
+import { bestOfFor, bracketShape, type SetFormat } from './format.js';
 import type { StartggClient, UpstreamSet } from './startgg.js';
 
 export interface CachedGame {
@@ -68,6 +69,7 @@ export class SetCache {
   constructor(
     private readonly client: StartggClient,
     private readonly eventId: number,
+    private readonly setFormat: SetFormat,
     private readonly onRefreshError: (e: Error) => void = () => {},
   ) {}
 
@@ -84,6 +86,8 @@ export class SetCache {
     const next = new Map<number, CachedSet>();
     const warnings: string[] = [];
     let previewCount = 0;
+
+    const shape = bracketShape(upstream.map((s) => ({ round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder })));
 
     for (const s of upstream) {
       if (typeof s.id === 'string') {
@@ -116,7 +120,7 @@ export class SetCache {
         round: s.round,
         roundShort: abbreviateRound(s.fullRoundText),
         roundName: wireRoundName(s.fullRoundText),
-        bestOf: s.totalGames,
+        bestOf: bestOfFor(this.setFormat, { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames }, shape),
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },
         games,

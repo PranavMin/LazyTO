@@ -14,6 +14,7 @@ const VALID = {
   weeklyNamePrefix: '',
   secret: 'abcd-EFGH_1234xy',
   streamStation: 1,
+  setFormat: 'top8q',
   tcpPort: 29470,
   httpPort: 29473,
   auditDir: '/var/lib/lazyto',
@@ -83,6 +84,7 @@ test('every missing field is reported at once', () => {
     'missing field "streamName"',
     'missing field "secret"',
     'missing field "streamStation"',
+    'missing field "setFormat"',
     'missing field "tcpPort"',
     'missing field "httpPort"',
     'missing field "auditDir"',
@@ -129,6 +131,11 @@ test('secret is 8-16 letters, digits, - or _', () => {
 test('eventName and streamName must be non-empty', () => {
   expectProblems(JSON.stringify({ ...VALID, eventName: '  ' }), 'eventName must be a non-empty string');
   expectProblems(JSON.stringify({ ...VALID, streamName: 1358079 }), 'streamName must be a non-empty string');
+});
+
+test('setFormat must be a known format', () => {
+  expectProblems(JSON.stringify({ ...VALID, setFormat: 'bo5' }), 'setFormat must be one of "startgg", "top8q"');
+  expectProblems(JSON.stringify({ ...VALID, setFormat: 5 }), 'setFormat must be one of "startgg", "top8q"');
 });
 
 test('streamStation out of u16 range', () => {

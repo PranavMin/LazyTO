@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   );
 
   const audit = new AuditLog(auditPath(config.auditDir, ev.eventId));
-  const cache = new SetCache(startgg, ev.eventId, (e) =>
+  const cache = new SetCache(startgg, ev.eventId, config.setFormat, (e) =>
     audit.record({ type: 'refresh_error', error: String(e) }),
   );
   await cache.refresh(); // fail fast: bad token / event id dies here

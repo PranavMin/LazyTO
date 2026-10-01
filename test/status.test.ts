@@ -17,7 +17,7 @@ test('status page', async (t) => {
   const fake = makeFake();
   await fake.start();
   const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID);
+  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
   await cache.refresh();
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit: nullAudit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });

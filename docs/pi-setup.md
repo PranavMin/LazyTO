@@ -82,6 +82,7 @@ In the repo folder, copy `.env.example` to `.env` and fill it in. `.env` is neve
 | `EVENT_NAME` | text that appears in your Melee singles event's name, for example `Melee Singles`. It must match exactly one singles event. |
 | `STREAM_NAME` | your stream's name exactly as in the tournament's stream settings |
 | `STREAM_STATION` | optional. The station number of the Wii on stream. Default 1. |
+| `SET_FORMAT` | optional. `startgg` (default): each set's best-of as start.gg has it. `top8q`: Bo3, then Bo5 from the top-8 qualifiers onward. start.gg lets an in-person event set only one best-of, so a venue that plays Bo3 into Bo5 wants `top8q`. |
 | `WEEKLY_NAME_PREFIX` | optional, for a numbered weekly. See below. |
 | `TEST_TOURNAMENT` | optional. A test tournament's full slug, used by `push.ps1 -Test`. |
 
@@ -185,6 +186,7 @@ stops the relay with a list of everything wrong.
 | `weeklyNamePrefix` | the weekly backup described above. Empty turns it off. | `WEEKLY_NAME_PREFIX` |
 | `secret` | the shared secret every Wii must send | `RELAY_SECRET` |
 | `streamStation` | station number of the stream Wii | `STREAM_STATION`, default 1 |
+| `setFormat` | how each set's best-of is decided | `SET_FORMAT`, default `startgg` |
 | `tcpPort` | port for Wii requests. The Wiis learn it from the announcement. | 29470 |
 | `httpPort` | status page port | 29473 |
 | `auditDir` | folder for the per-event log of every action | `/var/lib/lazyto` |

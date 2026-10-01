@@ -243,6 +243,7 @@ Startup validates every config field and exits non-zero on any problem. There ar
 | `weeklyNamePrefix` | `""` for none; otherwise the numbered-weekly fallback below |
 | `secret` | shared secret, 8 to 16 of `A-Z a-z 0-9 - _` |
 | `streamStation` | the station number of the stream setup |
+| `setFormat` | `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
 | `tcpPort`, `httpPort` | 29470, 29473 |
 | `auditDir` | where audit logs go |
 

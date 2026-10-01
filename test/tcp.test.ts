@@ -37,7 +37,7 @@ async function setup(opts: { sets?: FakeSet[]; limits?: { capacity: number; refi
     retryDelaysMs: [0, 0],
     limits: opts.limits,
   });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID);
+  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
   await cache.refresh();
   const state = new StationState();
   const audit = new ArrayAudit();

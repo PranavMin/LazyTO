@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SetCache, abbreviateRound, wireRoundName } from '../src/cache.js';
 import { StartggClient } from '../src/startgg.js';
-import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, entrant } from './fake-startgg.js';
+import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, FIXTURE_PHASE_ORDER, entrant } from './fake-startgg.js';
 
 function makeClient(url: string) {
   return new StartggClient({ endpoint: url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
@@ -36,8 +36,38 @@ test('set cache', async (t) => {
   t.after(() => fake.close());
   const client = makeClient(fake.url);
 
+  await t.test('top8q decides best-of from the bracket shape, not totalGames', async () => {
+    // Fixture: one phase, winners 1..4 (Grand Final 4); WQF round 1 = GF - 3: Bo5.
+    const c1 = new SetCache(client, FIXTURE_EVENT_ID, 'top8q');
+    await c1.refresh();
+    assert.equal(c1.get(107949994)!.bestOf, 5);
+
+    // Now a Bracket phase of WQF, LR1 and LR2 feeding a Top 8 phase (Grand
+    // Final round 3). The feeder's last rounds, WQF and LR2, are the
+    // qualifiers: Bo5. LR1 before them is Bo3, whatever totalGames says. The
+    // Top 8's Winners Semi-Final is Bo5.
+    const top8 = FIXTURE_PHASE_ORDER + 1;
+    const sets = defaultFixture().slice(0, 4); // the four WQF sets
+    sets.push({ ...sets[0]!, id: 107949900, round: -1, fullRoundText: 'Losers Round 1' });
+    sets.push({ ...sets[0]!, id: 107949904, round: -2, fullRoundText: 'Losers Round 2', slots: [null, null] });
+    sets.push({ ...sets[0]!, id: 107949901, round: 1, fullRoundText: 'Winners Semi-Final', phaseOrder: top8 });
+    sets.push({ ...sets[0]!, id: 107949902, round: 3, fullRoundText: 'Grand Final', phaseOrder: top8, slots: [null, null] });
+    sets.push({ ...sets[0]!, id: 107949903, round: -6, fullRoundText: 'Losers Final', phaseOrder: top8, slots: [null, null] });
+    const f2 = makeFake(sets);
+    await f2.start();
+    try {
+      const c2 = new SetCache(makeClient(f2.url), FIXTURE_EVENT_ID, 'top8q');
+      await c2.refresh();
+      assert.equal(c2.get(107949900)!.bestOf, 3);
+      assert.equal(c2.get(107949994)!.bestOf, 5);
+      assert.equal(c2.get(107949901)!.bestOf, 5);
+    } finally {
+      f2.close();
+    }
+  });
+
   await t.test('refresh keeps numeric both-entrant sets and drops preview ids with a warning', async () => {
-    const cache = new SetCache(client, FIXTURE_EVENT_ID);
+    const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
     await cache.refresh();
 
     // Fixture: 4 numeric sets with both entrants, 5 with TBD slots, 2 preview.
@@ -68,7 +98,7 @@ test('set cache', async (t) => {
     const f2 = makeFake(sets);
     await f2.start();
     try {
-      const cache = new SetCache(makeClient(f2.url), FIXTURE_EVENT_ID);
+      const cache = new SetCache(makeClient(f2.url), FIXTURE_EVENT_ID, 'startgg');
       await cache.refresh();
       assert.deepEqual(
         cache.pending().map((s) => s.roundShort),
@@ -87,7 +117,7 @@ test('set cache', async (t) => {
       { gameNum: 2, winnerId: entrant(4).id },
     ]);
 
-    const cache = new SetCache(client, FIXTURE_EVENT_ID);
+    const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
     await cache.refresh();
     const s = cache.get(SET)!;
     assert.equal(s.state, 2);
@@ -101,7 +131,7 @@ test('set cache', async (t) => {
   });
 
   await t.test('a failed refresh keeps the old data and records the error', async () => {
-    const cache = new SetCache(client, FIXTURE_EVENT_ID);
+    const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
     await cache.refresh();
     const countBefore = cache.status().count;
 
@@ -116,7 +146,7 @@ test('set cache', async (t) => {
 
   await t.test('start() refreshes on the interval and routes errors to the callback', async () => {
     const errors: Error[] = [];
-    const cache = new SetCache(client, FIXTURE_EVENT_ID, (e) => errors.push(e));
+    const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg', (e) => errors.push(e));
     await cache.refresh();
     const before = fake.callsFor('eventSets').length;
 

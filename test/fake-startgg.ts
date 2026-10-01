@@ -45,6 +45,7 @@ export interface FakeSet {
   round: number; // start.gg round: positive winners, negative losers
   fullRoundText: string;
   totalGames: number; // best of N
+  phaseOrder?: number; // default FIXTURE_PHASE_ORDER, the Bracket phase; a Top 8 phase is one higher
   slots: [FakeEntrant | null, FakeEntrant | null];
   games: FakeGame[];
   stream: { id: number; streamName: string; streamSource: string } | null;
@@ -222,6 +223,7 @@ export class FakeStartgg {
       round: set.round,
       fullRoundText: set.fullRoundText,
       totalGames: set.totalGames,
+      phaseGroup: { phase: { phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER } },
       slots: set.slots.map((e) => ({ entrant: e ? { id: e.id, name: e.name } : null })),
       games: set.games.length
         ? set.games.map((g) => ({ id: g.id, orderNum: g.orderNum, winnerId: g.winnerId }))
@@ -368,6 +370,7 @@ export class FakeStartgg {
 // first round is "Winners Quarter-Final".
 
 export const FIXTURE_EVENT_ID = 1613010;
+export const FIXTURE_PHASE_ORDER = 2; // the Bracket phase's phaseOrder on the real test event
 export const FIXTURE_TOKEN = 'test-token';
 
 const TAGS = [

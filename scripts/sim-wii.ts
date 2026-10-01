@@ -155,7 +155,7 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
 
   const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN });
   const audit = new AuditLog(auditPath(mkdtempSync(join(tmpdir(), 'tr-sim-')), FIXTURE_EVENT_ID));
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, (e) => {
+  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg', (e) => {
     tally.errors.push(`cache refresh failed: ${String(e)}`);
   });
   await cache.refresh();
