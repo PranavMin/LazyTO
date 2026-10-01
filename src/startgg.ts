@@ -151,17 +151,21 @@ class TokenBucket {
 
   /** Take a token, waiting at most maxWaitMs for one. Throws RateLimitedError. */
   async take(maxWaitMs: number): Promise<void> {
-    this.refill(Date.now());
-    if (this.tokens >= 1) {
-      this.tokens -= 1;
-      return;
+    const deadline = Date.now() + maxWaitMs;
+    for (;;) {
+      const now = Date.now();
+      this.refill(now);
+      if (this.tokens >= 1) {
+        this.tokens -= 1;
+        return;
+      }
+      // Timers can fire a little before Date.now() has advanced by the full
+      // delay (libuv measures from its cached loop time), so re-check rather
+      // than assume the token arrived. A concurrent taker also lands here.
+      const needMs = ((1 - this.tokens) / this.refillPerMinute) * 60_000;
+      if (now + needMs > deadline) throw new RateLimitedError();
+      await new Promise((r) => setTimeout(r, Math.max(1, Math.ceil(needMs))));
     }
-    const needMs = ((1 - this.tokens) / this.refillPerMinute) * 60_000;
-    if (needMs > maxWaitMs) throw new RateLimitedError();
-    await new Promise((r) => setTimeout(r, needMs));
-    this.refill(Date.now());
-    if (this.tokens < 1) throw new RateLimitedError(); // concurrent taker won the token
-    this.tokens -= 1;
   }
 }
 
