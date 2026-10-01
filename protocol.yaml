@@ -109,6 +109,13 @@ enums:
       EXI_RELAY_REQ:  {value: 0xF0, doc: "write request buffer to the ARM side"}
       EXI_RELAY_POLL: {value: 0xF1, doc: "read {state, response buffer}"}
 
+  exi_poll_flags:
+    doc: "bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg)"
+    values:
+      PF_NO_NETWORK: {value: 1, doc: "the host has no network: the loader's Network option is off, or the Wii failed to join the Wi-Fi at boot"}
+      PF_NO_CFG:     {value: 2, doc: "no usable sd:/tournament.cfg"}
+      PF_NO_SECRET:  {value: 4, doc: "tournament.cfg has no valid secret="}
+
   exi_poll_state:
     doc: "state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns"
     values:
@@ -149,7 +156,7 @@ structs:
     size: 12
     fields:
       - {name: state,      type: u8,  doc: "enum exi_poll_state"}
-      - {name: _pad,       type: u8}
+      - {name: flags,      type: u8,  doc: "exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)"}
       - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (design R10)"}
       - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
       - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}

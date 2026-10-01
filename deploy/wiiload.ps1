@@ -8,7 +8,7 @@ The Wii must be sitting on the Homebrew Channel (it shows its IP bottom-left
 when it is online). Sends the newest successful GitHub build of the fork's
 vanilla-module loader (same cache as sync-card.ps1) unless -File is given.
 The card still provides tournament.bin, tournament.cfg and the game; this only
-replaces the "launch Kegstand's Tournament Mod" step. The Wii's IP can also come
+replaces the "launch LazyTO" step. The Wii's IP can also come
 from the environment: $env:WII_IP, or the devkitPro form $env:WIILOAD = "tcp:IP".
 
 Needs wiiload.exe (devkitPro: pacman -S wiiload) and gh (logged in).
@@ -47,8 +47,8 @@ if (-not $File) {
         if ($LASTEXITCODE -ne 0) { Fail "gh run download $($run.databaseId) failed" }
         Set-Content (Join-Path $cache "done") $run.databaseId
     }
-    $File = (Get-ChildItem $cache -Recurse -Filter boot.dol | Where-Object { $_.DirectoryName -match 'Kegstand' } | Select-Object -First 1).FullName
-    if (-not $File) { Fail "no Kegstand Tournament Mod boot.dol in the CI artifact" }
+    $File = (Get-ChildItem $cache -Recurse -Filter boot.dol | Where-Object { $_.DirectoryName -match 'LazyTO' } | Select-Object -First 1).FullName
+    if (-not $File) { Fail "no LazyTO boot.dol in the CI artifact" }
     Write-Host ("loader : CI build {0} (commit {1}, {2})" -f $run.databaseId, $sha, $run.createdAt)
 }
 if (-not (Test-Path $File)) { Fail "file not found: $File" }

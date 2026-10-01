@@ -1,4 +1,4 @@
-# Wii setup: first run of the kiosk on hardware
+# Wii setup: LazyTO on hardware
 
 Written 2026-09-25 for the first hardware test. Prerequisites you already have:
 a Wii with the Homebrew Channel, an SD card (FAT32), and a stock Melee 1.02 image.
@@ -23,8 +23,8 @@ By hand:
 
 | SD path | From | Notes |
 |---|---|---|
-| `sd:/apps/Kegstand Tournament Mod/boot.dol` | the **CI-built** loader: `release-*` artifact of the fork's "CI Slippi Nintendont Builds" workflow on `vanilla-module` (`gh workflow run build.yml -R PranavMin/Nintendont --ref vanilla-module`; e.g. run 36795094785, commit 648cf92) | Our loader with the relay EXI device, beacon listener, shared secret and module loader built in. Never the locally built `nintendont/boot.dol`: it stops at the IOS58 step on hardware (see section 6). |
-| `sd:/apps/Kegstand Tournament Mod/icon.png`, `meta.xml` | the same `release-*` artifact (CI fills in version and git hash) | The Homebrew Channel lists it as **Kegstand's Tournament Mod**, so it is never confused with stock Slippi Nintendont; the venue's own Slippi Nintendont can stay installed beside it. The loader finds its files from wherever it is launched, so the folder name is free. |
+| `sd:/apps/LazyTO/boot.dol` | the **CI-built** loader: `release-*` artifact of the fork's "CI Slippi Nintendont Builds" workflow on `vanilla-module` (`gh workflow run build.yml -R PranavMin/Nintendont --ref vanilla-module`; e.g. run 36795094785, commit 648cf92) | Our loader with the relay EXI device, beacon listener, shared secret and module loader built in. Never the locally built `nintendont/boot.dol`: it stops at the IOS58 step on hardware (see section 6). |
+| `sd:/apps/LazyTO/icon.png`, `meta.xml` | the same `release-*` artifact (CI fills in version and git hash) | The Homebrew Channel lists it as **LazyTO** (renamed from Kegstand's Tournament Mod on 2026-09-30), so it is never confused with stock Slippi Nintendont; the venue's own Slippi Nintendont can stay installed beside it. The loader finds its files from wherever it is launched, so the folder name is free. |
 | `sd:/tournament.bin` | `P:\Projects\melee\build\GALE01\tournament.bin` (80,248 bytes) | The kiosk module. Same file on every card. Rebuild with `python tools/build_module.py` in the melee repo; the shipped build must have `TM_DEMO_AUTOSTART`, `LB_TOURNEY_DEMO_CLAIM` and `LB_TOURNEY_TRIGGER_READOUT` all 0 (they are). |
 | `sd:/tournament.cfg` | you write it, see below | One per Wii. |
 | `sd:/games/GALE01/game.iso` | your stock Melee 1.02 image | Boot the game **from the SD card** for the first test. The kernel only mounts `sd:` when the game boots from SD or Slippi replays are on; from USB with replays off, every relay action says `no tournament.cfg`. |
@@ -78,7 +78,7 @@ table shows every request the Wii makes.
 
 ## 4. Nintendont settings on the Wii
 
-Start **Kegstand's Tournament Mod** from the Homebrew Channel (not Slippi Nintendont).
+Start **LazyTO** from the Homebrew Channel (not Slippi Nintendont).
 `sync-card.ps1` already sets the two settings that matter in the loader's config file; if you
 set up a card by hand, in the loader's settings:
 
@@ -151,7 +151,9 @@ log: turn on **Log** in the loader's settings, boot once, and read `slippi_ndebu
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
 | Status page: `NOT LOADED: module overlaps game memory (arena top 0x0)`, or the SD log says `TMOD:arena top 00000000 below module end` | A kernel older than Nintendont 140bb77 | Use the current loader (sync-card.ps1 installs it). |
 | Crash `Illegal instruction at 817E88D8` (the module's first instruction) a second after boot; the RAM watch shows the module zeroed | A loader older than Nintendont f32740f: the apploader's arena top (the FST base) stayed above the module, so Melee's heap setup zeroed it. The kernel could not see or fix that word (it sits in the PPC's data cache), so the PPC entry stub lowers it now | Current loader. The status page's crash line and `melee/tools/resolve_crash.py` name the address if it ever recurs. |
-| `NO RELAY FOUND` and the Wii never appears on the status page | The Wii's Wi-Fi did not associate this boot (it answers no ping), or Network is off in the loader | Power-cycle and retry; check Network in the loader settings. |
+| `THIS WII IS NOT ONLINE` (kiosk) | The loader's Network option is off, or the Wi-Fi join failed at boot; the kernel tells the kiosk through the poll header's flags (protocol `exi_poll_flags`), so no 10 s wait | Power-cycle and retry; check Network in the loader settings. |
+| `THIS CARD IS NOT SET UP` (kiosk) | No usable `tournament.cfg`, or no `secret=` in it | Fix the card (sync-card.ps1 writes it). |
+| `NO RELAY FOUND` with the Wii online | No beacon heard in 10 s | Relay down, or a different network / client isolation. The Wii shows on the status page only after a beacon. |
 | Boots to the VS character select, not the Tournament screen | A module older than melee 7f88d95f0: Slippi's core codes force VS mode at boot (`04 801BFA20 38600002`) | Use the current `tournament.bin`; it re-requests the main menu after the boot scene. |
 | Nintendont: `Failed to load IOS58 from NAND` | With `ES_GetStoredTMDSize() returned -4352`: a **locally built loader** (libogc "ES not initialised"), not a missing IOS58; the title bar then already says IOS58. Other codes: the Wii really lacks IOS58 | -4352: put the CI-built loader on the card. Test: if plain Nintendont reaches its game list, IOS58 is fine. Genuinely missing IOS58: an IOS58 installer from the Homebrew Channel; avoid a full system update on a softmodded Wii. |
 | `no network` on every action | Nintendont's Network option is off | Turn it on. |

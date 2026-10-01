@@ -83,6 +83,13 @@ enum exi_cmd {
     EXI_RELAY_POLL = 241,  /* read {state, response buffer} */
 };
 
+/* bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg) */
+enum exi_poll_flags {
+    PF_NO_NETWORK = 1,  /* the host has no network: the loader's Network option is off, or the Wii failed to join the Wi-Fi at boot */
+    PF_NO_CFG     = 2,  /* no usable sd:/tournament.cfg */
+    PF_NO_SECRET  = 4,  /* tournament.cfg has no valid secret= */
+};
+
 /* state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 enum exi_poll_state {
     RELAY_IDLE  = 0,
@@ -120,7 +127,7 @@ enum module_state {
  */
 struct exi_poll_hdr {
     uint8_t  state;  /* enum exi_poll_state */
-    uint8_t  _pad;
+    uint8_t  flags;  /* exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0) */
     uint16_t station;  /* tournament.cfg station; 0 in Dolphin (design R10) */
     uint32_t relay_ip;  /* relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown */
     uint16_t relay_port;  /* relay TCP port; 0 = unknown */
@@ -129,7 +136,7 @@ struct exi_poll_hdr {
 
 RELAY_STATIC_ASSERT(sizeof(struct exi_poll_hdr) == 12, exi_poll_hdr_size);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, state) == 0, exi_poll_hdr_state);
-RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, _pad) == 1, exi_poll_hdr__pad);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, flags) == 1, exi_poll_hdr_flags);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, station) == 2, exi_poll_hdr_station);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_ip) == 4, exi_poll_hdr_relay_ip);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_port) == 8, exi_poll_hdr_relay_port);

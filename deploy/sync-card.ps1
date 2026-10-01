@@ -8,7 +8,7 @@ What it does (docs/wii-setup.md section 1):
   1. finds the card: the one removable FAT32 drive with a drive letter (or -Drive)
   2. loader: the newest successful GitHub build of the Nintendont fork's
      vanilla-module branch ("CI Slippi Nintendont Builds"), downloaded once into
-     deploy/.cache, copied to apps/Kegstand Tournament Mod. Never a locally built
+     deploy/.cache, copied to apps/LazyTO. Never a locally built
      loader: those fail on hardware (Nintendont docs/build-windows.md).
   3. module: melee build/GALE01/tournament.bin, refused if the melee sources have a
      dev switch on (TM_DEMO_AUTOSTART, LB_TOURNEY_DEMO_CLAIM, LB_TOURNEY_TRIGGER_READOUT)
@@ -36,7 +36,7 @@ param(
     [switch]$NoLog
 )
 $ErrorActionPreference = "Stop"
-$AppName = "Kegstand Tournament Mod"
+$AppName = "LazyTO"
 function Fail($msg) { Write-Host "sync-card: $msg" -ForegroundColor Red; exit 1 }
 function Md5($p) { (Get-FileHash $p -Algorithm MD5).Hash }
 

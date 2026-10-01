@@ -56,6 +56,13 @@ export enum ExiCmd {
   EXI_RELAY_POLL = 241, // read {state, response buffer}
 }
 
+/** bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg) */
+export enum ExiPollFlags {
+  PF_NO_NETWORK = 1, // the host has no network: the loader's Network option is off, or the Wii failed to join the Wi-Fi at boot
+  PF_NO_CFG = 2, // no usable sd:/tournament.cfg
+  PF_NO_SECRET = 4, // tournament.cfg has no valid secret=
+}
+
 /** state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 export enum ExiPollState {
   RELAY_IDLE = 0,
@@ -115,6 +122,7 @@ function checkLen(buf: Uint8Array, off: number, need: number, what: string): voi
 /** What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf: this, then relay_hdr, relay_resp and the payload). Not on the TCP wire: filled by the host of the fake EXI device (Nintendont kernel, Slippi Dolphin) on every poll, so the game can show which station it is and which relay it is talking to even while the relay never answers. The response bytes after it are valid only when state == RELAY_DONE. */
 export interface ExiPollHdr {
   state: number; // enum exi_poll_state
+  flags: number; // exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)
   station: number; // tournament.cfg station; 0 in Dolphin (design R10)
   relay_ip: number; // relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown
   relay_port: number; // relay TCP port; 0 = unknown
@@ -125,6 +133,7 @@ export function encodeExiPollHdr(v: ExiPollHdr): Uint8Array {
   const bytes = new Uint8Array(EXI_POLL_HDR_SIZE);
   const dv = new DataView(bytes.buffer);
   dv.setUint8(0, v.state);
+  dv.setUint8(1, v.flags);
   dv.setUint16(2, v.station, false);
   dv.setUint32(4, v.relay_ip, false);
   dv.setUint16(8, v.relay_port, false);
@@ -136,6 +145,7 @@ export function decodeExiPollHdr(buf: Uint8Array, off = 0): ExiPollHdr {
   const dv = new DataView(buf.buffer, buf.byteOffset);
   return {
     state: dv.getUint8(off + 0),
+    flags: dv.getUint8(off + 1),
     station: dv.getUint16(off + 2, false),
     relay_ip: dv.getUint32(off + 4, false),
     relay_port: dv.getUint16(off + 8, false),

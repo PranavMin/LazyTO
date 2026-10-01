@@ -202,7 +202,7 @@ export class StatusServer {
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Tournament Reporter</title>
+<title>LazyTO</title>
 <style>
   body { font-family: monospace; font-size: 16px; margin: 1em; }
   h1 { font-size: 1.25em; margin: 0 0 0.25em; }
@@ -222,7 +222,7 @@ export class StatusServer {
     td, th { padding: 0.3em 0.4em; }
   }
 </style></head><body>
-<h1>Tournament Reporter</h1>
+<h1>LazyTO</h1>
 <p class="sub"><b>${escapeHtml(eventLabel)}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
 <div class="scroll"><table>
 <tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
