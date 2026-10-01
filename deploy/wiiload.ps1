@@ -6,7 +6,7 @@ wiiload.ps1 -- boot a loader on the Wii over Wi-Fi, no SD card trip.
 
 The Wii must be sitting on the Homebrew Channel (it shows its IP bottom-left
 when it is online). Sends the newest successful GitHub build of the fork's
-vanilla-module loader (same cache as sync-card.ps1) unless -File is given.
+lazyto loader (same cache as sync-card.ps1) unless -File is given.
 The card still provides tournament.bin, tournament.cfg and the game; this only
 replaces the "launch LazyTO" step. The Wii's IP can also come
 from the environment: $env:WII_IP, or the devkitPro form $env:WIILOAD = "tcp:IP".
@@ -17,7 +17,7 @@ param(
     [string]$Wii = "",
     [string]$File = "",
     [string]$Repo = "PranavMin/Nintendont",
-    [string]$Branch = "vanilla-module"
+    [string]$Branch = "lazyto"
 )
 $ErrorActionPreference = "Stop"
 function Fail($msg) { Write-Host "wiiload: $msg" -ForegroundColor Red; exit 1 }

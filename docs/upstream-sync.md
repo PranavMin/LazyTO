@@ -5,7 +5,7 @@ LazyTO depends on two upstream projects, as submodules of this repo.
 | Submodule | Upstream | How LazyTO uses it |
 |------|----------|---------------|
 | `melee/` | `doldecomp/melee` `master` | unmodified; the kiosk builds against it |
-| `Nintendont/` | `project-slippi/Nintendont` `slippi` | forked as PranavMin/Nintendont, branch `vanilla-module` |
+| `Nintendont/` | `project-slippi/Nintendont` `slippi` | forked as PranavMin/Nintendont, branch `lazyto` |
 
 ## melee: move the submodule
 
@@ -27,8 +27,8 @@ The decomp is used as is, so there is nothing to merge.
 
 
 1. Add the upstream remote once: `git remote add upstream <url>`.
-2. `git fetch upstream` and see how far behind you are: `git log --oneline vanilla-module..upstream/<branch>`.
-3. On a clean `vanilla-module`, `git merge upstream/<branch>`. Merge, do not rebase: the fork is shared and its history is public.
+2. `git fetch upstream` and see how far behind you are: `git log --oneline lazyto..upstream/<branch>`.
+3. On a clean `lazyto`, `git merge upstream/<branch>`. Merge, do not rebase: the fork is shared and its history is public.
 4. Resolve conflicts (below), build, check, then commit the merge with a message listing what came in and how each conflict was resolved.
 
 What to expect: a few commits, usually clean.

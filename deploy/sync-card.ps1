@@ -7,7 +7,7 @@ sync-card.ps1 -- make one Wii SD card ready for the kiosk, in one command.
 What it does (docs/wii-setup.md section 1):
   1. finds the card: the one removable FAT32 drive with a drive letter (or -Drive)
   2. loader: the newest successful GitHub build of the Nintendont fork's
-     vanilla-module branch ("CI Slippi Nintendont Builds"), downloaded once into
+     lazyto branch ("CI Slippi Nintendont Builds"), downloaded once into
      deploy/.cache, copied to apps/LazyTO. Never a locally built
      loader: those fail on hardware (Nintendont docs/build-windows.md).
   3. module: kiosk/build/tournament.bin (or -Module), refused if the kiosk sources have a
@@ -31,7 +31,7 @@ param(
     [string]$Module = (Join-Path $PSScriptRoot "..\kiosk\build\tournament.bin"),
     [string]$MeleeSrc = (Join-Path $PSScriptRoot "..\kiosk\src\melee"),
     [string]$Repo = "PranavMin/Nintendont",
-    [string]$Branch = "vanilla-module",
+    [string]$Branch = "lazyto",
     [switch]$NoEject,
     [switch]$NoLog
 )

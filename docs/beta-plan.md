@@ -19,7 +19,7 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 - [x] Descriptions, topics and homepage on all four repos.
 - [x] Fork READMEs: a header naming the LazyTO changes and the upstream sync procedure.
 - [x] Umbrella README in this repo: what each repo does, how they fit.
-- [x] Default branch `vanilla-module` on the forks; stale branches pruned, `shifted-dol-final` kept as a tag.
+- [x] Default branch `vanilla-module` (renamed `lazyto` 2026-10-01) on the forks; stale branches pruned, `shifted-dol-final` kept as a tag.
 - [x] CI on this repo: `npm test` on push and PR, Node 22; protect `main`.
 - [x] Rename: repo `tournament-reporter` to `lazyto`, Pi service to `lazyto-relay`, Pi paths to `/opt|/etc|/var/lib/lazyto`.
 

@@ -5,4 +5,4 @@
 [submodule "Nintendont"]
 	path = Nintendont
 	url = https://github.com/PranavMin/Nintendont.git
-	branch = vanilla-module
+	branch = lazyto
