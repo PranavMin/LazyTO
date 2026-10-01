@@ -43,6 +43,10 @@ It has not run a full night at a venue yet.
 
 The set list a Wii shows at boot: pick your set and press A to start it on start.gg.
 
+<img src="docs/img/kiosk-css-banner.png" alt="Character select with the kiosk's score banner" width="480">
+
+Character select during a set: the banner shows both players, their ports and the score.
+
 ![The relay's status page](docs/img/status-page.png)
 
 The relay's status page during a test run: each station's set, score and last start.gg call.
