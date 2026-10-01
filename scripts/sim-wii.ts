@@ -38,6 +38,7 @@ import {
   peakPerMinute,
 } from '../test/fake-startgg.js';
 import { WiiClient, TEST_SECRET } from '../test/wii-client.js';
+import { RecordingArchive } from '../test/archive-stub.js';
 
 const STATIONS = 12;
 const ACTION_DELAY_MS = 12_000; // one player action every ~12 s, +/- 25% jitter
@@ -203,6 +204,7 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
     state,
     startgg,
     audit,
+    archive: new RecordingArchive(),
     streamStation: 1,
     streamId: 1358079,
     secret: TEST_SECRET,
@@ -217,6 +219,8 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
     beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) },
     tcp,
     telemetry: new StationTelemetry({ secret: TEST_SECRET }),
+    archive: { status: () => ({ inProgress: [], recent: [], watches: [] }) },
+    beamers: { status: () => ({ beamers: [], unnamed: 0, bad: 0 }) },
   });
   await status.listen(0, '127.0.0.1');
   cache.start();

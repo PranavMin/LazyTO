@@ -24,10 +24,12 @@ import {
   decodeReportScoreReq,
   decodeEndSetReq,
   decodeAbandonSetReq,
+  decodeGameStartReq,
   encodeRelayHdr,
   encodeRelayResp,
   encodeListSetsResp,
   type GameResult,
+  type GameStartReq,
   type SetEntry,
 } from '../generated/wire.js';
 import type { SetCache, CachedSet } from './cache.js';
@@ -41,11 +43,21 @@ export interface AuditSink {
   record(event: Record<string, unknown>): void;
 }
 
+/** The set archive (archive.ts), told about each successful set action. */
+export interface ArchiveHooks {
+  setStarted(station: number, set: CachedSet): void;
+  gameStarted(station: number, req: GameStartReq): void;
+  scored(setId: number, games: GameResult[]): void;
+  setEnded(setId: number, games: GameResult[]): void;
+  setAbandoned(setId: number): void;
+}
+
 export interface RelayDeps {
   cache: SetCache;
   state: StationState;
   startgg: StartggClient;
   audit: AuditSink;
+  archive: ArchiveHooks;
   streamStation: number;
   streamId: number;
   /** Shared secret every request's relay_auth must carry (decisions.md R16). */
@@ -223,6 +235,9 @@ export class RelayTcpServer {
           case RelayCmd.CMD_ABANDON_SET:
             reply = await this.abandonSet(station, decodeAbandonSetReq(payload));
             break;
+          case RelayCmd.CMD_GAME_START:
+            reply = this.gameStart(station, decodeGameStartReq(payload));
+            break;
           default:
             reply = { status: RelayStatus.ST_INTERNAL, msg: 'unknown command' };
         }
@@ -357,6 +372,7 @@ export class RelayTcpServer {
     // From here the set IS in progress upstream, so the station gets the
     // claim even if the stream assignment below fails (section 5.3).
     this.recordClaim(station, set);
+    this.deps.archive.setStarted(station, set);
 
     if (req.stream === 1) {
       const assignFailure = await this.upstream(
@@ -428,6 +444,7 @@ export class RelayTcpServer {
 
     claim.games = games.list;
     audit.record({ type: 'score', station, setId: req.set_id, games: games.list });
+    this.deps.archive.scored(req.set_id, games.list);
     return { status: RelayStatus.ST_OK, msg: scoreText(games.list) };
   }
 
@@ -468,6 +485,7 @@ export class RelayTcpServer {
 
     state.release(station);
     audit.record({ type: 'release', station, setId: req.set_id, reason: 'end_set', winnerId });
+    this.deps.archive.setEnded(req.set_id, games.list);
     return { status: RelayStatus.ST_OK, msg: `final ${scoreText(games.list)}` };
   }
 
@@ -492,7 +510,32 @@ export class RelayTcpServer {
 
     state.release(station);
     audit.record({ type: 'release', station, setId: req.set_id, reason: 'abandon' });
+    this.deps.archive.setAbandoned(req.set_id);
     return { status: RelayStatus.ST_OK, msg: 'set abandoned' };
+  }
+
+  // ---- CMD_GAME_START ----
+
+  /** A game of this station's set started: remember who plays where, for the set archive. No upstream call. */
+  private gameStart(station: number, req: GameStartReq): Reply {
+    const claim = this.deps.state.get(station);
+    if (!claim || claim.setId !== req.set_id) {
+      return { status: RelayStatus.ST_SET_NOT_FOUND, msg: 'no such set on this station' };
+    }
+    this.deps.audit.record({
+      type: 'game_start',
+      station,
+      setId: req.set_id,
+      game: req.game,
+      handwarmer: req.handwarmer,
+      stage: req.stage,
+      e1Port: req.e1_port,
+      e2Port: req.e2_port,
+      chars: [...req.chars],
+      costumes: [...req.costumes],
+    });
+    this.deps.archive.gameStarted(station, req);
+    return { status: RelayStatus.ST_OK, msg: req.handwarmer ? 'handwarmer' : `game ${req.game}` };
   }
 }
 

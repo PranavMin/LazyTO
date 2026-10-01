@@ -14,6 +14,9 @@ import {
   decodeRelayHdr,
   decodeRelayResp,
   encodeAbandonSetReq,
+  encodeGameStartReq,
+  NO_PORT,
+  type GameStartReq,
   encodeEndSetReq,
   encodeRelayHdr,
   encodeRelayAuth,
@@ -130,6 +133,43 @@ export class WiiClient {
   abandonSet(setId: number): Promise<WireReply> {
     return this.request(RelayCmd.CMD_ABANDON_SET, encodeAbandonSetReq({ set_id: setId }));
   }
+
+  gameStart(req: GameStartReq): Promise<WireReply> {
+    return this.request(RelayCmd.CMD_GAME_START, encodeGameStartReq(req));
+  }
+}
+
+/** A game_start_req: entrant 1 on port e1 with c1, entrant 2 on e2 with c2 (costume 0 each); other ports empty. */
+export function gameStartReq(
+  setId: number,
+  game: number,
+  opts: {
+    handwarmer?: boolean;
+    stage?: number;
+    e1?: number;
+    e2?: number;
+    c1?: number;
+    c2?: number;
+  } = {},
+): GameStartReq {
+  const e1 = opts.e1 ?? 0;
+  const e2 = opts.e2 ?? 1;
+  const chars = new Uint8Array([NO_PORT, NO_PORT, NO_PORT, NO_PORT]);
+  const costumes = new Uint8Array([NO_PORT, NO_PORT, NO_PORT, NO_PORT]);
+  chars[e1] = opts.c1 ?? 2;
+  chars[e2] = opts.c2 ?? 9;
+  costumes[e1] = 0;
+  costumes[e2] = 0;
+  return {
+    set_id: setId,
+    game,
+    handwarmer: opts.handwarmer ? 1 : 0,
+    stage: opts.stage ?? 0x1f,
+    e1_port: e1,
+    e2_port: e2,
+    chars,
+    costumes,
+  };
 }
 
 // Defaults are what an auto-scored game carries: Fox (ext 2) vs Marth (ext 9)

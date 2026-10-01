@@ -55,8 +55,12 @@ export interface Resolved {
   foundBy: 'full slug' | 'short URL' | 'nearest weekly';
   tournamentName: string;
   tournamentSlug: string;
+  tournamentLocation: string; // venue address, "" if none
   eventId: number;
   eventName: string;
+  eventSlug: string;
+  eventHasSiblings: boolean; // the tournament has other events
+  eventPhaseCount: number;
   streamId: number;
   streamName: string;
 }
@@ -184,8 +188,12 @@ export async function resolveEvent(
     foundBy: found.foundBy,
     tournamentName: t.name,
     tournamentSlug: t.slug,
+    tournamentLocation: t.venueAddress ?? '',
     eventId: Number(event.id),
     eventName: event.name,
+    eventSlug: event.slug,
+    eventHasSiblings: t.events.length > 1,
+    eventPhaseCount: event.phases?.length ?? 1,
     streamId: Number(stream.id),
     streamName: stream.streamName,
   };

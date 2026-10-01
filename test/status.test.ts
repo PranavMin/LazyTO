@@ -10,6 +10,7 @@ import { WiiClient, game, TEST_SECRET } from './wii-client.js';
 import { StationTelemetry } from '../src/telemetry.js';
 import { telemetryDatagram, statusPayload, crashPayload } from './telemetry.test.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
+import { RecordingArchive } from './archive-stub.js';
 
 const nullAudit: AuditSink = { record() {} };
 
@@ -29,6 +30,7 @@ test('status page', async (t) => {
     state,
     startgg,
     audit: nullAudit,
+    archive: new RecordingArchive(),
     streamStation: 1,
     streamId: 1358079,
     secret: TEST_SECRET,
@@ -51,6 +53,8 @@ test('status page', async (t) => {
     },
     tcp,
     telemetry,
+    archive: { status: () => ({ inProgress: [], recent: [], watches: [] }) },
+    beamers: { status: () => ({ beamers: [], unnamed: 0, bad: 0 }) },
   });
   await status.listen(0, '127.0.0.1');
   const statusUrl = `http://127.0.0.1:${status.address().port}`;

@@ -124,6 +124,12 @@ static struct {
     { 2.0f, 446.0f, 0.45f },   /* SENDING / SENT / FAILED, bottom left (tuned
                                 * live) */
 };
+/* CMD_GAME_START (2026-10-01): sent on a match's first frame so the relay
+ * can match the replay the station's beamer records and label who played
+ * on which port. Fire and forget: polled during the match only to clear it,
+ * never shown, and dropped if it is still in flight back on the CSS. */
+static bool gs_flight;
+static u32 gs_timeout;
 static bool match_seen;   /* a GS_VS frame ran since the last CSS frame */
 static u32 match_frames;  /* frames since the match scene began */
 static s32 vs_ctx = -1;   /* in-match SIS overlay, per GS_VS visit */
@@ -181,6 +187,10 @@ void lbTourney_SetCurrent(const struct set_entry* set)
     auto_note_frames = 0;
     claim_port = -1;
     memset(claim_hold, 0, sizeof(claim_hold));
+    if (gs_flight) {
+        lbRelayExi_Abort();
+        gs_flight = false;
+    }
     has_set = true;
     css_dirty = true;
 }
@@ -877,6 +887,49 @@ void lbTourney_SSSEnter(void* arg)
     mnStageSel_Scene_OnEnter(arg);
 }
 
+/* CMD_GAME_START on the match's first frame: the players, characters and
+ * costumes are spawned and the stage is in the start rules by now. */
+static void sendGameStart(void)
+{
+    struct game_start_req req;
+    int port;
+    int e1 = entrantPort(1);
+    int e2 = entrantPort(2);
+    memset(&req, 0, sizeof(req));
+    req.set_id = cur_set.set_id;
+    req.game = (u8) (game_count + 1);
+    req.handwarmer = handwarmer ? 1 : 0;
+    req.stage = (u8) gm_GetStartMeleeRules()->stkind;
+    req.e1_port = e1 >= 0 ? (u8) e1 : NO_PORT;
+    req.e2_port = e2 >= 0 ? (u8) e2 : NO_PORT;
+    for (port = 0; port < 4; port++) {
+        if (Player_GetPlayerSlotType(port) == Gm_PKind_Human) {
+            req.chars[port] = (u8) Player_GetPlayerCharacter(port);
+            req.costumes[port] = (u8) Player_GetCostumeId(port);
+        } else {
+            req.chars[port] = NO_PORT;
+            req.costumes[port] = NO_PORT;
+        }
+    }
+    if (pending_cmd == 0 &&
+        lbRelayExi_Request(CMD_GAME_START, &req, sizeof(req)))
+    {
+        gs_flight = true;
+        gs_timeout = 0;
+    }
+}
+
+static void pollGameStart(void)
+{
+    s32 state = lbRelayExi_Poll();
+    if (state < 0 || state == RELAY_DONE || state == RELAY_ERROR ||
+        ++gs_timeout > LB_TOURNEY_TIMEOUT_FRAMES)
+    {
+        lbRelayExi_Abort();
+        gs_flight = false;
+    }
+}
+
 void lbTourney_MatchFrame(void)
 {
     hw_battlefield = false; /* consumed by the SSS enter; never carry it over */
@@ -884,8 +937,12 @@ void lbTourney_MatchFrame(void)
         if (!match_seen) {
             match_seen = true;
             match_frames = 0;
+            sendGameStart();
         } else {
             match_frames++;
+            if (gs_flight) {
+                pollGameStart();
+            }
         }
         if (handwarmer) {
             if (vs_ctx < 0) {
@@ -948,6 +1005,12 @@ void lbTourney_CSSFrame(void)
             match_seen = false;
             handwarmer = false;
             css_dirty = true;
+            if (gs_flight) {
+                /* A game shorter than the round trip: the score report
+                 * below needs the device. */
+                lbRelayExi_Abort();
+                gs_flight = false;
+            }
             if (auto_pending != 0) {
                 char note[40];
                 char tag[TAG_LEN + 1];

@@ -182,6 +182,9 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `chars.ts` | Melee character id to start.gg character id |
 | `stages.ts` | Melee stage id to start.gg stage id |
 | `config.ts` | Loads and validates the config |
+| `beamer.ts` | Finds each station's Slippi Beamer by its announce; reads its replays over HTTP (experimental, [beamer.md](beamer.md)) |
+| `archive.ts` | Matches replays to games and writes one labelled zip per finished set (experimental, [beamer.md](beamer.md)) |
+| `slp.ts`, `zip.ts`, `names.ts` | Replay parsing and display-name stamping, the zip writer, the archive's file-name templates |
 
 ## Wire protocol
 
@@ -200,6 +203,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
+| `CMD_GAME_START` | set id, game number, handwarmer, stage, per-port characters and costumes, entrants' ports | Remembers it for the set archive; no start.gg call (experimental, [beamer.md](beamer.md)) |
 
 The game list is up to five 8-byte `game_result` records: winner slot, both characters, stage, and each player's stocks and costume. Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected.
 

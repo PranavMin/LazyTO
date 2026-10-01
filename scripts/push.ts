@@ -19,6 +19,11 @@
 //   STREAM_STATION      optional, default 1: the station number of the stream Wii.
 //   SET_FORMAT          optional, default startgg: startgg = each set's best-of as
 //                       start.gg has it; top8q = Bo3, Bo5 from the top-8 qualifiers onward.
+//   ARCHIVE_SET_NAME    optional: the file name of each set's replay zip, with
+//                       {fields} (src/names.ts); default
+//                       "{tournament} - {round_short} - {p1} vs {p2}".
+//   ARCHIVE_GAME_NAME   optional: each replay's name inside the zip; default
+//                       "Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}".
 //   TEST_TOURNAMENT     for --test: a full slug, "tournament/<slug>" (an
 //                       unpublished tournament is never listed, so it needs one).
 // Switching modes is a push; the relay's first log line says which tournament it

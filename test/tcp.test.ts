@@ -22,7 +22,8 @@ import {
   entrant,
   type FakeSet,
 } from './fake-startgg.js';
-import { WiiClient, rawRequest, game, TEST_SECRET } from './wii-client.js';
+import { WiiClient, rawRequest, game, gameStartReq, TEST_SECRET } from './wii-client.js';
+import { RecordingArchive } from './archive-stub.js';
 
 const STREAM_STATION = 1;
 const STREAM_ID = 1358079;
@@ -53,11 +54,13 @@ async function setup(
   await cache.refresh();
   const state = new StationState();
   const audit = new ArrayAudit();
+  const archive = new RecordingArchive();
   const server = new RelayTcpServer({
     cache,
     state,
     startgg,
     audit,
+    archive,
     streamStation: STREAM_STATION,
     streamId: STREAM_ID,
     secret: TEST_SECRET,
@@ -66,6 +69,7 @@ async function setup(
   const port = server.address().port;
   return {
     fake,
+    archive,
     startgg,
     cache,
     state,
@@ -544,4 +548,25 @@ test('the right secret goes through (every other test here uses it)', async () =
   } finally {
     await env.close();
   }
+});
+
+// ---- CMD_GAME_START on the wire ----
+
+test("CMD_GAME_START reaches the archive for the station's own set only", async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  const wii = env.wii(3);
+  assert.equal((await wii.startSet(107949994)).resp.status, RelayStatus.ST_OK);
+  const ok = await wii.gameStart(gameStartReq(107949994, 1, { e1: 2, e2: 0, c1: 9, c2: 2 }));
+  assert.equal(ok.resp.status, RelayStatus.ST_OK);
+  assert.equal(ok.resp.msg, 'game 1');
+  assert.equal(ok.hdr.cmd, RelayCmd.CMD_GAME_START);
+  const other = await env
+    .wii(4)
+    .gameStart(gameStartReq(107949994, 1, { e1: 2, e2: 0, c1: 9, c2: 2 }));
+  assert.equal(other.resp.status, RelayStatus.ST_SET_NOT_FOUND);
+  assert.deepEqual(
+    env.archive.calls.map((c) => c.hook),
+    ['setStarted', 'gameStarted'],
+  );
 });

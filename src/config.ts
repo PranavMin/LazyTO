@@ -16,9 +16,16 @@
 // and startggEndpoint, the GraphQL URL -- https://api.start.gg/gql/alpha in
 // production, the in-process fake (test/fake-startgg.ts) when the built
 // relay is exercised on a dev machine. Same reasoning: explicit, not hidden.
+//
+// The set archive (archive.ts, 2026-10-01): archiveDir is where the zips go,
+// archiveSetName and archiveGameName are the file-name templates (names.ts
+// lists their {fields}; an unknown field is a config error), and
+// beamerHttpPort is the port the stations' beamers serve replays on -- 80 on
+// a real beamer, another port for scripts/fake-beamer.ts on a dev machine.
 
 import { readFileSync } from 'node:fs';
 import { SET_FORMATS, type SetFormat } from './format.js';
+import { GAME_FIELDS, SET_FIELDS, unknownFields } from './names.js';
 
 export interface Config {
   startggEndpoint: string; // GraphQL URL, http(s)
@@ -33,6 +40,10 @@ export interface Config {
   tcpPort: number;
   httpPort: number;
   auditDir: string;
+  archiveDir: string;
+  archiveSetName: string; // e.g. "{tournament} - {round_short} - {p1} vs {p2}"
+  archiveGameName: string; // e.g. "Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}"
+  beamerHttpPort: number;
 }
 
 const FIELDS = [
@@ -48,6 +59,10 @@ const FIELDS = [
   'tcpPort',
   'httpPort',
   'auditDir',
+  'archiveDir',
+  'archiveSetName',
+  'archiveGameName',
+  'beamerHttpPort',
 ] as const;
 
 export class ConfigError extends Error {
@@ -113,6 +128,10 @@ export function loadConfig(path: string): Config {
     tcpPort,
     httpPort,
     auditDir,
+    archiveDir,
+    archiveSetName,
+    archiveGameName,
+    beamerHttpPort,
   } = obj;
 
   if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
@@ -174,6 +193,28 @@ export function loadConfig(path: string): Config {
   if ('auditDir' in obj && (typeof auditDir !== 'string' || auditDir.length === 0)) {
     problems.push('auditDir must be a non-empty string');
   }
+  if ('archiveDir' in obj && (typeof archiveDir !== 'string' || archiveDir.length === 0)) {
+    problems.push('archiveDir must be a non-empty string');
+  }
+  for (const [name, v, allowed] of [
+    ['archiveSetName', archiveSetName, SET_FIELDS],
+    ['archiveGameName', archiveGameName, [...SET_FIELDS, ...GAME_FIELDS]],
+  ] as const) {
+    if (!(name in obj)) continue;
+    if (typeof v !== 'string' || v.trim().length === 0) {
+      problems.push(`${name} must be a non-empty string`);
+      continue;
+    }
+    const bad = unknownFields(v, allowed);
+    if (bad.length > 0) {
+      problems.push(
+        `${name} has unknown field(s) ${bad.map((b) => `{${b}}`).join(', ')}; known: ${allowed.map((a) => `{${a}}`).join(' ')}`,
+      );
+    }
+  }
+  if ('beamerHttpPort' in obj && (!isPositiveInt(beamerHttpPort) || beamerHttpPort > 65535)) {
+    problems.push('beamerHttpPort must be an integer in 1..65535 (80 for a real beamer)');
+  }
 
   if (problems.length > 0) throw new ConfigError(problems);
 
@@ -190,5 +231,9 @@ export function loadConfig(path: string): Config {
     tcpPort: tcpPort as number,
     httpPort: httpPort as number,
     auditDir: auditDir as string,
+    archiveDir: archiveDir as string,
+    archiveSetName: archiveSetName as string,
+    archiveGameName: archiveGameName as string,
+    beamerHttpPort: beamerHttpPort as number,
   };
 }

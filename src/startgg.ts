@@ -48,10 +48,19 @@ export interface UpstreamSet {
   round: number;
   fullRoundText: string;
   totalGames: number;
-  phaseGroup: { phase: { phaseOrder: number } }; // phases number their rounds from 1 again (format.ts)
   slots: { entrant: { id: number; name: string } | null }[];
   games: { orderNum: number; winnerId: number }[] | null;
   stream: { id: number } | null;
+  /** The pool: its phase's phaseOrder for format.ts (phases number their rounds from 1 again), the rest for the set archive's context.json (archive.ts). */
+  phaseGroup: UpstreamPhaseGroup;
+}
+
+export interface UpstreamPhaseGroup {
+  id: number;
+  displayIdentifier: string;
+  bracketType: string | null; // "DOUBLE_ELIMINATION", ...
+  wave: { id: number } | null;
+  phase: { id: number; name: string; groupCount: number | null; phaseOrder: number };
 }
 
 /** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
@@ -67,7 +76,15 @@ export interface TournamentDetail {
   id: number;
   name: string;
   slug: string;
-  events: { id: number; name: string; type: number; videogame: { id: number } | null }[];
+  venueAddress: string | null;
+  events: {
+    id: number;
+    name: string;
+    slug: string;
+    type: number;
+    videogame: { id: number } | null;
+    phases: { id: number }[] | null;
+  }[];
   streams: { id: number; streamName: string }[];
 }
 
@@ -89,7 +106,8 @@ const TOURNAMENT_QUERY = `query Tournament($slug: String!) {
     id
     name
     slug
-    events { id name type videogame { id } }
+    venueAddress
+    events { id name slug type videogame { id } phases { id } }
     streams { id streamName }
   }
 }`;
@@ -106,10 +124,10 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
         round
         fullRoundText
         totalGames
-        phaseGroup { phase { phaseOrder } }
         slots { entrant { id name } }
         games { orderNum winnerId }
         stream { id }
+        phaseGroup { id displayIdentifier bracketType wave { id } phase { id name groupCount phaseOrder } }
       }
     }
   }

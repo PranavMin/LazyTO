@@ -10,6 +10,7 @@
 //   npx tsx scripts/probe.ts --weekly                  the weekly fallback's pick (WEEKLY_NAME_PREFIX)
 //   npx tsx scripts/probe.ts --stages                  Melee's stages with start.gg's ids (source of src/stages.ts)
 //   npx tsx scripts/probe.ts --rounds=<eventId>        every round of an event with its number and best-of (src/format.ts)
+//   npx tsx scripts/probe.ts --sets=<eventId>          the relay's set-cache query for an event (src/startgg.ts getEventSets)
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -220,6 +221,15 @@ async function showWeekly(): Promise<void> {
   );
 }
 
+// --sets=<eventId>: the relay's own event-sets query, as the cache and the set
+// archive (pool, phase) see it. The first three sets in full, then a count.
+async function showSets(eventId: number): Promise<void> {
+  const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
+  const sets = await client.getEventSets(eventId);
+  console.log(JSON.stringify(sets.slice(0, 3), null, 2));
+  console.log(`${sets.length} sets in states 1-2`);
+}
+
 async function main(): Promise<void> {
   const arg = (name: string) =>
     process.argv.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -232,8 +242,10 @@ async function main(): Promise<void> {
   if (process.argv.includes('--stages')) return listStages();
   const ev = arg('--rounds');
   if (ev) return showRounds(ev);
+  const s = arg('--sets');
+  if (s) return showSets(Number(s));
   fail(
-    'usage: npx tsx scripts/probe.ts --mine | --tournament=<slug> | --resolve=<tournament> | --weekly | --stages | --rounds=<eventId>',
+    'usage: npx tsx scripts/probe.ts --mine | --tournament=<slug> | --resolve=<tournament> | --weekly | --stages | --rounds=<eventId> | --sets=<eventId>',
   );
 }
 

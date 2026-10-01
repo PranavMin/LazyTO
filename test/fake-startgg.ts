@@ -49,6 +49,13 @@ export interface FakeSet {
   slots: [FakeEntrant | null, FakeEntrant | null];
   games: FakeGame[];
   stream: { id: number; streamName: string; streamSource: string } | null;
+  phaseGroup?: {
+    id: number;
+    displayIdentifier: string;
+    bracketType: string;
+    wave: null;
+    phase: { id: number; name: string; groupCount: number };
+  };
 }
 
 export interface FakeTournament {
@@ -58,7 +65,15 @@ export interface FakeTournament {
   startAt: number | null; // unix seconds
   id: number;
   name: string;
-  events: { id: number; name: string; type: number; videogame: { id: number } }[];
+  venueAddress?: string;
+  events: {
+    id: number;
+    name: string;
+    slug?: string;
+    type: number;
+    videogame: { id: number };
+    phases?: { id: number }[];
+  }[];
   streams: { id: number; streamName: string }[];
 }
 
@@ -229,12 +244,15 @@ export class FakeStartgg {
       round: set.round,
       fullRoundText: set.fullRoundText,
       totalGames: set.totalGames,
-      phaseGroup: { phase: { phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER } },
       slots: set.slots.map((e) => ({ entrant: e ? { id: e.id, name: e.name } : null })),
       games: set.games.length
         ? set.games.map((g) => ({ id: g.id, orderNum: g.orderNum, winnerId: g.winnerId }))
         : null, // the real API returns null, not [], for a set with no games
       stream: set.stream,
+      phaseGroup: (() => {
+        const pg = set.phaseGroup ?? FIXTURE_PHASE_GROUP;
+        return { ...pg, phase: { ...pg.phase, phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER } };
+      })(),
     };
   }
 
@@ -383,7 +401,12 @@ export class FakeStartgg {
       id: t.id,
       name: t.name,
       slug: t.slug,
-      events: t.events,
+      venueAddress: t.venueAddress ?? null,
+      events: t.events.map((e) => ({
+        slug: `${t.slug}/event/${e.name.toLowerCase().replace(/\s+/g, '-')}`,
+        phases: [{ id: 1700 }],
+        ...e,
+      })),
       streams: t.streams,
     };
     return { status: 200, body: JSON.stringify({ data: { tournament: body } }) };
@@ -412,6 +435,14 @@ export class FakeStartgg {
 
 export const FIXTURE_EVENT_ID = 1613010;
 export const FIXTURE_PHASE_ORDER = 2; // the Bracket phase's phaseOrder on the real test event
+/** Every fixture set's pool unless a test gives one. */
+export const FIXTURE_PHASE_GROUP = {
+  id: 2938001,
+  displayIdentifier: '1',
+  bracketType: 'DOUBLE_ELIMINATION',
+  wave: null,
+  phase: { id: 1700, name: 'Bracket', groupCount: 2, phaseOrder: FIXTURE_PHASE_ORDER },
+};
 export const FIXTURE_TOKEN = 'test-token';
 
 const TAGS = [

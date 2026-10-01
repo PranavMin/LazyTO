@@ -30,6 +30,8 @@ RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >= sizeof(struct start_set_req),
 RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >=
                         sizeof(struct abandon_set_req),
                     lb_req_fits_abandon_set);
+RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >= sizeof(struct game_start_req),
+                    lb_req_fits_game_start);
 RELAY_STATIC_ASSERT((LB_RELAY_EXI_BUF_SIZE % 32) == 0, lb_resp_dma_multiple);
 
 static struct lbRelayExi_Req req_buf;

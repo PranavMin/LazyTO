@@ -19,6 +19,8 @@ import { StationTelemetry } from './telemetry.js';
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BEACON_PORT, BEACON_INTERVAL_MS } from '../generated/wire.js';
+import { ANNOUNCE_GROUP, ANNOUNCE_PORT, BeamerDirectory } from './beamer.js';
+import { SetArchive } from './archive.js';
 
 async function main(): Promise<void> {
   const configPath = process.env.CONFIG;
@@ -48,12 +50,32 @@ async function main(): Promise<void> {
     }
   }
 
+  // The set archive (archive.ts): each station's beamer is found by its own
+  // announce; finished sets become zips in archiveDir.
+  let archive: SetArchive | null = null;
+  const beamers = new BeamerDirectory({
+    port: ANNOUNCE_PORT,
+    onAnnounce: (e) => archive?.onAnnounce(e.station),
+  });
+  await beamers.start();
+  archive = new SetArchive({
+    dir: config.archiveDir,
+    setTemplate: config.archiveSetName,
+    gameTemplate: config.archiveGameName,
+    beamerHttpPort: config.beamerHttpPort,
+    beamers,
+    event: ev,
+    audit,
+  });
+  archive.start();
+
   cache.start();
   const tcp = new RelayTcpServer({
     cache,
     state,
     startgg,
     audit,
+    archive,
     streamStation: config.streamStation,
     streamId: ev.streamId,
     secret: config.secret,
@@ -89,6 +111,8 @@ async function main(): Promise<void> {
     beacon,
     tcp,
     telemetry,
+    archive,
+    beamers,
   });
   await status.listen(config.httpPort);
 
@@ -101,11 +125,21 @@ async function main(): Promise<void> {
     `beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`,
   );
   console.log(`telemetry: udp :${telemetry.address().port} (Wii kernel logs and module status)`);
+  console.log(
+    `beamers: announces on ${ANNOUNCE_GROUP}:${ANNOUNCE_PORT}, replays from :${config.beamerHttpPort}, set archives in ${config.archiveDir}`,
+  );
 
   const shutdown = async (signal: string) => {
     console.log(`${signal}: shutting down`);
     cache.stop();
-    await Promise.all([beacon.stop(), telemetry.stop(), tcp.close(), status.close()]);
+    archive?.stop();
+    await Promise.all([
+      beacon.stop(),
+      telemetry.stop(),
+      beamers.stop(),
+      tcp.close(),
+      status.close(),
+    ]);
     audit.record({ type: 'shutdown', signal });
     audit.close();
     process.exit(0);

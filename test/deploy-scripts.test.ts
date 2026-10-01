@@ -465,7 +465,17 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
     tcpPort: 29470,
     httpPort: 29473,
     auditDir: '/var/lib/lazyto',
+    archiveDir: '/var/lib/lazyto/archive',
+    archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
+    archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+    beamerHttpPort: 80,
   });
+  const named = relayConfigFromEnv(
+    { ...ENV, ARCHIVE_SET_NAME: '{p1} vs {p2}', ARCHIVE_GAME_NAME: 'G{game}' },
+    PO,
+  );
+  assert.equal(named.archiveSetName, '{p1} vs {p2}');
+  assert.equal(named.archiveGameName, 'G{game}');
   const t = relayConfigFromEnv(
     { ...ENV, STREAM_STATION: '3', SET_FORMAT: 'top8q' },
     { ...PO, test: true },

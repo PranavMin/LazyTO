@@ -63,8 +63,12 @@ test('the test tournament resolves to its singles event and the LazyTOStream str
       foundBy: 'full slug',
       tournamentName: 'LazyTO Test Tournament',
       tournamentSlug: 'tournament/lazyto-test',
+      tournamentLocation: '',
       eventId: FIXTURE_EVENT_ID,
       eventName: 'Melee Singles! (7:30 Start)',
+      eventSlug: 'tournament/lazyto-test/event/melee-singles!-(7:30-start)',
+      eventHasSiblings: true,
+      eventPhaseCount: 1,
       streamId: FIXTURE_STREAM_ID,
       streamName: 'LazyTOStream',
     });

@@ -37,23 +37,33 @@ typedef unsigned long uint32_t;
 #define RELAY_MAGIC_0 'M'
 #define RELAY_MAGIC_1 'T'
 
-#define MAX_GAMES           5  /* games per set (best of 5) */
-#define MAX_SETS            56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
-#define MSG_LEN             30  /* human-readable status text in relay_resp */
-#define ROUND_LEN           24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
-#define TAG_LEN             16  /* player tag */
-#define BEACON_PORT         29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address) */
-#define BEACON_INTERVAL_MS  2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
-#define SECRET_LEN          16  /* relay shared secret, printable ASCII, NUL-padded (decisions.md R16) */
-#define AUTH_MAGIC_0        77  /* 'M', first byte of relay_auth */
-#define AUTH_MAGIC_1        75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
-#define TELEMETRY_PORT      29472  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
-#define TELEMETRY_MAGIC_1   76  /* 'L', second byte of telemetry_hdr ('M','L') */
-#define TELEMETRY_TEXT_MAX  480  /* most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame */
-#define TELEMETRY_STATUS_MS 5000  /* a station sends a TM_STATUS datagram at least this often once it knows the relay */
-#define CRASH_MAILBOX_PPC   0xD3003480  /* PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin. */
-#define CRASH_MAGIC         1297367890  /* 'MTCR', first word of crash_mailbox */
-#define CRASH_STACK_DEPTH   8  /* LR saves walked up the crashed stack in crash_report */
+#define MAX_GAMES              5  /* games per set (best of 5) */
+#define MAX_SETS               56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
+#define MSG_LEN                30  /* human-readable status text in relay_resp */
+#define ROUND_LEN              24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
+#define TAG_LEN                16  /* player tag */
+#define BEACON_PORT            29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_INTERVAL_MS     2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
+#define SECRET_LEN             16  /* relay shared secret, printable ASCII, NUL-padded (decisions.md R16) */
+#define AUTH_MAGIC_0           77  /* 'M', first byte of relay_auth */
+#define AUTH_MAGIC_1           75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
+#define TELEMETRY_PORT         29472  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
+#define TELEMETRY_MAGIC_1      76  /* 'L', second byte of telemetry_hdr ('M','L') */
+#define TELEMETRY_TEXT_MAX     480  /* most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame */
+#define TELEMETRY_STATUS_MS    5000  /* a station sends a TM_STATUS datagram at least this often once it knows the relay */
+#define CRASH_MAILBOX_PPC      0xD3003480  /* PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin. */
+#define CRASH_MAGIC            1297367890  /* 'MTCR', first word of crash_mailbox */
+#define CRASH_STACK_DEPTH      8  /* LR saves walked up the crashed stack in crash_report */
+#define NO_PORT                255  /* game_start_req: no port (nobody holds the L + R claim) or no human player on that port */
+#define BEAMER_SECTOR_SIZE     512  /* sector size of the beamer mailbox (the beamer reports its SD card's 512-byte sectors) */
+#define BEAMER_MB_SECTORS      16  /* sectors in the beamer mailbox window, which starts at the end of the replay partition (LBA = partition end + offset) */
+#define BEAMER_MB_HELLO        0  /* mailbox sector of beamer_hello (beamer to Wii) */
+#define BEAMER_MB_REQ          1  /* mailbox sector of the request: beamer_req_hdr + relay_auth + relay_hdr + payload (Wii to beamer) */
+#define BEAMER_MB_RESP         2  /* first mailbox sector of the response: beamer_resp_hdr + the relay's reply (beamer to Wii) */
+#define BEAMER_MB_RESP_SECTORS 8  /* sectors the response spans: 4096 - 12 = 4084 reply bytes, the game's poll buffer after exi_poll_hdr */
+#define BEAMER_MB_TELE         10  /* first mailbox sector of a telemetry datagram: beamer_tele_hdr + relay_auth + telemetry_hdr + payload (Wii to beamer) */
+#define BEAMER_MB_TELE_SECTORS 2  /* sectors a telemetry datagram spans (relay_auth 20 + telemetry_hdr 16 + TELEMETRY_TEXT_MAX 480 does not fit one) */
+#define BEAMER_MB_VERSION      1  /* mailbox layout version in beamer_hello */
 
 /* request/response command, echoed back in the response header */
 enum relay_cmd {
@@ -62,6 +72,7 @@ enum relay_cmd {
     CMD_REPORT_SCORE = 3,
     CMD_END_SET      = 4,
     CMD_ABANDON_SET  = 5,  /* player-initiated "wrong set"; relay resets it */
+    CMD_GAME_START   = 6,  /* a game of the current set (or a handwarmer) has started; the relay remembers who plays on which port, so it can match and label the replay. Fire and forget: the kiosk does not show the answer */
 };
 
 /* result of a request, first byte of relay_resp */
@@ -88,6 +99,7 @@ enum exi_poll_flags {
     PF_NO_NETWORK  = 1,  /* the host will never have a network: the loader's Network option is off */
     PF_NO_CFG      = 2,  /* no usable sd:/tournament.cfg */
     PF_NO_SECRET   = 4,  /* tournament.cfg has no valid secret= */
+    PF_NO_BEAMER   = 16,  /* tournament.cfg says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello) */
     PF_NET_JOINING = 8,  /* Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it */
 };
 
@@ -110,6 +122,23 @@ enum telemetry_kind {
     TM_LOG    = 1,  /* len bytes of kernel log text, ASCII, lines ending in \n (a line may be split across datagrams) */
     TM_STATUS = 2,  /* one station_status */
     TM_CRASH  = 3,  /* one crash_report: the game took an unhandled exception */
+};
+
+/* beamer_resp_hdr.result: how the beamer's round trip to the relay went */
+enum beamer_result {
+    BR_OK        = 0,  /* the relay's reply follows, len bytes */
+    BR_NO_RELAY  = 1,  /* the beamer has not found the relay (no beacon yet) */
+    BR_NO_WIFI   = 2,  /* the beamer is not on Wi-Fi */
+    BR_CONNECT   = 3,  /* TCP connect to the relay failed */
+    BR_TIMEOUT   = 4,  /* the relay did not answer within the budget */
+    BR_TOO_LARGE = 5,  /* the relay's reply did not fit the mailbox */
+    BR_BAD_REQ   = 6,  /* the request sector was malformed (bad magic or length) */
+};
+
+/* bit flags in beamer_hello.flags */
+enum beamer_flags {
+    BF_WIFI  = 1,  /* joined the Wi-Fi and has an address */
+    BF_RELAY = 2,  /* has heard the relay's beacon; relay_ip and relay_port are valid */
 };
 
 /* what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
@@ -451,6 +480,128 @@ struct abandon_set_req {
 RELAY_STATIC_ASSERT(sizeof(struct abandon_set_req) == 4, abandon_set_req_size);
 RELAY_STATIC_ASSERT(offsetof(struct abandon_set_req, set_id) == 0, abandon_set_req_set_id);
 
+/* CMD_GAME_START request payload: sent by the kiosk on the first frame of a
+ * match while a set is current. Per CSS port (0-3): the external character id
+ * and costume of a human player, NO_PORT for an empty or CPU port. e1_port /
+ * e2_port are the ports of entrant 1 and 2 from the L + R claim, NO_PORT when
+ * nobody has claimed. The relay matches the replay the station's beamer
+ * records next by these ports, characters, costumes and stage.
+ */
+struct game_start_req {
+    uint32_t set_id;
+    uint8_t  game;  /* 1-based number this game gets if it is scored: games scored so far + 1 */
+    uint8_t  handwarmer;  /* 1 = a handwarmer (Z + X), never scored */
+    uint8_t  stage;  /* internal StKind the game is played on */
+    uint8_t  e1_port;  /* CSS port 0-3 of entrant 1; NO_PORT = no claim */
+    uint8_t  e2_port;  /* CSS port 0-3 of entrant 2; NO_PORT = no claim */
+    uint8_t  _pad[3];
+    uint8_t  chars[4];  /* per port: external CharacterKind, NO_PORT = no human player */
+    uint8_t  costumes[4];  /* per port: costume index, NO_PORT = no human player */
+};  /* 20 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct game_start_req) == 20, game_start_req_size);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, set_id) == 0, game_start_req_set_id);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, game) == 4, game_start_req_game);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, handwarmer) == 5, game_start_req_handwarmer);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, stage) == 6, game_start_req_stage);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, e1_port) == 7, game_start_req_e1_port);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, e2_port) == 8, game_start_req_e2_port);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, _pad) == 9, game_start_req__pad);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, chars) == 12, game_start_req_chars);
+RELAY_STATIC_ASSERT(offsetof(struct game_start_req, costumes) == 16, game_start_req_costumes);
+
+/* Beamer mailbox sector BEAMER_MB_HELLO, written by the beamer (a Slippi
+ * Beamer running the LazyTO firmware), read by the Nintendont kernel when
+ * tournament.cfg says transport=beamer. The mailbox is BEAMER_MB_SECTORS
+ * sectors right after the beamer's replay partition, served from the beamer's
+ * RAM: no filesystem covers them on either side. The kernel writes nothing to
+ * the mailbox until this sector carries the magic and BEAMER_MB_VERSION. Not
+ * on the TCP wire.
+ */
+struct beamer_hello {
+    char     magic[8];  /* LAZYTOMB */
+    uint8_t  version;  /* BEAMER_MB_VERSION */
+    uint8_t  flags;  /* beamer_flags bits */
+    uint16_t station;  /* the station number on the beamer's screen (its button); for display */
+    uint32_t relay_ip;  /* relay IPv4 address from the beacon, big-endian u32; 0 = unknown */
+    uint16_t relay_port;  /* relay TCP port; 0 = unknown */
+    uint16_t _pad;
+    uint32_t fw_build;  /* the beamer firmware's LazyTO build number */
+};  /* 24 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct beamer_hello) == 24, beamer_hello_size);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, magic) == 0, beamer_hello_magic);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, version) == 8, beamer_hello_version);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, flags) == 9, beamer_hello_flags);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, station) == 10, beamer_hello_station);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, relay_ip) == 12, beamer_hello_relay_ip);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, relay_port) == 16, beamer_hello_relay_port);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, _pad) == 18, beamer_hello__pad);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_hello, fw_build) == 20, beamer_hello_fw_build);
+
+/* Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes,
+ * exactly what the kernel would send on a TCP connection to the relay
+ * (relay_auth + relay_hdr + payload). The beamer sends those bytes to the
+ * relay once per seq (a repeated write of the same seq, for example a USB
+ * retry, is not sent again) and answers in the response sectors.
+ */
+struct beamer_req_hdr {
+    uint8_t  magic[2];  /* 'M','Q' */
+    uint16_t _pad;
+    uint32_t seq;  /* nonzero; counts up by one per request. The beamer stays powered across Wii reboots and keeps its last response, so whenever the kernel finds the beamer (first valid beamer_hello after boot or a USB change) it starts one past the seq in the response sector (or at 1 if that is 0) */
+    uint16_t len;  /* bytes after this header, at most BEAMER_SECTOR_SIZE - 12 */
+    uint16_t _pad2;
+};  /* 12 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct beamer_req_hdr) == 12, beamer_req_hdr_size);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_req_hdr, magic) == 0, beamer_req_hdr_magic);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_req_hdr, _pad) == 2, beamer_req_hdr__pad);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_req_hdr, seq) == 4, beamer_req_hdr_seq);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_req_hdr, len) == 8, beamer_req_hdr_len);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_req_hdr, _pad2) == 10, beamer_req_hdr__pad2);
+
+/* Start of mailbox sector BEAMER_MB_RESP (beamer to Wii): then len bytes of
+ * the relay's reply (relay_hdr + relay_resp + payload) when result is BR_OK.
+ * Valid for the request whose seq it carries; the kernel polls until seq
+ * matches its request.
+ */
+struct beamer_resp_hdr {
+    uint8_t  magic[2];  /* 'M','R' */
+    uint8_t  result;  /* enum beamer_result */
+    uint8_t  _pad;
+    uint32_t seq;  /* the request's seq; 0 = no response yet */
+    uint16_t len;
+    uint16_t _pad2;
+};  /* 12 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct beamer_resp_hdr) == 12, beamer_resp_hdr_size);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, magic) == 0, beamer_resp_hdr_magic);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, result) == 2, beamer_resp_hdr_result);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, _pad) == 3, beamer_resp_hdr__pad);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, seq) == 4, beamer_resp_hdr_seq);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, len) == 8, beamer_resp_hdr_len);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_resp_hdr, _pad2) == 10, beamer_resp_hdr__pad2);
+
+/* Start of mailbox sector BEAMER_MB_TELE (Wii to beamer): then len bytes of
+ * one telemetry datagram (relay_auth + telemetry_hdr + payload), which the
+ * beamer sends to the relay's TELEMETRY_PORT once per seq. Unanswered, like
+ * the UDP datagram it replaces.
+ */
+struct beamer_tele_hdr {
+    uint8_t  magic[2];  /* 'M','E' */
+    uint16_t _pad;
+    uint32_t seq;
+    uint16_t len;
+    uint16_t _pad2;
+};  /* 12 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct beamer_tele_hdr) == 12, beamer_tele_hdr_size);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_tele_hdr, magic) == 0, beamer_tele_hdr_magic);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_tele_hdr, _pad) == 2, beamer_tele_hdr__pad);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_tele_hdr, seq) == 4, beamer_tele_hdr_seq);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_tele_hdr, len) == 8, beamer_tele_hdr_len);
+RELAY_STATIC_ASSERT(offsetof(struct beamer_tele_hdr, _pad2) == 10, beamer_tele_hdr__pad2);
+
 /* Message map: payload struct after relay_hdr (request) and after
  * relay_resp (ST_OK response).
  *
@@ -459,6 +610,7 @@ RELAY_STATIC_ASSERT(offsetof(struct abandon_set_req, set_id) == 0, abandon_set_r
  *   CMD_REPORT_SCORE  req: report_score_req   resp payload: -
  *   CMD_END_SET       req: end_set_req        resp payload: -
  *   CMD_ABANDON_SET   req: abandon_set_req    resp payload: -
+ *   CMD_GAME_START    req: game_start_req     resp payload: -
  */
 
 #endif /* RELAY_PROTO_H */

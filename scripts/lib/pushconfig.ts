@@ -21,6 +21,10 @@ export interface RelayConfig {
   tcpPort: number;
   httpPort: number;
   auditDir: string;
+  archiveDir: string;
+  archiveSetName: string;
+  archiveGameName: string;
+  beamerHttpPort: number;
 }
 
 export interface PushOptions {
@@ -74,6 +78,11 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
     tcpPort: opts.tcpPort,
     httpPort: opts.httpPort,
     auditDir: '/var/lib/lazyto',
+    archiveDir: '/var/lib/lazyto/archive',
+    archiveSetName: env.ARCHIVE_SET_NAME || '{tournament} - {round_short} - {p1} vs {p2}',
+    archiveGameName:
+      env.ARCHIVE_GAME_NAME || 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+    beamerHttpPort: 80,
   };
 }
 

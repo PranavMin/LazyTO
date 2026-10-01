@@ -19,6 +19,10 @@ const VALID = {
   tcpPort: 29470,
   httpPort: 29473,
   auditDir: '/var/lib/lazyto',
+  archiveDir: '/var/lib/lazyto/archive',
+  archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
+  archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+  beamerHttpPort: 80,
 };
 
 let dir: string;
@@ -248,4 +252,23 @@ test('scripts/push.ts writes exactly the validated fields', () => {
   );
   assert.deepEqual(Object.keys(written).sort(), Object.keys(VALID).sort());
   assert.doesNotThrow(() => loadConfig(writeConfig(JSON.stringify(written))));
+});
+
+test('archive name templates: unknown fields are named, empty ones refused', () => {
+  expectProblems(
+    JSON.stringify({ ...VALID, archiveSetName: '{tournament} {stage}' }),
+    'archiveSetName has unknown field(s) {stage}',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, archiveGameName: 'G{game} {p3}' }),
+    'archiveGameName has unknown field(s) {p3}',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, archiveSetName: '  ' }),
+    'archiveSetName must be a non-empty string',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, beamerHttpPort: 0 }),
+    'beamerHttpPort must be an integer',
+  );
 });

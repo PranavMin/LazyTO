@@ -27,6 +27,16 @@ export const TELEMETRY_STATUS_MS = 5000; // a station sends a TM_STATUS datagram
 export const CRASH_MAILBOX_PPC = 3540006016; // PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin.
 export const CRASH_MAGIC = 1297367890; // 'MTCR', first word of crash_mailbox
 export const CRASH_STACK_DEPTH = 8; // LR saves walked up the crashed stack in crash_report
+export const NO_PORT = 255; // game_start_req: no port (nobody holds the L + R claim) or no human player on that port
+export const BEAMER_SECTOR_SIZE = 512; // sector size of the beamer mailbox (the beamer reports its SD card's 512-byte sectors)
+export const BEAMER_MB_SECTORS = 16; // sectors in the beamer mailbox window, which starts at the end of the replay partition (LBA = partition end + offset)
+export const BEAMER_MB_HELLO = 0; // mailbox sector of beamer_hello (beamer to Wii)
+export const BEAMER_MB_REQ = 1; // mailbox sector of the request: beamer_req_hdr + relay_auth + relay_hdr + payload (Wii to beamer)
+export const BEAMER_MB_RESP = 2; // first mailbox sector of the response: beamer_resp_hdr + the relay's reply (beamer to Wii)
+export const BEAMER_MB_RESP_SECTORS = 8; // sectors the response spans: 4096 - 12 = 4084 reply bytes, the game's poll buffer after exi_poll_hdr
+export const BEAMER_MB_TELE = 10; // first mailbox sector of a telemetry datagram: beamer_tele_hdr + relay_auth + telemetry_hdr + payload (Wii to beamer)
+export const BEAMER_MB_TELE_SECTORS = 2; // sectors a telemetry datagram spans (relay_auth 20 + telemetry_hdr 16 + TELEMETRY_TEXT_MAX 480 does not fit one)
+export const BEAMER_MB_VERSION = 1; // mailbox layout version in beamer_hello
 
 /** request/response command, echoed back in the response header */
 export enum RelayCmd {
@@ -35,6 +45,7 @@ export enum RelayCmd {
   CMD_REPORT_SCORE = 3,
   CMD_END_SET = 4,
   CMD_ABANDON_SET = 5, // player-initiated "wrong set"; relay resets it
+  CMD_GAME_START = 6, // a game of the current set (or a handwarmer) has started; the relay remembers who plays on which port, so it can match and label the replay. Fire and forget: the kiosk does not show the answer
 }
 
 /** result of a request, first byte of relay_resp */
@@ -61,6 +72,7 @@ export enum ExiPollFlags {
   PF_NO_NETWORK = 1, // the host will never have a network: the loader's Network option is off
   PF_NO_CFG = 2, // no usable sd:/tournament.cfg
   PF_NO_SECRET = 4, // tournament.cfg has no valid secret=
+  PF_NO_BEAMER = 16, // tournament.cfg says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello)
   PF_NET_JOINING = 8, // Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it
 }
 
@@ -83,6 +95,23 @@ export enum TelemetryKind {
   TM_LOG = 1, // len bytes of kernel log text, ASCII, lines ending in \n (a line may be split across datagrams)
   TM_STATUS = 2, // one station_status
   TM_CRASH = 3, // one crash_report: the game took an unhandled exception
+}
+
+/** beamer_resp_hdr.result: how the beamer's round trip to the relay went */
+export enum BeamerResult {
+  BR_OK = 0, // the relay's reply follows, len bytes
+  BR_NO_RELAY = 1, // the beamer has not found the relay (no beacon yet)
+  BR_NO_WIFI = 2, // the beamer is not on Wi-Fi
+  BR_CONNECT = 3, // TCP connect to the relay failed
+  BR_TIMEOUT = 4, // the relay did not answer within the budget
+  BR_TOO_LARGE = 5, // the relay's reply did not fit the mailbox
+  BR_BAD_REQ = 6, // the request sector was malformed (bad magic or length)
+}
+
+/** bit flags in beamer_hello.flags */
+export enum BeamerFlags {
+  BF_WIFI = 1, // joined the Wi-Fi and has an address
+  BF_RELAY = 2, // has heard the relay's beacon; relay_ip and relay_port are valid
 }
 
 /** what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
@@ -713,6 +742,186 @@ export function decodeAbandonSetReq(buf: Uint8Array, off = 0): AbandonSetReq {
 }
 
 
+// ---- game_start_req (20 bytes) ----
+
+/** CMD_GAME_START request payload: sent by the kiosk on the first frame of a match while a set is current. Per CSS port (0-3): the external character id and costume of a human player, NO_PORT for an empty or CPU port. e1_port / e2_port are the ports of entrant 1 and 2 from the L + R claim, NO_PORT when nobody has claimed. The relay matches the replay the station's beamer records next by these ports, characters, costumes and stage. */
+export interface GameStartReq {
+  set_id: number;
+  game: number; // 1-based number this game gets if it is scored: games scored so far + 1
+  handwarmer: number; // 1 = a handwarmer (Z + X), never scored
+  stage: number; // internal StKind the game is played on
+  e1_port: number; // CSS port 0-3 of entrant 1; NO_PORT = no claim
+  e2_port: number; // CSS port 0-3 of entrant 2; NO_PORT = no claim
+  chars: Uint8Array; // per port: external CharacterKind, NO_PORT = no human player
+  costumes: Uint8Array; // per port: costume index, NO_PORT = no human player
+}
+export const GAME_START_REQ_SIZE = 20;
+
+export function encodeGameStartReq(v: GameStartReq): Uint8Array {
+  const bytes = new Uint8Array(GAME_START_REQ_SIZE);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint32(0, v.set_id, false);
+  dv.setUint8(4, v.game);
+  dv.setUint8(5, v.handwarmer);
+  dv.setUint8(6, v.stage);
+  dv.setUint8(7, v.e1_port);
+  dv.setUint8(8, v.e2_port);
+  bytes.set(v.chars.subarray(0, 4), 12);
+  bytes.set(v.costumes.subarray(0, 4), 16);
+  return bytes;
+}
+
+export function decodeGameStartReq(buf: Uint8Array, off = 0): GameStartReq {
+  checkLen(buf, off, GAME_START_REQ_SIZE, 'game_start_req');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    set_id: dv.getUint32(off + 0, false),
+    game: dv.getUint8(off + 4),
+    handwarmer: dv.getUint8(off + 5),
+    stage: dv.getUint8(off + 6),
+    e1_port: dv.getUint8(off + 7),
+    e2_port: dv.getUint8(off + 8),
+    chars: buf.slice(off + 12, off + 12 + 4),
+    costumes: buf.slice(off + 16, off + 16 + 4),
+  };
+}
+
+
+// ---- beamer_hello (24 bytes) ----
+
+/** Beamer mailbox sector BEAMER_MB_HELLO, written by the beamer (a Slippi Beamer running the LazyTO firmware), read by the Nintendont kernel when tournament.cfg says transport=beamer. The mailbox is BEAMER_MB_SECTORS sectors right after the beamer's replay partition, served from the beamer's RAM: no filesystem covers them on either side. The kernel writes nothing to the mailbox until this sector carries the magic and BEAMER_MB_VERSION. Not on the TCP wire. */
+export interface BeamerHello {
+  magic: string; // LAZYTOMB
+  version: number; // BEAMER_MB_VERSION
+  flags: number; // beamer_flags bits
+  station: number; // the station number on the beamer's screen (its button); for display
+  relay_ip: number; // relay IPv4 address from the beacon, big-endian u32; 0 = unknown
+  relay_port: number; // relay TCP port; 0 = unknown
+  fw_build: number; // the beamer firmware's LazyTO build number
+}
+export const BEAMER_HELLO_SIZE = 24;
+
+export function encodeBeamerHello(v: BeamerHello): Uint8Array {
+  const bytes = new Uint8Array(BEAMER_HELLO_SIZE);
+  const dv = new DataView(bytes.buffer);
+  putAscii(bytes, 0, 8, v.magic);
+  dv.setUint8(8, v.version);
+  dv.setUint8(9, v.flags);
+  dv.setUint16(10, v.station, false);
+  dv.setUint32(12, v.relay_ip, false);
+  dv.setUint16(16, v.relay_port, false);
+  dv.setUint32(20, v.fw_build, false);
+  return bytes;
+}
+
+export function decodeBeamerHello(buf: Uint8Array, off = 0): BeamerHello {
+  checkLen(buf, off, BEAMER_HELLO_SIZE, 'beamer_hello');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: getAscii(buf, off + 0, 8),
+    version: dv.getUint8(off + 8),
+    flags: dv.getUint8(off + 9),
+    station: dv.getUint16(off + 10, false),
+    relay_ip: dv.getUint32(off + 12, false),
+    relay_port: dv.getUint16(off + 16, false),
+    fw_build: dv.getUint32(off + 20, false),
+  };
+}
+
+
+// ---- beamer_req_hdr (12 bytes) ----
+
+/** Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes, exactly what the kernel would send on a TCP connection to the relay (relay_auth + relay_hdr + payload). The beamer sends those bytes to the relay once per seq (a repeated write of the same seq, for example a USB retry, is not sent again) and answers in the response sectors. */
+export interface BeamerReqHdr {
+  magic: Uint8Array; // 'M','Q'
+  seq: number; // nonzero; counts up by one per request. The beamer stays powered across Wii reboots and keeps its last response, so whenever the kernel finds the beamer (first valid beamer_hello after boot or a USB change) it starts one past the seq in the response sector (or at 1 if that is 0)
+  len: number; // bytes after this header, at most BEAMER_SECTOR_SIZE - 12
+}
+export const BEAMER_REQ_HDR_SIZE = 12;
+
+export function encodeBeamerReqHdr(v: BeamerReqHdr): Uint8Array {
+  const bytes = new Uint8Array(BEAMER_REQ_HDR_SIZE);
+  const dv = new DataView(bytes.buffer);
+  bytes.set(v.magic.subarray(0, 2), 0);
+  dv.setUint32(4, v.seq, false);
+  dv.setUint16(8, v.len, false);
+  return bytes;
+}
+
+export function decodeBeamerReqHdr(buf: Uint8Array, off = 0): BeamerReqHdr {
+  checkLen(buf, off, BEAMER_REQ_HDR_SIZE, 'beamer_req_hdr');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: buf.slice(off + 0, off + 0 + 2),
+    seq: dv.getUint32(off + 4, false),
+    len: dv.getUint16(off + 8, false),
+  };
+}
+
+
+// ---- beamer_resp_hdr (12 bytes) ----
+
+/** Start of mailbox sector BEAMER_MB_RESP (beamer to Wii): then len bytes of the relay's reply (relay_hdr + relay_resp + payload) when result is BR_OK. Valid for the request whose seq it carries; the kernel polls until seq matches its request. */
+export interface BeamerRespHdr {
+  magic: Uint8Array; // 'M','R'
+  result: number; // enum beamer_result
+  seq: number; // the request's seq; 0 = no response yet
+  len: number;
+}
+export const BEAMER_RESP_HDR_SIZE = 12;
+
+export function encodeBeamerRespHdr(v: BeamerRespHdr): Uint8Array {
+  const bytes = new Uint8Array(BEAMER_RESP_HDR_SIZE);
+  const dv = new DataView(bytes.buffer);
+  bytes.set(v.magic.subarray(0, 2), 0);
+  dv.setUint8(2, v.result);
+  dv.setUint32(4, v.seq, false);
+  dv.setUint16(8, v.len, false);
+  return bytes;
+}
+
+export function decodeBeamerRespHdr(buf: Uint8Array, off = 0): BeamerRespHdr {
+  checkLen(buf, off, BEAMER_RESP_HDR_SIZE, 'beamer_resp_hdr');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: buf.slice(off + 0, off + 0 + 2),
+    result: dv.getUint8(off + 2),
+    seq: dv.getUint32(off + 4, false),
+    len: dv.getUint16(off + 8, false),
+  };
+}
+
+
+// ---- beamer_tele_hdr (12 bytes) ----
+
+/** Start of mailbox sector BEAMER_MB_TELE (Wii to beamer): then len bytes of one telemetry datagram (relay_auth + telemetry_hdr + payload), which the beamer sends to the relay's TELEMETRY_PORT once per seq. Unanswered, like the UDP datagram it replaces. */
+export interface BeamerTeleHdr {
+  magic: Uint8Array; // 'M','E'
+  seq: number;
+  len: number;
+}
+export const BEAMER_TELE_HDR_SIZE = 12;
+
+export function encodeBeamerTeleHdr(v: BeamerTeleHdr): Uint8Array {
+  const bytes = new Uint8Array(BEAMER_TELE_HDR_SIZE);
+  const dv = new DataView(bytes.buffer);
+  bytes.set(v.magic.subarray(0, 2), 0);
+  dv.setUint32(4, v.seq, false);
+  dv.setUint16(8, v.len, false);
+  return bytes;
+}
+
+export function decodeBeamerTeleHdr(buf: Uint8Array, off = 0): BeamerTeleHdr {
+  checkLen(buf, off, BEAMER_TELE_HDR_SIZE, 'beamer_tele_hdr');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: buf.slice(off + 0, off + 0 + 2),
+    seq: dv.getUint32(off + 4, false),
+    len: dv.getUint16(off + 8, false),
+  };
+}
+
+
 // ---- message map (architecture.md): request struct after relay_hdr,
 // ---- payload struct after relay_resp in an ST_OK response ----
 
@@ -721,6 +930,7 @@ export const REQUEST_DECODERS = {
   [RelayCmd.CMD_REPORT_SCORE]: decodeReportScoreReq,
   [RelayCmd.CMD_END_SET]: decodeEndSetReq,
   [RelayCmd.CMD_ABANDON_SET]: decodeAbandonSetReq,
+  [RelayCmd.CMD_GAME_START]: decodeGameStartReq,
 } as const;
 
 export const RESPONSE_PAYLOAD_DECODERS = {

@@ -29,6 +29,9 @@ import {
   type TelemetryRefused,
 } from './telemetry.js';
 import { ModuleState } from '../generated/wire.js';
+import type { SetArchive } from './archive.js';
+import type { BeamerDirectory } from './beamer.js';
+import { basename } from 'node:path';
 
 export interface StatusDeps {
   state: StationState;
@@ -48,6 +51,9 @@ export interface StatusDeps {
     refused(): TelemetryRefused | null;
     beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null;
   };
+  /** The set archive (archive.ts) and the beamers it reads replays from (beamer.ts). */
+  archive: Pick<SetArchive, 'status'>;
+  beamers: Pick<BeamerDirectory, 'status'>;
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -233,6 +239,41 @@ export class StatusServer {
       : '';
     const warningLines = cs.warnings.map((w) => `<p class="warn">⚠ ${escapeHtml(w)}</p>`).join('');
 
+    const as = this.deps.archive.status();
+    const bs2 = this.deps.beamers.status();
+    const watch = new Map(as.watches);
+    const beamerRows = bs2.beamers.map(([station, b]) => {
+      const w = watch.get(station);
+      const err = w?.lastError ? `<br><span class="warn">✗ ${escapeHtml(w.lastError)}</span>` : '';
+      return `<tr><td>${station}</td><td>${escapeHtml(b.address)}</td><td>${age(b.lastSeen)} ago</td><td>${w?.downloaded ?? 0} replay(s) pulled${err}</td></tr>`;
+    });
+    if (beamerRows.length === 0) {
+      beamerRows.push(
+        '<tr><td colspan="4" class="muted">no beamer heard yet (each one announces itself when a game starts or ends)</td></tr>',
+      );
+    }
+    const inProgress = as.inProgress
+      .map(
+        (s) =>
+          `set ${s.setId} on station ${s.station}: ${s.bound}/${s.starts} game(s) matched to a replay${s.ended ? ' — ended, writing the archive' : ''}`,
+      )
+      .map((l) => `<p class="muted">${escapeHtml(l)}</p>`)
+      .join('');
+    const recent = as.recent
+      .map((r) => {
+        const what = r.file
+          ? `${escapeHtml(basename(r.file))} (${r.games} game(s))`
+          : `set ${r.setId}: not archived`;
+        const note = r.note
+          ? ` <span class="${r.file && r.missing.length === 0 ? 'muted' : 'warn'}">${escapeHtml(r.note)}</span>`
+          : '';
+        return `<p>${r.file ? '✓' : '✗'} station ${r.station}, ${age(r.at)} ago: ${what}${note}</p>`;
+      })
+      .join('');
+    const odd = bs2.unnamed
+      ? `<p class="warn">⚠ ${bs2.unnamed} announce(s) from a beamer whose name is not "Station N" — set its number with its button.</p>`
+      : '';
+
     return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -270,6 +311,12 @@ ${wiiRows.join('\n')}
 </table></div>
 ${telemetryRefusedLine}
 ${beaconRequestLine}
+<h2>Beamers and set archives</h2>
+<div class="scroll"><table>
+<tr><th>Station</th><th>Beamer</th><th>Last heard</th><th>Replays</th></tr>
+${beamerRows.join('\n')}
+</table></div>
+${odd}${inProgress}${recent || '<p class="muted">no set archived yet</p>'}
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${beaconLine}
 ${refusedLine}

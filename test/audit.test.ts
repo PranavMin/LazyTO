@@ -14,6 +14,7 @@ import { StationState } from '../src/state.js';
 import { StartggClient } from '../src/startgg.js';
 import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
 import { WiiClient, game, TEST_SECRET } from './wii-client.js';
+import { RecordingArchive } from './archive-stub.js';
 
 let dir: string;
 test.before(() => {
@@ -91,6 +92,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
       state,
       startgg,
       audit,
+      archive: new RecordingArchive(),
       streamStation: 1,
       streamId: 1358079,
       secret: TEST_SECRET,
@@ -129,6 +131,7 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
       state,
       startgg,
       audit,
+      archive: new RecordingArchive(),
       streamStation: 1,
       streamId: 1358079,
       secret: TEST_SECRET,

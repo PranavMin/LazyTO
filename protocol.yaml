@@ -74,6 +74,36 @@ constants:
   CRASH_STACK_DEPTH:
     value: 8
     doc: "LR saves walked up the crashed stack in crash_report"
+  NO_PORT:
+    value: 0xFF
+    doc: "game_start_req: no port (nobody holds the L + R claim) or no human player on that port"
+  BEAMER_SECTOR_SIZE:
+    value: 512
+    doc: "sector size of the beamer mailbox (the beamer reports its SD card's 512-byte sectors)"
+  BEAMER_MB_SECTORS:
+    value: 16
+    doc: "sectors in the beamer mailbox window, which starts at the end of the replay partition (LBA = partition end + offset)"
+  BEAMER_MB_HELLO:
+    value: 0
+    doc: "mailbox sector of beamer_hello (beamer to Wii)"
+  BEAMER_MB_REQ:
+    value: 1
+    doc: "mailbox sector of the request: beamer_req_hdr + relay_auth + relay_hdr + payload (Wii to beamer)"
+  BEAMER_MB_RESP:
+    value: 2
+    doc: "first mailbox sector of the response: beamer_resp_hdr + the relay's reply (beamer to Wii)"
+  BEAMER_MB_RESP_SECTORS:
+    value: 8
+    doc: "sectors the response spans: 4096 - 12 = 4084 reply bytes, the game's poll buffer after exi_poll_hdr"
+  BEAMER_MB_TELE:
+    value: 10
+    doc: "first mailbox sector of a telemetry datagram: beamer_tele_hdr + relay_auth + telemetry_hdr + payload (Wii to beamer)"
+  BEAMER_MB_TELE_SECTORS:
+    value: 2
+    doc: "sectors a telemetry datagram spans (relay_auth 20 + telemetry_hdr 16 + TELEMETRY_TEXT_MAX 480 does not fit one)"
+  BEAMER_MB_VERSION:
+    value: 1
+    doc: "mailbox layout version in beamer_hello"
 
 enums:
   relay_cmd:
@@ -84,6 +114,7 @@ enums:
       CMD_REPORT_SCORE: {value: 3}
       CMD_END_SET:      {value: 4}
       CMD_ABANDON_SET:  {value: 5, doc: "player-initiated \"wrong set\"; relay resets it"}
+      CMD_GAME_START:   {value: 6, doc: "a game of the current set (or a handwarmer) has started; the relay remembers who plays on which port, so it can match and label the replay. Fire and forget: the kiosk does not show the answer"}
 
   relay_status:
     doc: "result of a request, first byte of relay_resp"
@@ -115,6 +146,7 @@ enums:
       PF_NO_NETWORK:  {value: 1, doc: "the host will never have a network: the loader's Network option is off"}
       PF_NO_CFG:      {value: 2, doc: "no usable sd:/tournament.cfg"}
       PF_NO_SECRET:   {value: 4, doc: "tournament.cfg has no valid secret="}
+      PF_NO_BEAMER:   {value: 16, doc: "tournament.cfg says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello)"}
       PF_NET_JOINING: {value: 8, doc: "Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it"}
 
   exi_host_opts:
@@ -137,6 +169,23 @@ enums:
       TM_LOG:    {value: 1, doc: "len bytes of kernel log text, ASCII, lines ending in \\n (a line may be split across datagrams)"}
       TM_STATUS: {value: 2, doc: "one station_status"}
       TM_CRASH:  {value: 3, doc: "one crash_report: the game took an unhandled exception"}
+
+  beamer_result:
+    doc: "beamer_resp_hdr.result: how the beamer's round trip to the relay went"
+    values:
+      BR_OK:        {value: 0, doc: "the relay's reply follows, len bytes"}
+      BR_NO_RELAY:  {value: 1, doc: "the beamer has not found the relay (no beacon yet)"}
+      BR_NO_WIFI:   {value: 2, doc: "the beamer is not on Wi-Fi"}
+      BR_CONNECT:   {value: 3, doc: "TCP connect to the relay failed"}
+      BR_TIMEOUT:   {value: 4, doc: "the relay did not answer within the budget"}
+      BR_TOO_LARGE: {value: 5, doc: "the relay's reply did not fit the mailbox"}
+      BR_BAD_REQ:   {value: 6, doc: "the request sector was malformed (bad magic or length)"}
+
+  beamer_flags:
+    doc: "bit flags in beamer_hello.flags"
+    values:
+      BF_WIFI:  {value: 1, doc: "joined the Wi-Fi and has an address"}
+      BF_RELAY: {value: 2, doc: "has heard the relay's beacon; relay_ip and relay_port are valid"}
 
   module_state:
     doc: "what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule)"
@@ -374,6 +423,91 @@ structs:
     fields:
       - {name: set_id, type: u32}
 
+  game_start_req:
+    doc: >-
+      CMD_GAME_START request payload: sent by the kiosk on the first frame of
+      a match while a set is current. Per CSS port (0-3): the external
+      character id and costume of a human player, NO_PORT for an empty or CPU
+      port. e1_port / e2_port are the ports of entrant 1 and 2 from the L + R
+      claim, NO_PORT when nobody has claimed. The relay matches the replay
+      the station's beamer records next by these ports, characters, costumes
+      and stage.
+    size: 20
+    fields:
+      - {name: set_id,     type: u32}
+      - {name: game,       type: u8, doc: "1-based number this game gets if it is scored: games scored so far + 1"}
+      - {name: handwarmer, type: u8, doc: "1 = a handwarmer (Z + X), never scored"}
+      - {name: stage,      type: u8, doc: "internal StKind the game is played on"}
+      - {name: e1_port,    type: u8, doc: "CSS port 0-3 of entrant 1; NO_PORT = no claim"}
+      - {name: e2_port,    type: u8, doc: "CSS port 0-3 of entrant 2; NO_PORT = no claim"}
+      - {name: _pad,       type: u8, array: 3}
+      - {name: chars,      type: u8, array: 4, doc: "per port: external CharacterKind, NO_PORT = no human player"}
+      - {name: costumes,   type: u8, array: 4, doc: "per port: costume index, NO_PORT = no human player"}
+
+  beamer_hello:
+    doc: >-
+      Beamer mailbox sector BEAMER_MB_HELLO, written by the beamer (a Slippi
+      Beamer running the LazyTO firmware), read by the Nintendont kernel when
+      tournament.cfg says transport=beamer. The mailbox is BEAMER_MB_SECTORS
+      sectors right after the beamer's replay partition, served from the
+      beamer's RAM: no filesystem covers them on either side. The kernel
+      writes nothing to the mailbox until this sector carries the magic and
+      BEAMER_MB_VERSION. Not on the TCP wire.
+    size: 24
+    fields:
+      - {name: magic,      type: char, array: 8, doc: "LAZYTOMB"}
+      - {name: version,    type: u8,  doc: "BEAMER_MB_VERSION"}
+      - {name: flags,      type: u8,  doc: "beamer_flags bits"}
+      - {name: station,    type: u16, doc: "the station number on the beamer's screen (its button); for display"}
+      - {name: relay_ip,   type: u32, doc: "relay IPv4 address from the beacon, big-endian u32; 0 = unknown"}
+      - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
+      - {name: _pad,       type: u16}
+      - {name: fw_build,   type: u32, doc: "the beamer firmware's LazyTO build number"}
+
+  beamer_req_hdr:
+    doc: >-
+      Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes,
+      exactly what the kernel would send on a TCP connection to the relay
+      (relay_auth + relay_hdr + payload). The beamer sends those bytes to the
+      relay once per seq (a repeated write of the same seq, for example a USB
+      retry, is not sent again) and answers in the response sectors.
+    size: 12
+    fields:
+      - {name: magic, type: u8, array: 2, doc: "'M','Q'"}
+      - {name: _pad,  type: u16}
+      - {name: seq,   type: u32, doc: "nonzero; counts up by one per request. The beamer stays powered across Wii reboots and keeps its last response, so whenever the kernel finds the beamer (first valid beamer_hello after boot or a USB change) it starts one past the seq in the response sector (or at 1 if that is 0)"}
+      - {name: len,   type: u16, doc: "bytes after this header, at most BEAMER_SECTOR_SIZE - 12"}
+      - {name: _pad2, type: u16}
+
+  beamer_resp_hdr:
+    doc: >-
+      Start of mailbox sector BEAMER_MB_RESP (beamer to Wii): then len bytes of
+      the relay's reply (relay_hdr + relay_resp + payload) when result is
+      BR_OK. Valid for the request whose seq it carries; the kernel polls
+      until seq matches its request.
+    size: 12
+    fields:
+      - {name: magic,  type: u8, array: 2, doc: "'M','R'"}
+      - {name: result, type: u8, doc: "enum beamer_result"}
+      - {name: _pad,   type: u8}
+      - {name: seq,    type: u32, doc: "the request's seq; 0 = no response yet"}
+      - {name: len,    type: u16}
+      - {name: _pad2,  type: u16}
+
+  beamer_tele_hdr:
+    doc: >-
+      Start of mailbox sector BEAMER_MB_TELE (Wii to beamer): then len bytes of
+      one telemetry datagram (relay_auth + telemetry_hdr + payload), which the
+      beamer sends to the relay's TELEMETRY_PORT once per seq. Unanswered,
+      like the UDP datagram it replaces.
+    size: 12
+    fields:
+      - {name: magic, type: u8, array: 2, doc: "'M','E'"}
+      - {name: _pad,  type: u16}
+      - {name: seq,   type: u32}
+      - {name: len,   type: u16}
+      - {name: _pad2, type: u16}
+
 # Which struct follows relay_hdr in a request, and which struct (if any)
 # follows relay_resp in an ST_OK response.
 messages:
@@ -382,3 +516,4 @@ messages:
   CMD_REPORT_SCORE: {request: report_score_req, response_payload: null}
   CMD_END_SET:      {request: end_set_req,      response_payload: null}
   CMD_ABANDON_SET:  {request: abandon_set_req,  response_payload: null}
+  CMD_GAME_START:   {request: game_start_req,   response_payload: null}
