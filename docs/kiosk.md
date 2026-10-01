@@ -34,6 +34,33 @@ Prerequisite: the `melee/` submodule (the unmodified decomp) set up once: your v
 delete them to force a clean rebuild. The output ends with the applied patch list, the guard
 check and the file size.
 
+The build runs on Windows only: the decomp's compilers and `powerpc-eabi-nm` are `.exe` files,
+and the wordmark generator uses GDI+.
+
+## Developer flags
+
+Three compile-time switches exist for development runs with no controller, such as a Dolphin
+session capturing screenshots. Each is a `#define` that must stay `0` in a shipped build;
+`deploy/sync-card.ps1` refuses to write a card while any is non-zero. Set one to `1`, rebuild,
+and set it back before committing.
+
+| Flag | File | With `1` |
+|---|---|---|
+| `TM_DEMO_AUTOSTART` | `src/melee/mn/mntourney.c` | the set list auto-confirms and starts its first set two seconds after it is up (`2`: only opens the confirm pane) |
+| `LB_TOURNEY_DEMO_CLAIM` | `src/melee/lb/lbtourney.c` | fakes an L + R claim by port 3 after 150 CSS frames and treats port 1 as human |
+| `LB_TOURNEY_TRIGGER_READOUT` | `src/melee/lb/lbtourney.c` | draws every port's raw L/R trigger values bottom-left, to pick the claim threshold from a real pad |
+
+## Generated files
+
+Never edit these by hand:
+
+| File | Generator |
+|---|---|
+| `kiosk/include/relay_proto.h` | `python tools/gen_protocol.py` from `protocol.yaml` (checked by `npm test`) |
+| `kiosk/src/melee/lb/lbbuttonglyph_shapes.inc` | `python kiosk/tools/gen_button_glyphs.py` (the button and UI shapes) |
+| `kiosk/src/melee/lb/lbwordmark_tex.inc` | `python kiosk/tools/gen_wordmark.py` (the LazyTO title texture; needs the Franklin Gothic Medium font) |
+| `kiosk/src/melee/lb/lbmodule_version.inc` | written by every build, git-ignored |
+
 ## File format
 
 ```

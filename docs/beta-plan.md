@@ -7,7 +7,7 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 
 - [ ] Full set lifecycle on a real Wii: START, L+R port claim, auto score, END, set completes on start.gg.
 - [ ] `.slp` written to USB; recording survives unplug/replug.
-- [ ] Venue striking code: Y un-strike, stage select limited to six legal stages, Frozen Stadium parity with the Dolphin ini.
+- [ ] Venue striking code on hardware: Z brings every struck stage back (the poster says so), which stages the stage select shows.
 - [ ] Loader shows "UCF 0.84" after the 2026-09-30 upstream sync.
 - [ ] Wi-Fi association flake (one boot in four): retest on a Pi access point.
 - [ ] Relay on a real Pi, overnight soak with `npm run sim`.
@@ -16,7 +16,7 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 ## 2. GitHub organization (user account, all repos public)
 
 - [x] Relay repo public (forks already were).
-- [x] Descriptions, topics and homepage on all four repos.
+- [x] Descriptions, topics and homepage on the repos.
 - [x] Fork READMEs: a header naming the LazyTO changes and the upstream sync procedure.
 - [x] Umbrella README in this repo: what each repo does, how they fit.
 - [x] Default branch `vanilla-module` (renamed `LazyTO` 2026-10-01) on the forks; stale branches pruned, `shifted-dol-final` kept as a tag.
@@ -32,14 +32,14 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 
 - [x] Review all documentation; rewrite for a general audience (no personal paths or venue names).
 - [x] Split the old design doc into `architecture.md`, `decisions.md` and `changelog.md`; build-history docs removed.
-- [ ] Split dev tools from user-facing builds: dev-only switches, diagnostics and scripts out of the release loader, module and Pi bundle; dev tools from session scratchpads into `tools/`.
+- [x] Dev tools separated: developer flags documented in kiosk.md and refused by sync-card; probe.ts read-only; wiiload.ps1 and reset-bracket.ts documented as developer tools.
 - [x] `.env.example` covering every key; venue values moved from the code to `.env`.
-- [ ] General code cleanup across the four repos.
+- [x] Code cleanup for release (2026-10-01): kiosk dead code, read-only probe.ts, venue names out of comments, GPL-2.0 licence files.
 
 ## 5. Release packaging
 
-- [ ] Lockstep version tags across the four repos; relay `package.json` to `0.9.0-beta.1`.
-- [ ] Release workflow bundling loader app, `tournament.bin`, `tournament.cfg` template, `sync-card.ps1`, relay Pi tarball, Dolphin ini.
+- [ ] Version tags in LazyTO and Nintendont together; `package.json` is `0.9.0-beta.1`, tag `v0.9.0-beta.1` when the hardware checks pass.
+- [x] Release workflow (`.github/workflows/release.yml`): a tag `v*` creates a draft release with the Wii kit zip (cfg template, sync-card, poster, guides) and the relay bundle; `tournament.bin` and the loader are attached by hand, then the draft is published.
 - [ ] Document the `PROTO_VERSION` rule: a bump means module and kernel are rebuilt together.
 
 ## 6. Operator docs

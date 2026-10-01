@@ -16,10 +16,14 @@ Needs wiiload.exe (devkitPro: pacman -S wiiload) and gh (logged in).
 param(
     [string]$Wii = "",
     [string]$File = "",
-    [string]$Repo = "PranavMin/Nintendont",
+    [string]$Repo = "",   # default: the Nintendont submodule's GitHub repo (from .gitmodules)
     [string]$Branch = "LazyTO"
 )
 $ErrorActionPreference = "Stop"
+if (-not $Repo) {
+    $gm = Get-Content (Join-Path $PSScriptRoot "..\.gitmodules") -Raw
+    if ($gm -match 'url = https://github\.com/([^/\s]+/Nintendont)(\.git)?') { $Repo = $Matches[1] } else { throw "cannot find the Nintendont submodule URL in .gitmodules; pass -Repo owner/Nintendont" }
+}
 function Fail($msg) { Write-Host "wiiload: $msg" -ForegroundColor Red; exit 1 }
 
 $tool = Get-Command wiiload.exe -ErrorAction SilentlyContinue

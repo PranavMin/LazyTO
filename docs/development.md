@@ -67,8 +67,9 @@ the repo root:
 python kiosk/tools/build_module.py
 ```
 
-writes `kiosk/build/tournament.bin`. The module's sources, hooks and file format are described
-in [kiosk.md](kiosk.md). Walk through [kiosk-checklist.md](kiosk-checklist.md) for each new
+writes `kiosk/build/tournament.bin`. The build runs on Windows only: the decomp's compilers are
+`.exe` files. The module's sources, hooks, file format, developer flags and generated files are
+described in [kiosk.md](kiosk.md). Walk through [kiosk-checklist.md](kiosk-checklist.md) for each new
 build.
 
 ## The loader
@@ -107,8 +108,11 @@ also saves each Wii's log as `wii-station-N.log` in its audit folder. If a Wii n
 turn on **Log** in the loader and read `slippi_ndebug.log` on the SD card. A crash line names an
 address. `python kiosk/tools/resolve_crash.py <address>` turns it into a function name.
 
-**Testing in Dolphin.** The module can also run in a patched Slippi Dolphin, kept as a separate
-development setup. It is not part of LazyTO's public builds.
+**Testing in Dolphin.** The module can also run without a Wii, in a Slippi Dolphin with a relay
+forwarder: [PranavMin/Ishiiruka](https://github.com/PranavMin/Ishiiruka), branch `LazyTO`. It
+is a development setup, not something a venue installs. Its README covers the build and the
+Dolphin settings; the developer flags in [kiosk.md](kiosk.md) exist for runs there with no
+controller.
 
 ## Working in a submodule
 

@@ -30,12 +30,16 @@ param(
     [string]$RelayConfig = "",
     [string]$Module = (Join-Path $PSScriptRoot "..\kiosk\build\tournament.bin"),
     [string]$MeleeSrc = (Join-Path $PSScriptRoot "..\kiosk\src\melee"),
-    [string]$Repo = "PranavMin/Nintendont",
+    [string]$Repo = "",   # default: the Nintendont submodule's GitHub repo (from .gitmodules)
     [string]$Branch = "LazyTO",
     [switch]$NoEject,
     [switch]$NoLog
 )
 $ErrorActionPreference = "Stop"
+if (-not $Repo) {
+    $gm = Get-Content (Join-Path $PSScriptRoot "..\.gitmodules") -Raw
+    if ($gm -match 'url = https://github\.com/([^/\s]+/Nintendont)(\.git)?') { $Repo = $Matches[1] } else { throw "cannot find the Nintendont submodule URL in .gitmodules; pass -Repo owner/Nintendont" }
+}
 $AppName = "LazyTO"
 function Fail($msg) { Write-Host "sync-card: $msg" -ForegroundColor Red; exit 1 }
 function Md5($p) { (Get-FileHash $p -Algorithm MD5).Hash }

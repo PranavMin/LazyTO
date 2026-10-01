@@ -1,0 +1,63 @@
+name: release
+
+# A tag v* creates a DRAFT release with the two bundles below. Attach
+# tournament.bin and the loader's apps/LazyTO folder by hand (both are built
+# outside CI: the kiosk build is Windows-only and needs the vanilla main.dol;
+# the loader comes from the Nintendont repo's CI), then publish the draft.
+# Run by hand (workflow_dispatch) it only uploads the bundles as artifacts.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  bundles:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then echo "ver=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT";
+          else echo "ver=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"; fi
+      - name: Relay bundle (what push.ps1 sends to the Pi, minus config.json)
+        run: |
+          mkdir -p out/relay
+          cp -r dist deploy package.json package-lock.json README.md LICENSE out/relay/
+          tar -czf "out/lazyto-relay-${{ steps.v.outputs.ver }}.tgz" -C out/relay .
+      - name: Wii kit (everything for the SD cards except the two built files)
+        run: |
+          mkdir -p out/wii
+          cp deploy/tournament.cfg.example deploy/sync-card.ps1 docs/kiosk-poster.html docs/wii-setup.md docs/night-of.md LICENSE out/wii/
+          cat > out/wii/README.txt <<'EOF'
+          LazyTO Wii kit. Each SD card needs:
+            apps/LazyTO/        the loader (attached to the release as a zip)
+            tournament.bin      the kiosk module (attached to the release)
+            tournament.cfg      from tournament.cfg.example: station number, stream=1 on the stream Wii only, the relay's secret
+            games/GALE01/game.iso   your own stock Melee 1.02 image
+          See wii-setup.md. sync-card.ps1 does all of it from a clone of the repo.
+          EOF
+          (cd out/wii && zip -qr "../lazyto-wii-kit-${{ steps.v.outputs.ver }}.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ steps.v.outputs.ver }}
+          path: |
+            out/*.tgz
+            out/*.zip
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.v.outputs.ver }}" --draft --title "LazyTO ${{ steps.v.outputs.ver }}" \
+            --notes "Draft. Before publishing, attach tournament.bin (python kiosk/tools/build_module.py at this tag) and apps-LazyTO.zip (the loader from the Nintendont repo's CI build for the matching commit), then edit these notes." \
+            out/*.tgz out/*.zip
