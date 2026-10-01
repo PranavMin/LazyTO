@@ -7,6 +7,20 @@ Nintendont `52b5a23`, relay `290eb6c`.
 
 ## 1. What goes on the SD card
 
+**The quick way:** with the card in the PC, one command installs and checks everything below
+except the Melee image, then ejects the card:
+
+```
+powershell -ExecutionPolicy Bypass -File deploy/sync-card.ps1 -Station 1 -Stream 0
+```
+
+Station and stream default to what the card already has. The secret comes from `.env`
+`RELAY_SECRET` (the venue relay), or from a dev relay's config with `-RelayConfig <file>`; it is
+never printed. The script uses the newest successful GitHub build of the loader and refuses a
+module built with a dev switch on.
+
+By hand:
+
 | SD path | From | Notes |
 |---|---|---|
 | `sd:/apps/Kegstand Tournament Mod/boot.dol` | the **CI-built** loader: `release-*` artifact of the fork's "CI Slippi Nintendont Builds" workflow on `vanilla-module` (`gh workflow run build.yml -R PranavMin/Nintendont --ref vanilla-module`; e.g. run 36795094785, commit 648cf92) | Our loader with the relay EXI device, beacon listener, shared secret and module loader built in. Never the locally built `nintendont/boot.dol`: it stops at the IOS58 step on hardware (see section 6). |
@@ -108,10 +122,20 @@ Also check while you are there (open items from design.md and the checklist):
 
 ## 6. If it does not work
 
+**Look at the relay's status page first** (http://<relay>:8083). Since Nintendont 140bb77 every
+Wii sends its own kernel log and its module load result to the relay, so the **Wii consoles**
+table says whether the module loaded and why not, with the last log lines; "full log" shows the
+whole boot. The lines are also saved as `wii-station-N.log` in the relay's audit folder. A Wii
+appears there once it has heard the beacon and has the right `secret=`; a Wii with a wrong secret
+shows as "dropped for a wrong relay secret". If a Wii never appears at all, fall back to the SD
+log: turn on **Log** in the loader's settings, boot once, and read `slippi_ndebug.log` on the card.
+
+
 | Symptom | Meaning | First thing to check |
 |---|---|---|
 | `NO RELAY FOUND` after 10 s | No beacon heard | Same LAN? Relay log shows the beacon going out? If both yes, suspect the kernel's `recvfromAddr` (never run on hardware before, Nintendont docs/relay-exi-report.md section 3.7). |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
+| Status page: `NOT LOADED: module overlaps game memory (arena top 0x0)`, or the SD log says `TMOD:arena top 00000000 below module end` | A kernel older than Nintendont 140bb77: Nintendont never sets the boot arena word, and the old check refused the module | Use the current loader (sync-card.ps1 installs it). |
 | Boots to the VS character select, not the Tournament screen | A module older than melee 7f88d95f0: Slippi's core codes force VS mode at boot (`04 801BFA20 38600002`) | Use the current `tournament.bin`; it re-requests the main menu after the boot scene. |
 | Nintendont: `Failed to load IOS58 from NAND` | With `ES_GetStoredTMDSize() returned -4352`: a **locally built loader** (libogc "ES not initialised"), not a missing IOS58; the title bar then already says IOS58. Other codes: the Wii really lacks IOS58 | -4352: put the CI-built loader on the card. Test: if plain Nintendont reaches its game list, IOS58 is fine. Genuinely missing IOS58: an IOS58 installer from the Homebrew Channel; avoid a full system update on a softmodded Wii. |
 | `no network` on every action | Nintendont's Network option is off | Turn it on. |
