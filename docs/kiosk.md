@@ -98,3 +98,18 @@ after the module and would win silently.
 - Nothing the venue's codesets already do is re-implemented here: UCF, neutral spawns,
   striking, stealth tags, rumble toggle, music/mono are theirs.
 - Per-build QA: `kiosk-checklist.md`.
+
+## Compiler and engine pitfalls
+
+- MWCC is C89 and MSL has no `<stdint.h>`. `gen_protocol.py` emits `__MWERKS__`-guarded
+  typedefs instead.
+- MWCC wants literal aggregates for `const GXColor` initialisers. Use macros.
+- Sources must be plain ASCII. sjiswrap rejects em dashes and smart quotes.
+- Each scene has a fixed SIS text pool. The module raises the menu's pool with a `li` patch to
+  `0x7800`, the largest value one `li` holds (`0xC000` sign-extends negative).
+- Do not draw letters through `HSD_SisLib_803A67EC`: its opcode run is a fixed-width digit
+  mode, so letters crush inside it.
+- Hardware boots differ from Dolphin in low memory: the ARM kernel cannot fix BootInfo
+  `0x80000034` (the apploader's value sits in the PPC data cache), so only PPC code at entry
+  may lower it. Suspect boot-environment differences first when something works in Dolphin
+  but not on a Wii.
