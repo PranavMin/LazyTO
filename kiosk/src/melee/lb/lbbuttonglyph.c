@@ -56,7 +56,7 @@ void lbButton_InstallFont(void)
     HSD_SisLib_804D1124[TM_FONT] = (u8**) &tm_font;
 }
 
-/* Icons are drawn a bit larger than the text they sit in (user, 2026-09-24)
+/* Icons are drawn a bit larger than the text they sit in (2026-09-24)
  * and re-centred on the text's ink line; the letter over the shape is a
  * fraction of the shape's scale. */
 #define ICON_SCALE 1.25f
@@ -418,11 +418,6 @@ static f32 walk(HSD_Text* text, f32 x, f32 y, f32 s, const GXColor* ink,
         }
     }
     return pen - x;
-}
-
-f32 lbButton_Line(HSD_Text* text, f32 x, f32 y, f32 scale, const char* fmt)
-{
-    return walk(text, x, y, scale, NULL, fmt, true, false);
 }
 
 f32 lbButton_LineC(HSD_Text* text, f32 x, f32 y, f32 scale,

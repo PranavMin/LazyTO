@@ -1,4 +1,4 @@
-/* Crash report for the tournament kiosk (tournament-reporter protocol.yaml
+/* Crash report for the kiosk (protocol.yaml
  * crash_report / crash_mailbox).
  *
  * Melee's own crash screen (db_SetupCrashHandler -> fn_OSErrorHandler, the

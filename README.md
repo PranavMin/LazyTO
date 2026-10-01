@@ -52,4 +52,4 @@ The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Mele
 
 ## Licence
 
-Copyright (C) 2026 Pranav Minasandram. LazyTO is free software under the GNU General Public License, version 2: see [LICENSE](LICENSE). The LazyTO loader is a fork of Slippi Nintendont and stays under its GPLv2.
+Copyright (C) 2026 Kegstand Jesus (PranavMin). LazyTO is free software under the GNU General Public License, version 2: see [LICENSE](LICENSE). The LazyTO loader is a fork of Slippi Nintendont and stays under its GPLv2.

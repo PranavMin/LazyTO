@@ -63,7 +63,7 @@ static HSD_Text* css_shadow = NULL; /* drop shadows */
 static bool css_dirty;
 static u32 css_frames; /* CSS frames with a set: paces the SEND FAILED flip */
 
-/* Handwarmer flag (user, 2026-09-22): the next game is a warm-up that does
+/* Handwarmer flag (2026-09-22): the next game is a warm-up that does
  * not count toward the score. Toggled on the CSS with Z + X (any port),
  * shown on the CSS overlay, drawn in-match as a count-up clock that turns red
  * past 1:00 (architecture.md), and cleared automatically once that game has
@@ -72,7 +72,7 @@ static u32 css_frames; /* CSS frames with a set: paces the SEND FAILED flip */
 #define LB_TOURNEY_HANDWARMER_RED_FRAMES (60 * 60) /* 1:00 */
 static bool handwarmer;
 
-/* Port claim (user, 2026-09-25). Tags are optional - a tag cut to four
+/* Port claim (2026-09-25). Tags are optional - a tag cut to four
  * characters can read badly - so the player named on the LEFT of the set
  * (entrant 1) can instead hold L + R for a second on their own controller;
  * the other human port is then entrant 2. Holding L + R + B clears it, and
@@ -83,16 +83,22 @@ static bool handwarmer;
 /* A trigger counts as held at its digital click OR from this raw analog
  * value (0-140 after the game's clamp, no deadzone subtraction: gmmain.c sets
  * clamp_analogLRMin 0 / Max 140): not every controller has a click, and a
- * light press must do (user, 2026-09-25; their light R press reads 50,
- * the readout below showed). The friction is the two-trigger one-second hold, not the depth. */
+ * light press must do (2026-09-25: a light R press read 50 on the
+ * trigger readout). The friction is the two-trigger one-second hold, not the depth. */
 #define LB_TOURNEY_CLAIM_PULL_RAW 49
+/* Dev flag (docs/kiosk.md): 1 draws the raw L/R trigger values of every
+ * port bottom-left, to pick the claim threshold from a real pad. Must be 0
+ * in a shipped build; sync-card.ps1 refuses otherwise. */
 #ifndef LB_TOURNEY_TRIGGER_READOUT
-#define LB_TOURNEY_TRIGGER_READOUT 0 /* dev: raw L/R per port, bottom-left */
+#define LB_TOURNEY_TRIGGER_READOUT 0
 #endif
 static s8 claim_port = -1;   /* port that claimed entrant 1, or -1 */
 static u8 claim_hold[4];     /* frames each port has held L + R */
+/* Dev flag (docs/kiosk.md): 1 fakes an L + R claim by port 3 after 150 CSS
+ * frames and treats port 1 as human, for a Dolphin run with no controller.
+ * Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
 #ifndef LB_TOURNEY_DEMO_CLAIM
-#define LB_TOURNEY_DEMO_CLAIM 0 /* dev loop only: fake a claim by port 3 */
+#define LB_TOURNEY_DEMO_CLAIM 0
 #endif
 static void setAutoNote(const char* msg);
 static int leftEntrant(void);
@@ -107,14 +113,8 @@ static u8 auto_stage;         /* internal StKind the game was played on */
 static char auto_note[40];    /* why nothing was scored, or what was */
 static u32 auto_note_frames;  /* frames left showing auto_note */
 
-/* CSS overlay layout. The values are the shipped positions (tuned live by
- * the user, 2026-09-22). Set LB_TOURNEY_LAYOUT_TUNE to 1 to compile the live
- * layout tune mode back in (see tuneInputs): hold L + R on the CSS, D-pad
- * moves the selected element by 2 px (10 with Z), X selects the next element,
- * Y grows the scale (shrinks with Z), and a readout "TUNE SCORE X 212 Y 4
- * S 52" shows the live numbers for ~3 s. Read them off the screen and
- * hardcode them here, then set the define back to 0 for a venue build. */
-#define LB_TOURNEY_LAYOUT_TUNE 0
+/* CSS overlay layout: the shipped positions, tuned live on a Wii
+ * (2026-09-22). */
 enum lbTourney_El { EL_SCORE, EL_HINT, EL_STATUS, EL_COUNT };
 static struct {
     f32 x, y, scale;
@@ -124,11 +124,6 @@ static struct {
     { 2.0f, 446.0f, 0.45f },   /* SENDING / SENT / FAILED, bottom left (tuned
                                 * live) */
 };
-#if LB_TOURNEY_LAYOUT_TUNE
-static const char* const el_names[EL_COUNT] = { "SCORE", "HINT", "STATUS" };
-static int tune_sel;
-static u32 tune_show; /* frames left showing the tune readout */
-#endif
 static bool match_seen;   /* a GS_VS frame ran since the last CSS frame */
 static u32 match_frames;  /* frames since the match scene began */
 static s32 vs_ctx = -1;   /* in-match SIS overlay, per GS_VS visit */
@@ -136,8 +131,9 @@ static HSD_Text* vs_text = NULL;
 static HSD_Text* vs_shadow = NULL;
 static int vs_shown_sec = -1;
 
-/* A port with a player behind it (slot HMN). The headless Dolphin loop
- * leaves its slots N/A, so the demo build treats port 1 as human. */
+/* A port with a player behind it (slot HMN). A Dolphin run with no
+ * controller leaves its slots N/A, so the LB_TOURNEY_DEMO_CLAIM build treats
+ * port 1 as human. */
 static bool portIsHuman(int port)
 {
 #if LB_TOURNEY_DEMO_CLAIM
@@ -195,11 +191,6 @@ void lbTourney_ClearCurrent(void)
     pending_cmd = 0;
     claim_port = -1;
     css_dirty = true;
-}
-
-bool lbTourney_HasCurrent(void)
-{
-    return has_set;
 }
 
 static int winsFor(int slot)
@@ -376,7 +367,7 @@ static void handleInputs(void)
             continue;
         }
         if (pad->trigger & PAD_BUTTON_X) {
-            /* Z + X: straight into a handwarmer (user, 2026-09-22). When the
+            /* Z + X: straight into a handwarmer (2026-09-22). When the
              * CSS is ready the fight starts now on Battlefield (user,
              * 2026-09-25; it was a random legal stage before), no stage
              * select: lbTourney_SSSEnter writes force_stage_id before the
@@ -469,7 +460,7 @@ static void pollRelay(void)
 }
 
 /* Which entrant is shown on the left: the lower port once both ports are
- * known (user, 2026-09-25), entrant 1 until then. The scoreboard and the
+ * known (2026-09-25), entrant 1 until then. The scoreboard and the
  * C-stick binds (C-left = the left name) follow it. */
 static int leftEntrant(void)
 {
@@ -478,15 +469,7 @@ static int leftEntrant(void)
     return (a >= 0 && b >= 0 && b < a) ? 2 : 1;
 }
 
-/* "P3" for the port playing as `entrant` (1 or 2), "" while unknown. */
-static const char* portLabel(int entrant)
-{
-    static const char* const labels[4] = { "P1", "P2", "P3", "P4" };
-    int port = entrantPort(entrant);
-    return port < 0 ? "" : labels[port];
-}
-
-/* Automatic scoring at game end (architecture.md, user 2026-09-22). The
+/* Automatic scoring at game end (architecture.md, 2026-09-22). The
  * vanilla GS_VS exit fills the scene's MatchEnd (outcome + per-slot standings:
  * type, stocks, percent), so lbTourney_MatchExit reads it after the
  * vanilla handler and decides the game there; the game is appended and sent
@@ -583,9 +566,6 @@ static void autoScoreFromMatch(const struct MatchEnd* me)
  * so the panel fill, the shadows and the opaque text are three objects. */
 static const GXColor ov_white = { 255, 255, 255, 255 };
 static const GXColor ov_black = { 0, 0, 0, 255 };
-static const GXColor ov_navy = { 18, 28, 72, 255 };
-static const GXColor ov_rim = { 110, 150, 255, 255 };
-static const GXColor ov_dim = { 169, 188, 230, 255 };
 static const GXColor ov_grn = { 94, 224, 138, 255 };
 static const GXColor ov_red = { 255, 106, 92, 255 };
 static const GXColor ov_amb = { 255, 179, 71, 255 };
@@ -622,7 +602,7 @@ static void ovLine(HSD_Text* shadow, HSD_Text* text, f32 x, f32 y, f32 s,
 }
 
 /* The CSS's own rules banner ("4-man survival test!") shows the score
- * instead (user, 2026-09-25). The banner is an HSD_Text the CSS binds to
+ * instead (2026-09-25). The banner is an HSD_Text the CSS binds to
  * premade string slot 0x4A of font 0 (mncharsel.c, SdSlChr's SIS data:
  * pos -12/-23.3, box 450x32, centred, shrink-to-fit) and the renderer walks
  * that slot's bytes every frame. So the slot, and every text bound to it,
@@ -793,7 +773,7 @@ static void redraw(void)
     css_text = newText(css_ctx, 255);
     (void) entry;
 
-    /* Handwarmer hint at the top-left corner (user, 2026-09-25; it sat
+    /* Handwarmer hint at the top-left corner (2026-09-25; it sat
      * top-right beside BACK before). */
     {
         const char* fmt = handwarmer ? "#Z+#X CANCELS" : "#Z+#X WARMUP";
@@ -862,69 +842,7 @@ static void redraw(void)
         bannerName(re == 1 ? p1 : p2);
     }
     bannerEnd();
-
-#if LB_TOURNEY_LAYOUT_TUNE
-    /* Layout tune readout, mid-screen, while tuning. Scale shown x100. */
-    if (tune_show > 0) {
-        entry = HSD_SisLib_803A6B98(css_text, 120.0f, 200.0f,
-                                    "TUNE %s  X %d  Y %d  S %d",
-                                    el_names[tune_sel], (int) el[tune_sel].x,
-                                    (int) el[tune_sel].y,
-                                    (int) (el[tune_sel].scale * 100.0f + 0.5f));
-        HSD_SisLib_803A7548(css_text, entry, 0.5f, 0.5f);
-    }
-#endif
 }
-
-#if LB_TOURNEY_LAYOUT_TUNE
-/* Layout tune mode (see the el[] comment). Returns true while any port holds
- * L + R, during which that chord owns the D-pad (so the rumble toggle must
- * not also fire). */
-static bool tuneInputs(void)
-{
-    int port;
-    bool tuning = false;
-    for (port = 0; port < 4; port++) {
-        const HSD_PadStatus* pad = &HSD_PadCopyStatus[port];
-        u32 trig = pad->trigger;
-        f32 step;
-        if ((pad->button & (PAD_TRIGGER_L | PAD_TRIGGER_R)) !=
-            (PAD_TRIGGER_L | PAD_TRIGGER_R))
-        {
-            continue;
-        }
-        tuning = true;
-        step = (pad->button & PAD_TRIGGER_Z) ? 10.0f : 2.0f;
-        if (trig & PAD_BUTTON_LEFT) {
-            el[tune_sel].x -= step;
-        } else if (trig & PAD_BUTTON_RIGHT) {
-            el[tune_sel].x += step;
-        } else if (trig & PAD_BUTTON_UP) {
-            el[tune_sel].y -= step;
-        } else if (trig & PAD_BUTTON_DOWN) {
-            el[tune_sel].y += step;
-        } else if (trig & PAD_BUTTON_X) {
-            tune_sel = (tune_sel + 1) % EL_COUNT;
-        } else if (trig & PAD_BUTTON_Y) {
-            el[tune_sel].scale +=
-                (pad->button & PAD_TRIGGER_Z) ? -0.02f : 0.02f;
-            if (el[tune_sel].scale < 0.1f) {
-                el[tune_sel].scale = 0.1f;
-            }
-        } else {
-            continue;
-        }
-        tune_show = 180;
-        css_dirty = true;
-    }
-    return tuning;
-}
-#else
-static bool tuneInputs(void)
-{
-    return false;
-}
-#endif
 
 /* In-match handwarmer clock: "HANDWARMER 0:42" in the top-left corner (the
  * HUD timer owns top-centre), counting up from the scene start, red once it
@@ -984,7 +902,7 @@ void lbTourney_MatchFrame(void)
     gm_Scene_Vs_OnFrame();
     if (has_set && handwarmer) {
         /* One clock only: the HUD's countdown is hidden for a handwarmer
-         * (user, 2026-09-22). Done after the vanilla frame and re-asserted
+         * (2026-09-22). Done after the vanilla frame and re-asserted
          * every frame because the HUD shows its timers again on its own
          * (gmvs.c:1135, ifall.c:51 - pause/HUD toggles); the flag is
          * idempotent and the timer itself keeps running underneath. */
@@ -1017,9 +935,6 @@ void lbTourney_CSSFrame(void)
     /* Venue mods (UCF, neutral spawns, striking, stealth nametag, the D-pad
      * rumble toggle, audio) are Nintendont's / Dolphin's gecko codes on the
      * vanilla DOL; the module adds nothing there. */
-    if (has_set) {
-        (void) tuneInputs();
-    }
     if (has_set) {
         if (css_ctx < 0) {
             css_ctx = HSD_SisLib_803A611C(lbButton_Font(), NULL, 9, 0xD, 0,
@@ -1087,11 +1002,6 @@ void lbTourney_CSSFrame(void)
             sent_flash--;
             css_dirty = true; /* keep "SCORE SENT" up, then clear it */
         }
-#if LB_TOURNEY_LAYOUT_TUNE
-        if (tune_show > 0 && --tune_show == 0) {
-            css_dirty = true; /* drop the tune readout */
-        }
-#endif
         if (css_dirty) {
             css_dirty = false;
             redraw();

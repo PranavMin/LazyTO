@@ -30,23 +30,6 @@ UNIT=lazyto-relay
 
 [[ $EUID -eq 0 ]] || { echo "install.sh: run with sudo" >&2; exit 1; }
 
-# --- one-time migration from the pre-rename install ("tournament-reporter",
-#     renamed to LazyTO 2026-09-30): stop and remove the old unit, carry the
-#     audit logs over (a mid-tournament push must keep its claims), drop the
-#     old code, config and NetworkManager drop-in. No-op on a fresh Pi. ---
-if [[ -f /etc/systemd/system/tournament-reporter.service ]]; then
-  echo "migrating from the tournament-reporter install"
-  systemctl disable --now tournament-reporter >/dev/null 2>&1 || true
-  rm -f /etc/systemd/system/tournament-reporter.service
-  systemctl daemon-reload
-fi
-if [[ -d /var/lib/tournament-reporter ]]; then
-  mkdir -p "$DATA_DIR"
-  cp -an /var/lib/tournament-reporter/. "$DATA_DIR"/
-  rm -rf /var/lib/tournament-reporter
-fi
-rm -rf /opt/tournament-reporter /etc/tournament-reporter
-rm -f /etc/NetworkManager/conf.d/tournament-reporter-wifi.conf
 for f in dist/main.js package.json config.json deploy/$UNIT.service; do
   [[ -f "$BUNDLE/$f" ]] || { echo "install.sh: $BUNDLE/$f missing (bundle not built by push.ps1?)" >&2; exit 1; }
 done

@@ -38,14 +38,12 @@ enum lbButton_Shape {
  * ( + ( ) / ! ? ) is translated to its Shift-JIS glyph, so callers write
  * plain "#Z+#X FOR HANDWARMER".
  *
- * An icon is two SIS entries: a coloured shape glyph (extra atlas glyphs
- * 287-290, tools/gen_button_glyphs.py) and the font's own letter laid over
- * it. Everything is positioned from the font's kerning table, so the return
- * value is the exact drawn width and lbButton_Measure lets a caller centre a
- * line: x = (640 - lbButton_Measure(s, fmt)) / 2. Text segments keep the
- * HSD_Text's default colour. */
-f32 lbButton_Line(HSD_Text* text, f32 x, f32 y, f32 scale, const char* fmt);
-/* Same, with the text runs in colour ink (NULL = the text's default). */
+ * An icon is two SIS entries: a coloured shape glyph (the module's own font
+ * slot, kiosk/tools/gen_button_glyphs.py) and the font's own letter laid
+ * over it. Everything is positioned from the font's kerning table, so the
+ * return value is the exact drawn width and lbButton_Measure lets a caller
+ * centre a line: x = (640 - lbButton_Measure(s, fmt)) / 2. The text runs are
+ * drawn in colour ink (NULL = the text's default). */
 f32 lbButton_LineC(HSD_Text* text, f32 x, f32 y, f32 scale,
                    const GXColor* ink, const char* fmt);
 f32 lbButton_Measure(f32 scale, const char* fmt);

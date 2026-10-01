@@ -140,11 +140,6 @@ const struct lbRelayExi_PollBuf* lbRelayExi_Response(void)
     return (const struct lbRelayExi_PollBuf*) resp_buf;
 }
 
-bool lbRelayExi_InFlight(void)
-{
-    return in_flight;
-}
-
 void lbRelayExi_Abort(void)
 {
     in_flight = false;

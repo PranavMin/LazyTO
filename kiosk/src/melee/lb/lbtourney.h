@@ -30,7 +30,6 @@
 void lbTourney_SetCurrent(const struct set_entry* set);
 
 void lbTourney_ClearCurrent(void);
-bool lbTourney_HasCurrent(void);
 
 /* GS_CSS scene hooks (gmscdata rows): run the tournament keybinds, polls
  * and overlay, then the vanilla mnCharSel handler. */

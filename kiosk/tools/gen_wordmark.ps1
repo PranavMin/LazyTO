@@ -8,7 +8,7 @@ param(
   [Parameter(Mandatory = $true)][string]$OutRaw,
   [string]$OutPng = ""
 )
-# Renders the kiosk wordmark with GDI+ (called by tools/gen_wordmark.py):
+# Renders the kiosk wordmark with GDI+ (called by kiosk/tools/gen_wordmark.py):
 # white text with a baked-in dark drop shadow, sheared to lean like Melee's
 # own menu titles, on a transparent canvas. Output: W*H pixels of {intensity,
 # alpha} bytes, row-major, which gen_wordmark.py tiles into a GX IA8 texture.

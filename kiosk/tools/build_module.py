@@ -76,7 +76,7 @@ MWLD = DECOMP / "build" / "compilers" / "GC" / "1.3.2" / "mwldeppc.exe"
 NM = DECOMP / "build" / "binutils" / "powerpc-eabi-nm.exe"
 
 # The DOL build's C flags (build.ninja, rule mwcc_sjis) plus: no small data
-# (the module sits far from r13/r2) and the module define. The kiosk's own
+# (the module sits far from r13/r2). The kiosk's own
 # directories come first; the rest are the decomp's, relative to DECOMP (the
 # compiler runs there).
 CFLAGS = [
@@ -91,7 +91,7 @@ CFLAGS = [
     "-i", "include", "-i", "libs/dolphin/include", "-i", "libs/doldecomp/include",
     "-i", "build/GALE01/include",
     "-lang=c", "-O4,p", "-DNDEBUG=1", "-inline", "auto", "-sym", "off",
-    "-sdata", "0", "-sdata2", "0", "-DTOURNAMENT_MODULE",
+    "-sdata", "0", "-sdata2", "0",
 ]
 
 

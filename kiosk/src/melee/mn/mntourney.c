@@ -46,7 +46,7 @@ u16 mnTourney_DescIndices[1] = { 0 };
  *   Confirm       the list dims, the side pane asks; A sends START_SET
  *   Error         A retries the failed request, B goes back
  *
- * Screen ("Direction B", design pitch 2026-09-25): the vanilla main-menu
+ * Screen (design of 2026-09-25): the vanilla main-menu
  * panel frames everything. Its left two thirds hold the set list - rows are
  * the two tags on a fixed VS axis, grouped under round-name headers - and
  * its preview box on the right is the detail pane for the highlighted set
@@ -123,28 +123,20 @@ enum mnTourney_State {
 #define L_PANE_BOX_Y 120.0f
 #define L_PANE_BOX_W 190.0f
 #define L_PANE_BOX_H 276.0f
-#define L_PANE_S 0.48f /* round name, wrapped */
 #define L_HINT_CX 320.0f /* between the panel's two bottom corner boxes */
 #define L_HINT_Y 400.0f
 #define L_HINT_S 0.50f
-#define L_SCRIM_A 150 /* alpha of the dark list scrim */
 #define L_BAR_A 80    /* alpha of the cursor bar */
 #define L_PULSE_FRAMES 20
 
-/* How the two panes get their contrast over the animated grid (trial
- * variants, 2026-09-25):
- *   0  flat near-black scrims (the pitch's version)
- *   1  flat translucent navy scrims, the grid shows through
- *   2  rounded translucent navy panels with a thin light-blue rim
- *   3  no panels; every text line gets a drop shadow instead
- *   4  the rounded rim panels of 2 with a light fill, plus the shadows of 3 */
-#ifndef TM_LOOK
-#define TM_LOOK 4
-#endif
-/* Dev-loop only: with 1 the list auto-confirms and starts its first set two
- * seconds after it is up (there is no controller in the headless Dolphin
- * loop), so the CSS overlay can be captured; with 2 it only opens the
- * confirm pane. Never non-zero in a shipped build. */
+/* The two panes get their contrast over the animated grid from rounded
+ * translucent navy panels with a thin light-blue rim and a light fill, plus
+ * a drop shadow under every text line (chosen 2026-09-25 among five trial
+ * looks). */
+/* Dev flag (docs/kiosk.md): with 1 the list auto-confirms and starts its
+ * first set two seconds after it is up, so the CSS overlay can be captured
+ * in a Dolphin run that has no controller; with 2 it only opens the confirm
+ * pane. Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
 #ifndef TM_DEMO_AUTOSTART
 #define TM_DEMO_AUTOSTART 0
 #endif
@@ -160,11 +152,7 @@ static const GXColor c_amb = { 255, 179, 71, 255 };   /* playing here */
 static const GXColor c_red = { 255, 106, 92, 255 };
 static const GXColor c_grn = { 94, 224, 138, 255 };
 static const GXColor c_muted = { 96, 110, 150, 255 }; /* list behind a confirm */
-#if TM_LOOK == 0
-static const GXColor c_scrim = { 2, 4, 14, 255 };
-#else
 static const GXColor c_scrim = { 18, 28, 72, 255 };  /* translucent navy */
-#endif
 static const GXColor c_rim = { 110, 150, 255, 255 };
 static const GXColor c_black = { 0, 0, 0, 255 };
 static const GXColor c_tint = { 48, 42, 18, 255 };    /* pane behind a confirm */
@@ -261,7 +249,7 @@ static void setMenuVisualsHidden(bool hide)
  * first (creation order is draw order), everything else is opaque. */
 static s32 tm_ctx = -1;
 static HSD_Text* tm_scrim = NULL;
-static HSD_Text* tm_shadow = NULL; /* TM_LOOK 3: drop shadows */
+static HSD_Text* tm_shadow = NULL; /* drop shadows */
 static HSD_Text* tm_bar = NULL;
 static HSD_Text* tm_text = NULL;
 
@@ -506,20 +494,13 @@ static void lineC(f32 x, f32 y, f32 scale, const GXColor* c, const char* str)
     lbButton_LineC(tm_text, x, y, scale, c, str);
 }
 
-/* A pane background: flat scrim, or a rounded panel built from three blocks
- * and four quarter discs that never overlap (overlaps would double the
- * alpha), with an opaque rim drawn by the main text on top. */
+/* A pane background: a rounded panel built from three blocks and four
+ * quarter discs that never overlap (overlaps would double the alpha), with
+ * an opaque rim drawn by the main text on top. */
 static void paneBox(f32 x, f32 y, f32 w, f32 h, GXColor c, bool rim)
 {
-#if TM_LOOK == 3
-    (void) x; (void) y; (void) w; (void) h; (void) c; (void) rim;
-#elif TM_LOOK == 2 || TM_LOOK == 4
     lbButton_Panel(tm_scrim, rim ? tm_text : NULL, x, y, w, h, L_PANEL_R, c,
                    c_rim);
-#else
-    (void) rim;
-    lbButton_Box(tm_scrim, x, y, w, h, c);
-#endif
 }
 
 static f32 width(f32 scale, const char* str)
@@ -678,9 +659,9 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
     c = muted ? &c_muted : selected ? &c_yel : set->state != 0 ? &c_amb : &c_white;
     vs = muted ? &c_muted : selected ? &c_white : &c_dim;
     if (selected) {
-        /* Bar inside the panel's rim on the rounded looks; the yellow edge
-         * 7 px in, so it does not read as part of the rim. */
-        f32 in = (TM_LOOK == 2 || TM_LOOK == 4) ? 3.0f : 0.0f;
+        /* Bar inside the panel's rim; the yellow edge 7 px in, so it does
+         * not read as part of the rim. */
+        f32 in = 3.0f;
         lbButton_Box(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
                      L_BAR_H, c_bar);
         lbButton_Box(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
@@ -943,10 +924,8 @@ static void drawPane(void)
 static void redraw(void)
 {
     destroyText();
-    tm_scrim = newText(TM_LOOK == 0 ? L_SCRIM_A : TM_LOOK == 4 ? 70 : 120);
-#if TM_LOOK == 3 || TM_LOOK == 4
+    tm_scrim = newText(70);
     tm_shadow = newText(L_SHADOW_A);
-#endif
     tm_bar = newText(L_BAR_A);
     tm_text = newText(255);
 
@@ -1462,7 +1441,7 @@ static void enterTournament(HSD_GObj* gobj)
     forceKioskDefaults();
     /* Entering the set list: show the menu panel again. It was hidden only
      * for the boot warm-up (no main-menu flash); on the tournament screen its
-     * border frames the list (user, 2026-09-22: "bring back the border"). */
+     * border frames the list (2026-09-22). */
     setMenuVisualsHidden(false);
     mn_804D6BC8.cooldown = 5;
     mn_804A04F0.prev_menu = mn_804A04F0.cur_menu;

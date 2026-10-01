@@ -5,11 +5,10 @@
 
 #include <relay_proto.h>
 
-/* EXI request/poll helpers for the tournament relay device
- * (../tournament-reporter/docs/architecture.md). The game side of the
- * fake relay EXI device that Slippi Dolphin (session 7) and Nintendont
- * (session 8) implement; those sides must match the channel/device/frequency
- * chosen here. */
+/* EXI request/poll helpers for the relay device (docs/architecture.md).
+ * This is the game side; the LazyTO Nintendont kernel implements the device
+ * side (and the Dolphin development setup emulates it). Those sides must
+ * match the channel/device/frequency chosen here. */
 
 /* Slot B, like Slippi's own device; the relay device shares it (the
  * EXI_RELAY_* command bytes sit clear of Slippi's EXI command space,
@@ -60,8 +59,6 @@ s32 lbRelayExi_Poll(void);
 /* The 4 KB response area the poll DMA lands in. Contents are stable until
  * the next lbRelayExi_Poll. */
 const struct lbRelayExi_PollBuf* lbRelayExi_Response(void);
-
-bool lbRelayExi_InFlight(void);
 
 /* Read the poll image without a request in flight, for its exi_poll_hdr:
  * the host fills station and the relay address it has found (decisions.md R15:

@@ -1,11 +1,11 @@
-# Tournament module hook table (tools/build_module.py).
+# Kiosk module hook table (kiosk/tools/build_module.py).
 # One patch per line, applied to the VANILLA Melee 1.02 DOL in RAM by the loaders
-# (Nintendont kernel / Ishiiruka fork) after the module blob is copied in:
+# (the LazyTO Nintendont kernel, or the Dolphin development setup) after the module blob is copied in:
 #   ptr    <addr> <module symbol>   write the symbol's address at addr
 #   branch <addr> <module symbol>   write "b <symbol>" at addr (function hijack)
 #   word   <addr> <hex>             write a literal 32-bit word
-# Addresses are vanilla (config/GALE01/symbols.txt); the builder verifies each
-# against orig/GALE01/sys/main.dol where noted.
+# Addresses are vanilla (melee/config/GALE01/symbols.txt); the builder verifies each
+# against melee/orig/GALE01/sys/main.dol where noted.
 
 # gmscdata.c scene table `scenes` (0x803DA920, rows of 0x14: kind, on_frame,
 # on_enter, on_exit, unused).
@@ -30,7 +30,7 @@ word   0x803EB6F0 0x00000000                # row 3 start_frame = 0.0f (frame 60
 # mn_803EAE8C[kind][3] (AnimLoopSettings {start,end,loop} x3: enter, leave,
 # idle). Kind 3's rows are the green "Trophies" frames (600-799); every kind's
 # range carries that kind's title texture (the main menu's 0-199 says "Main
-# Menu"). Row 3 gets what the shifted-DOL kiosk read by accident for its
+# Menu"). Row 3 gets what the old rebuilt-DOL kiosk read by accident for its
 # out-of-table kind 35 (the statics after the table, 0x803EB378): enter plays
 # frames 0-49 and idle holds frames 0-10 of the main-menu enter animation -
 # the plain frame with the bottom description box, before any title fades in.
