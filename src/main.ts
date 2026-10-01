@@ -15,6 +15,9 @@ import { RelayTcpServer } from './tcp.js';
 import { StatusServer } from './status.js';
 import { resolveEvent } from './resolve.js';
 import { RelayBeacon } from './beacon.js';
+import { StationTelemetry } from './telemetry.js';
+import { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BEACON_PORT, BEACON_INTERVAL_MS } from '../generated/wire.js';
 
 async function main(): Promise<void> {
@@ -60,6 +63,19 @@ async function main(): Promise<void> {
   // once TCP is listening, so a station never learns an address that refuses.
   const beacon = new RelayBeacon({ tcpPort: config.tcpPort, eventId: ev.eventId });
   await beacon.start();
+  // Each Wii's own boot report (kernel log + module status). Lines are also
+  // appended to <auditDir>/wii-station-N.log so a boot can be read after the fact.
+  const telemetry = new StationTelemetry({
+    secret: config.secret,
+    onLine: (station, line) => {
+      try {
+        appendFileSync(join(config.auditDir, `wii-station-${station}.log`), `${new Date().toISOString()} ${line}\n`);
+      } catch (e) {
+        console.error(`wii log write failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+  });
+  await telemetry.start();
   const status = new StatusServer({
     state,
     cache,
@@ -68,6 +84,7 @@ async function main(): Promise<void> {
     eventLabel: `${ev.tournamentName} · ${ev.eventName} (${ev.eventId})`,
     beacon,
     tcp,
+    telemetry,
   });
   await status.listen(config.httpPort);
 
@@ -77,11 +94,12 @@ async function main(): Promise<void> {
       `tcp :${config.tcpPort}, status http://localhost:${config.httpPort}`,
   );
   console.log(`beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`);
+  console.log(`telemetry: udp :${telemetry.address().port} (Wii kernel logs and module status)`);
 
   const shutdown = async (signal: string) => {
     console.log(`${signal}: shutting down`);
     cache.stop();
-    await Promise.all([beacon.stop(), tcp.close(), status.close()]);
+    await Promise.all([beacon.stop(), telemetry.stop(), tcp.close(), status.close()]);
     audit.record({ type: 'shutdown', signal });
     audit.close();
     process.exit(0);

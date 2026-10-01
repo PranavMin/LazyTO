@@ -9,6 +9,10 @@
 // The footer is the "night of" dashboard: event id, cache size and age
 // (stale = warning), how many sets are selectable vs on stations, upstream
 // call rate, the last refresh error, and the R8 preview-id warning.
+//
+// "Wii consoles" is each Wii's own report (telemetry.ts): when it was last
+// heard, whether its tournament module loaded and why not, and the tail of
+// its kernel log; /log?station=N is the whole log as plain text.
 
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -17,6 +21,8 @@ import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
 import type { RefusedStatus } from './tcp.js';
+import { moduleStateText, type StationTelemetryRow, type TelemetryRefused } from './telemetry.js';
+import { ModuleState } from '../generated/wire.js';
 
 export interface StatusDeps {
   state: StationState;
@@ -29,7 +35,14 @@ export interface StatusDeps {
   beacon: { status(): BeaconStatus };
   /** Requests refused for their secret (design R16): a mis-copied SD card, or someone else on the Wi-Fi. */
   tcp: { refused(): RefusedStatus | null };
+  /** Each Wii's own boot report: module load status and kernel log (telemetry.ts). */
+  telemetry: { stations(): StationTelemetryRow[]; get(station: number): StationTelemetryRow | undefined; refused(): TelemetryRefused | null };
 }
+
+/** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
+export const SILENT_STATION_MS = 20_000;
+/** Log lines shown per Wii on the main page; the rest is on /log. */
+export const LOG_TAIL_LINES = 6;
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
 export const STALE_CACHE_MS = 60_000;
@@ -53,6 +66,12 @@ export class StatusServer {
         const ok = this.deps.state.ack(Number(url.searchParams.get('id')));
         res.writeHead(ok ? 303 : 404, { location: '/' });
         res.end();
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/log') {
+        const row = this.deps.telemetry.get(Number(url.searchParams.get('station')));
+        res.writeHead(row ? 200 : 404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(row ? `station ${row.station} (${row.from}), last heard ${age(row.lastSeenAt)} ago\n\n${row.lines.join('\n')}\n` : 'no telemetry from that station\n');
         return;
       }
       if (req.method === 'GET' && url.pathname === '/') {
@@ -84,7 +103,7 @@ export class StatusServer {
   }
 
   render(): string {
-    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp } = this.deps;
+    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp, telemetry } = this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -144,6 +163,34 @@ export class StatusServer {
       ? `<p class="warn">✗ discovery beacon: ${escapeHtml(bs.lastError)} — Wiis cannot find the relay</p>`
       : `<p class="muted">Discovery beacon to ${bs.targets.map(escapeHtml).join(', ') || '—'}, last sent ${bs.lastSentAt ? `${age(bs.lastSentAt)} ago` : 'never'}.</p>`;
     const errorLine = cs.error ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>` : '';
+
+    const wiiRows = telemetry.stations().map((t) => {
+      const silent = Date.now() - t.lastSeenAt > SILENT_STATION_MS;
+      const heard = `${age(t.lastSeenAt)} ago${silent ? ' <span class="warn">(silent)</span>' : ''}`;
+      const mod = t.status
+        ? t.status.module_state === ModuleState.MOD_LOADED || t.status.module_state === ModuleState.MOD_PENDING
+          ? escapeHtml(moduleStateText(t.status))
+          : `<span class="warn">✗ ${escapeHtml(moduleStateText(t.status))}</span>`
+        : '<span class="muted">no status yet</span>';
+      const extra = [
+        t.lost ? `${t.lost} datagram(s) lost` : '',
+        t.reboots ? `${t.reboots} reboot(s)` : '',
+        t.status?.log_dropped ? `${t.status.log_dropped} log bytes dropped on the Wii` : '',
+      ].filter(Boolean);
+      const tail = t.lines.slice(-LOG_TAIL_LINES).map(escapeHtml).join('\n');
+      return (
+        `<tr><td>${t.station}</td><td>${heard}<br><span class="muted">${escapeHtml(t.from)}</span></td>` +
+        `<td>${mod}${extra.length ? `<br><span class="muted">${escapeHtml(extra.join(', '))}</span>` : ''}</td>` +
+        `<td><pre>${tail || '<span class="muted">no log yet</span>'}</pre><a href="/log?station=${t.station}">full log</a></td></tr>`
+      );
+    });
+    if (wiiRows.length === 0) {
+      wiiRows.push('<tr><td colspan="4" class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</td></tr>');
+    }
+    const trf = telemetry.refused();
+    const telemetryRefusedLine = trf
+      ? `<p class="warn">✗ ${trf.count} Wii report(s) dropped for a wrong relay secret — last ${age(trf.lastAt)} ago from ${escapeHtml(trf.lastFrom)} claiming station ${trf.lastStation}.</p>`
+      : '';
     const warningLines = cs.warnings.map((w) => `<p class="warn">⚠ ${escapeHtml(w)}</p>`).join('');
 
     return `<!doctype html>
@@ -154,6 +201,7 @@ export class StatusServer {
 <style>
   body { font-family: monospace; font-size: 16px; margin: 1em; }
   h1 { font-size: 1.25em; margin: 0 0 0.25em; }
+  h2 { font-size: 1.1em; margin: 1.2em 0 0.4em; }
   .sub { margin: 0 0 1em; }
   .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; }
@@ -162,6 +210,7 @@ export class StatusServer {
   .warn { color: #a40; }
   .muted { color: #888; }
   form { display: inline; }
+  pre { margin: 0 0 0.3em; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
   @media (max-width: 600px) {
     body { font-size: 14px; margin: 0.5em; }
@@ -174,6 +223,12 @@ export class StatusServer {
 <tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
 ${rows.join('\n')}
 </table></div>
+<h2>Wii consoles</h2>
+<div class="scroll"><table>
+<tr><th>Station</th><th>Last heard</th><th>Tournament module</th><th>Kernel log</th></tr>
+${wiiRows.join('\n')}
+</table></div>
+${telemetryRefusedLine}
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${beaconLine}
 ${refusedLine}

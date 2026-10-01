@@ -29,6 +29,7 @@ import { StationState } from '../src/state.js';
 import { AuditLog, auditPath } from '../src/audit.js';
 import { RelayTcpServer } from '../src/tcp.js';
 import { StatusServer } from '../src/status.js';
+import { StationTelemetry } from '../src/telemetry.js';
 import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
 import { WiiClient, TEST_SECRET } from '../test/wii-client.js';
 
@@ -161,7 +162,7 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) }, tcp });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) }, tcp, telemetry: new StationTelemetry({ secret: TEST_SECRET }) });
   await status.listen(0, '127.0.0.1');
   cache.start();
 

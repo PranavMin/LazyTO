@@ -53,6 +53,18 @@ constants:
   AUTH_MAGIC_1:
     value: 0x4B
     doc: "'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so"
+  TELEMETRY_PORT:
+    value: 7779
+    doc: "UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from"
+  TELEMETRY_MAGIC_1:
+    value: 0x4C
+    doc: "'L', second byte of telemetry_hdr ('M','L')"
+  TELEMETRY_TEXT_MAX:
+    value: 480
+    doc: "most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame"
+  TELEMETRY_STATUS_MS:
+    value: 5000
+    doc: "a station sends a TM_STATUS datagram at least this often once it knows the relay"
 
 enums:
   relay_cmd:
@@ -95,6 +107,25 @@ enums:
       RELAY_BUSY:  {value: 1, doc: "request in flight on the ARM side"}
       RELAY_DONE:  {value: 2, doc: "response buffer valid"}
       RELAY_ERROR: {value: 3, doc: "transport failed; response buffer is zeroed"}
+
+  telemetry_kind:
+    doc: "what follows a telemetry_hdr"
+    values:
+      TM_LOG:    {value: 1, doc: "len bytes of kernel log text, ASCII, lines ending in \\n (a line may be split across datagrams)"}
+      TM_STATUS: {value: 2, doc: "one station_status"}
+
+  module_state:
+    doc: "what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule)"
+    values:
+      MOD_PENDING:     {value: 0, doc: "no game booted yet"}
+      MOD_LOADED:      {value: 1}
+      MOD_NOT_FOUND:   {value: 2, doc: "no sd:/tournament.bin"}
+      MOD_BAD_FILE:    {value: 3, doc: "not a TMOD file"}
+      MOD_BAD_HEADER:  {value: 4, doc: "unsupported version, size or load address"}
+      MOD_GUARD:       {value: 5, doc: "guard word mismatch: the disc is not stock Melee 1.02"}
+      MOD_ARENA:       {value: 6, doc: "the module would overlap game memory (arena top below the module)"}
+      MOD_READ_FAILED: {value: 7}
+      MOD_NOT_MELEE:   {value: 8, doc: "the booted game is not Melee NTSC 1.02"}
 
 structs:
   exi_poll_hdr:
@@ -149,6 +180,39 @@ structs:
       - {name: magic,  type: u8,   array: 2, doc: "AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')"}
       - {name: _pad,   type: u16}
       - {name: secret, type: char, array: SECRET_LEN, doc: "the shared secret, NUL-padded"}
+
+  telemetry_hdr:
+    doc: >-
+      Station telemetry. Not part of the game's messages: the host of the
+      fake EXI device (Nintendont kernel) sends one UDP datagram per message
+      to the relay's address from the beacon, port TELEMETRY_PORT:
+      relay_auth (the same shared secret as TCP requests), this header, then
+      len payload bytes (TM_LOG text or one station_status). The relay drops
+      datagrams with a wrong secret (counted on the status page), keeps the
+      last log lines and status per station, and never answers. seq counts
+      datagrams from 0 at kernel boot, so a gap is a lost datagram and a
+      smaller seq is a reboot.
+    size: 16
+    fields:
+      - {name: magic,     type: u8,  array: 2, doc: "MAGIC_0, TELEMETRY_MAGIC_1 ('M','L')"}
+      - {name: version,   type: u8,            doc: "PROTO_VERSION"}
+      - {name: kind,      type: u8,            doc: "enum telemetry_kind"}
+      - {name: station,   type: u16,           doc: "tournament.cfg station"}
+      - {name: len,       type: u16,           doc: "payload bytes after this header"}
+      - {name: seq,       type: u32}
+      - {name: uptime_ms, type: u32,           doc: "milliseconds since the kernel started"}
+
+  station_status:
+    doc: "TM_STATUS payload: what the station's host knows about its own boot."
+    size: 20
+    fields:
+      - {name: module_state,   type: u8,  doc: "enum module_state"}
+      - {name: _pad,           type: u8}
+      - {name: module_patches, type: u16, doc: "hook patches applied (MOD_LOADED)"}
+      - {name: module_len,     type: u32, doc: "module code bytes (MOD_LOADED)"}
+      - {name: module_load,    type: u32, doc: "module load address (MOD_LOADED)"}
+      - {name: arena_hi,       type: u32, doc: "the boot-info arena top (0x80000034) the host saw at load time; 0 = unset, the game then uses its built-in default"}
+      - {name: log_dropped,    type: u32, doc: "log bytes discarded because the host's buffer was full"}
 
   relay_hdr:
     doc: "Every message (request and response) begins with this header."

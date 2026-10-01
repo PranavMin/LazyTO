@@ -3,3 +3,4 @@ node_modules/
 __pycache__/
 dist/
 .claude/settings.local.json
+deploy/.cache/

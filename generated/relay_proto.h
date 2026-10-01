@@ -37,16 +37,20 @@ typedef unsigned long uint32_t;
 #define RELAY_MAGIC_0 'M'
 #define RELAY_MAGIC_1 'T'
 
-#define MAX_GAMES          5  /* games per set (best of 5) */
-#define MAX_SETS           56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
-#define MSG_LEN            30  /* human-readable status text in relay_resp */
-#define ROUND_LEN          24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
-#define TAG_LEN            16  /* player tag */
-#define BEACON_PORT        7778  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
-#define BEACON_INTERVAL_MS 2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
-#define SECRET_LEN         16  /* relay shared secret, printable ASCII, NUL-padded (design R16) */
-#define AUTH_MAGIC_0       77  /* 'M', first byte of relay_auth */
-#define AUTH_MAGIC_1       75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
+#define MAX_GAMES           5  /* games per set (best of 5) */
+#define MAX_SETS            56  /* cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72) */
+#define MSG_LEN             30  /* human-readable status text in relay_resp */
+#define ROUND_LEN           24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
+#define TAG_LEN             16  /* player tag */
+#define BEACON_PORT         7778  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_INTERVAL_MS  2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
+#define SECRET_LEN          16  /* relay shared secret, printable ASCII, NUL-padded (design R16) */
+#define AUTH_MAGIC_0        77  /* 'M', first byte of relay_auth */
+#define AUTH_MAGIC_1        75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
+#define TELEMETRY_PORT      7779  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
+#define TELEMETRY_MAGIC_1   76  /* 'L', second byte of telemetry_hdr ('M','L') */
+#define TELEMETRY_TEXT_MAX  480  /* most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame */
+#define TELEMETRY_STATUS_MS 5000  /* a station sends a TM_STATUS datagram at least this often once it knows the relay */
 
 /* request/response command, echoed back in the response header */
 enum relay_cmd {
@@ -82,6 +86,25 @@ enum exi_poll_state {
     RELAY_BUSY  = 1,  /* request in flight on the ARM side */
     RELAY_DONE  = 2,  /* response buffer valid */
     RELAY_ERROR = 3,  /* transport failed; response buffer is zeroed */
+};
+
+/* what follows a telemetry_hdr */
+enum telemetry_kind {
+    TM_LOG    = 1,  /* len bytes of kernel log text, ASCII, lines ending in \n (a line may be split across datagrams) */
+    TM_STATUS = 2,  /* one station_status */
+};
+
+/* what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
+enum module_state {
+    MOD_PENDING     = 0,  /* no game booted yet */
+    MOD_LOADED      = 1,
+    MOD_NOT_FOUND   = 2,  /* no sd:/tournament.bin */
+    MOD_BAD_FILE    = 3,  /* not a TMOD file */
+    MOD_BAD_HEADER  = 4,  /* unsupported version, size or load address */
+    MOD_GUARD       = 5,  /* guard word mismatch: the disc is not stock Melee 1.02 */
+    MOD_ARENA       = 6,  /* the module would overlap game memory (arena top below the module) */
+    MOD_READ_FAILED = 7,
+    MOD_NOT_MELEE   = 8,  /* the booted game is not Melee NTSC 1.02 */
 };
 
 /* What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf:
@@ -153,6 +176,54 @@ RELAY_STATIC_ASSERT(sizeof(struct relay_auth) == 20, relay_auth_size);
 RELAY_STATIC_ASSERT(offsetof(struct relay_auth, magic) == 0, relay_auth_magic);
 RELAY_STATIC_ASSERT(offsetof(struct relay_auth, _pad) == 2, relay_auth__pad);
 RELAY_STATIC_ASSERT(offsetof(struct relay_auth, secret) == 4, relay_auth_secret);
+
+/* Station telemetry. Not part of the game's messages: the host of the fake EXI
+ * device (Nintendont kernel) sends one UDP datagram per message to the relay's
+ * address from the beacon, port TELEMETRY_PORT: relay_auth (the same shared
+ * secret as TCP requests), this header, then len payload bytes (TM_LOG text or
+ * one station_status). The relay drops datagrams with a wrong secret (counted
+ * on the status page), keeps the last log lines and status per station, and
+ * never answers. seq counts datagrams from 0 at kernel boot, so a gap is a
+ * lost datagram and a smaller seq is a reboot.
+ */
+struct telemetry_hdr {
+    uint8_t  magic[2];  /* MAGIC_0, TELEMETRY_MAGIC_1 ('M','L') */
+    uint8_t  version;  /* PROTO_VERSION */
+    uint8_t  kind;  /* enum telemetry_kind */
+    uint16_t station;  /* tournament.cfg station */
+    uint16_t len;  /* payload bytes after this header */
+    uint32_t seq;
+    uint32_t uptime_ms;  /* milliseconds since the kernel started */
+};  /* 16 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct telemetry_hdr) == 16, telemetry_hdr_size);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, magic) == 0, telemetry_hdr_magic);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, version) == 2, telemetry_hdr_version);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, kind) == 3, telemetry_hdr_kind);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, station) == 4, telemetry_hdr_station);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, len) == 6, telemetry_hdr_len);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, seq) == 8, telemetry_hdr_seq);
+RELAY_STATIC_ASSERT(offsetof(struct telemetry_hdr, uptime_ms) == 12, telemetry_hdr_uptime_ms);
+
+/* TM_STATUS payload: what the station's host knows about its own boot. */
+struct station_status {
+    uint8_t  module_state;  /* enum module_state */
+    uint8_t  _pad;
+    uint16_t module_patches;  /* hook patches applied (MOD_LOADED) */
+    uint32_t module_len;  /* module code bytes (MOD_LOADED) */
+    uint32_t module_load;  /* module load address (MOD_LOADED) */
+    uint32_t arena_hi;  /* the boot-info arena top (0x80000034) the host saw at load time; 0 = unset, the game then uses its built-in default */
+    uint32_t log_dropped;  /* log bytes discarded because the host's buffer was full */
+};  /* 20 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct station_status) == 20, station_status_size);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, module_state) == 0, station_status_module_state);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, _pad) == 1, station_status__pad);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, module_patches) == 2, station_status_module_patches);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, module_len) == 4, station_status_module_len);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, module_load) == 8, station_status_module_load);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, arena_hi) == 12, station_status_arena_hi);
+RELAY_STATIC_ASSERT(offsetof(struct station_status, log_dropped) == 16, station_status_log_dropped);
 
 /* Every message (request and response) begins with this header. */
 struct relay_hdr {

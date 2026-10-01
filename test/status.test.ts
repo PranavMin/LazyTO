@@ -7,6 +7,9 @@ import { StartggClient } from '../src/startgg.js';
 import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
 import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
 import { WiiClient, game, TEST_SECRET } from './wii-client.js';
+import { StationTelemetry } from '../src/telemetry.js';
+import { telemetryDatagram, statusPayload } from './telemetry.test.js';
+import { ModuleState, TelemetryKind } from '../generated/wire.js';
 
 const nullAudit: AuditSink = { record() {} };
 
@@ -19,13 +22,34 @@ test('status page', async (t) => {
   const state = new StationState();
   const tcp = new RelayTcpServer({ cache, state, startgg, audit: nullAudit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `SF Melee Discord Test · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: ['192.168.1.255'], sent: 1, lastSentAt: Date.now(), lastError: null }) }, tcp });
+  const telemetry = new StationTelemetry({ secret: TEST_SECRET });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `SF Melee Discord Test · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: ['192.168.1.255'], sent: 1, lastSentAt: Date.now(), lastError: null }) }, tcp, telemetry });
   await status.listen(0, '127.0.0.1');
   const statusUrl = `http://127.0.0.1:${status.address().port}`;
   t.after(async () => {
     await status.close();
     await tcp.close();
     await fake.close();
+  });
+
+  await t.test('Wii consoles: module status, log tail, full log page', async () => {
+    let html = await (await fetch(statusUrl)).text();
+    assert.match(html, /no Wii has reported yet/);
+    telemetry.receive(telemetryDatagram(TelemetryKind.TM_LOG, 4, 0, 'Patch:Game ID = 47414c45\nTMOD:arena top 00000000 below module end 817f38a4\n'), '192.168.1.80');
+    telemetry.receive(telemetryDatagram(TelemetryKind.TM_STATUS, 4, 1, statusPayload({ module_state: ModuleState.MOD_ARENA, arena_hi: 0 })), '192.168.1.80');
+    html = await (await fetch(statusUrl)).text();
+    assert.match(html, /<h2>Wii consoles<\/h2>/);
+    assert.match(html, /✗ NOT LOADED: module overlaps game memory \(arena top 0x0\)/);
+    assert.match(html, /TMOD:arena top 00000000 below module end 817f38a4/, 'log tail on the main page');
+    assert.match(html, /192\.168\.1\.80/);
+    const log = await fetch(`${statusUrl}/log?station=4`);
+    assert.equal(log.status, 200);
+    assert.match(await log.text(), /^station 4 \(192\.168\.1\.80\)[\s\S]*Patch:Game ID = 47414c45\nTMOD:arena top/);
+    assert.equal((await fetch(`${statusUrl}/log?station=9`)).status, 404);
+    telemetry.receive(telemetryDatagram(TelemetryKind.TM_STATUS, 4, 2, statusPayload({ module_state: ModuleState.MOD_LOADED, module_len: 80288, module_patches: 28 })), '192.168.1.80');
+    html = await (await fetch(statusUrl)).text();
+    assert.match(html, /loaded \(80288 bytes, 28 patches\)/);
+    assert.doesNotMatch(html, /NOT LOADED/);
   });
 
   await t.test('before any Wii connects: event id, empty table, cache line', async () => {
