@@ -36,6 +36,17 @@ check.
 | `npx tsx scripts/probe.ts --mine` | Read-only lookups on the real start.gg API with the token in `.env`: `--mine` lists your tournaments and short URLs, `--tournament=<slug>` lists a tournament's events and streams (to pick `EVENT_NAME` and `STREAM_NAME`), `--resolve=<tournament>` shows what the relay would pick at startup, `--weekly` shows the weekly fallback's pick. |
 | `npx tsx scripts/reset-bracket.ts` | Lists every set of the event `EVENT_ID` in `.env`; with `--yes` resets them all on start.gg so a test bracket can be played again. Only ever point it at a test event. |
 
+**On Windows.** `python3` is often the Microsoft Store alias; the npm scripts call `python`.
+npm drops some flags after `--` (`--duration`), so run `npx tsx scripts/<name>.ts` directly when
+one is ignored. A relay started through `npx` leaves its `tsx` child running when the wrapper
+stops; for long runs start one process, `node dist/main.js`. `tsx` takes over 3 s to start, so
+poll the port rather than sleeping a fixed time.
+
+**Resetting the test bracket.** On start.gg, `markSetInProgress` on any `preview_*` set id
+starts the whole pool: every set gets a real numeric id. This is asynchronous; query again
+after a few seconds. `resetSet` on one started set leaves the pool started, so to get a pristine
+started bracket, start one set and reset it. `resetSet` keeps a set's stream assignment.
+
 **Rehearsing the built relay without start.gg.** Run `npm run build` and `npm run fake -- --port=18081`.
 Write a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`,
 `"tournament": "tournament/lazyto-test"`, `"eventName": "Melee Singles"`,
@@ -118,7 +129,9 @@ address. `python kiosk/tools/resolve_crash.py <address>` turns it into a functio
 forwarder: [PranavMin/Ishiiruka](https://github.com/PranavMin/Ishiiruka), branch `LazyTO`. It
 is a development setup, not something a venue installs. Its README covers the build and the
 Dolphin settings; the developer flags in [kiosk.md](kiosk.md) exist for runs there with no
-controller.
+controller. Dolphin rewrites `Dolphin.ini` from memory when it exits, so edit the file only
+while Dolphin is closed. Dolphin finds a relay by its beacon like a Wii does: with a Pi relay
+up on the same network, it may pair with the Pi instead of your development relay.
 
 ## Working in a submodule
 
