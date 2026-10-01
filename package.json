@@ -1,5 +1,5 @@
 {
-  "name": "tournament-reporter-relay",
+  "name": "lazyto-relay",
   "version": "0.1.0",
   "private": true,
   "main": "dist/main.js",

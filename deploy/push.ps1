@@ -64,7 +64,7 @@ try {
 if (-not (Test-Path (Join-Path $repo 'dist\main.js'))) { throw 'build produced no dist/main.js' }
 
 # --- bundle ---
-$stage = Join-Path ([System.IO.Path]::GetTempPath()) 'tournament-reporter-bundle'
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) 'lazyto-bundle'
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -Recurse (Join-Path $repo 'dist') (Join-Path $stage 'dist')
@@ -81,11 +81,11 @@ $config = [ordered]@{
   streamStation = $StreamStation
   tcpPort       = $TcpPort
   httpPort      = $HttpPort
-  auditDir      = '/var/lib/tournament-reporter'
+  auditDir      = '/var/lib/lazyto'
 }
 $json = (($config | ConvertTo-Json) -replace "`r`n", "`n") + "`n"
 [System.IO.File]::WriteAllText((Join-Path $stage 'config.json'), $json, (New-Object System.Text.UTF8Encoding $false))
-$tgz = Join-Path ([System.IO.Path]::GetTempPath()) 'tournament-reporter.tgz'
+$tgz = Join-Path ([System.IO.Path]::GetTempPath()) 'lazyto.tgz'
 if (Test-Path $tgz) { Remove-Item -Force $tgz }
 & tar -czf $tgz -C $stage .
 if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
@@ -99,11 +99,11 @@ if ($DryRun) { Write-Host 'dry run: not pushing'; exit 0 }
 # --- push and install ---
 $target = "$User@$PiHost"
 Write-Host "copying to $target ..."
-& scp -q $tgz "${target}:/tmp/tournament-reporter.tgz"
+& scp -q $tgz "${target}:/tmp/lazyto.tgz"
 if ($LASTEXITCODE -ne 0) { throw "scp to $target failed" }
 Write-Host 'installing (sudo on the Pi) ...'
-$remote = 'rm -rf /tmp/tr && mkdir -p /tmp/tr && tar -xzf /tmp/tournament-reporter.tgz -C /tmp/tr ' +
-  '&& sudo bash /tmp/tr/deploy/install.sh /tmp/tr && rm -rf /tmp/tr /tmp/tournament-reporter.tgz'
+$remote = 'rm -rf /tmp/tr && mkdir -p /tmp/tr && tar -xzf /tmp/lazyto.tgz -C /tmp/tr ' +
+  '&& sudo bash /tmp/tr/deploy/install.sh /tmp/tr && rm -rf /tmp/tr /tmp/lazyto.tgz'
 & ssh -t $target $remote
 if ($LASTEXITCODE -ne 0) { throw 'install on the Pi failed (see output above)' }
 # The bundle carries the token; don't leave it lying in %TEMP%.

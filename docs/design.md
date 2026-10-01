@@ -1,7 +1,7 @@
 # Design: Console-Side Set Selection and Score Reporting for Melee Locals
 
 **Status:** Draft v0.1 — September 2026
-**Project:** Tournament Reporter — repos: `tournament-reporter` (relay + this doc + protocol), forks of `doldecomp/melee`, `project-slippi/Nintendont`, `project-slippi/Ishiiruka` on branch `reporter`
+**Project:** LazyTO (formerly Tournament Reporter) — repos: `lazyto` (relay + this doc + protocol), forks of `doldecomp/melee`, `project-slippi/Nintendont`, `project-slippi/Ishiiruka` on branch `reporter`
 **Scope:** Melee decomp build + Nintendont kernel extension + LAN relay on Raspberry Pi
 **Audience:** The people writing the three components; future-you at 11pm before a local
 
@@ -419,7 +419,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
 | `chars.ts` | Melee external char id (`CharacterKind`) → start.gg character id table, used for `selections` since the auto-score path landed (R13). All 26 mappings verified live 2026-09-19. |
 | `stages.ts` | Melee `StKind` → start.gg stage id table (29 stages; the API's `videogame(id: 1).stages`, read 2026-09-22 with `probe.ts --stages`). 0 / unused ids → no `stageId`. |
 
-**Config** (`/etc/tournament-reporter/config.json`):
+**Config** (`/etc/lazyto/config.json`):
 
 ```json
 {
@@ -432,7 +432,7 @@ The kernel does not interpret payloads beyond the header length. Still one code 
   "streamStation": 1,
   "tcpPort": 29470,
   "httpPort": 29473,
-  "auditDir": "/var/lib/tournament-reporter"
+  "auditDir": "/var/lib/lazyto"
 }
 ```
 
@@ -564,12 +564,12 @@ start.gg states: `1` not started → `2` in progress → `3` complete. The relay
 |------|------|
 | `deploy/push.ps1` | Run on the Windows dev PC: `npm run build` (tsc → `dist/`, no runtime npm deps), writes `config.json` (token from `.env`; tournament `abbey` by default, `tournament/sf-melee-discord-test` with `-Test`; `-EventName`, `-StreamName`), scp's the bundle, runs the installer over ssh (`-PiHost`/`-User` for another Pi, e.g. the venue's matchcaller Pi). Needed only to update the relay or switch modes, not per tournament. |
 | `deploy/uninstall.sh` | Removes exactly what install.sh added (unit, `relay` user, `/opt` Node + code, `/etc` config; audit logs kept unless `--purge`), for a shared Pi. |
-| `deploy/install.sh` | Run on the Pi by push.ps1 (sudo): pinned official Node 22 tarball at `/opt/node`, Wi-Fi power saving off (NetworkManager `wifi.powersave = 2`: it causes latency spikes and mDNS drops, and a Wii gives up after 3 s), system user `relay`, code at `/opt/tournament-reporter`, config at `/etc/tournament-reporter/config.json` (root:relay 0640), unit installed and restarted, waits for `relay up:`. Idempotent. |
-| `deploy/tournament-reporter.service` | systemd unit: `ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/main.js`, `Environment=CONFIG=…`, `Restart=on-failure`, runs as `relay`. |
+| `deploy/install.sh` | Run on the Pi by push.ps1 (sudo): pinned official Node 22 tarball at `/opt/node`, Wi-Fi power saving off (NetworkManager `wifi.powersave = 2`: it causes latency spikes and mDNS drops, and a Wii gives up after 3 s), system user `relay`, code at `/opt/lazyto`, config at `/etc/lazyto/config.json` (root:relay 0640), unit installed and restarted, waits for `relay up:`. Idempotent. |
+| `deploy/lazyto-relay.service` | systemd unit: `ExecStart=/opt/node/bin/node /opt/lazyto/dist/main.js`, `Environment=CONFIG=…`, `Restart=on-failure`, runs as `relay`. |
 | `deploy/add-wifi.sh` | Saves another Wi-Fi network (the venue's) with NetworkManager, from anywhere; the Pi joins whichever saved network is in range. Prompts for the password. |
 | `scripts/smoke.ts` | From the PC: one LIST_SETS over the wire protocol plus a status-page fetch against the deployed relay. |
 
-Logs to journald; audit log to `/var/lib/tournament-reporter/<eventId>.jsonl` (one file per tournament).
+Logs to journald; audit log to `/var/lib/lazyto/<eventId>.jsonl` (one file per tournament).
 
 **Status 2026-09-24** — two kits were built independently (2026-09-22: clone-on-Pi, nvm, hand-edited `config.example.json`, unit run as `pi`; 2026-09-24: build-on-Windows, push over ssh) and reconciled to the second: the Pi never needs git, npm or a GitHub credential, and the config is generated from `.env`, so `config.example.json` is gone. Kept from the first: `npm run build` (`dist/main.js` entry via the root `main.ts`; `generated/wire.ts` compiled in place), `startggEndpoint` as an explicit required config field (push.ps1 writes the production URL; a rehearsal points it at `npm run fake -- --port=N`), `npm run sim -- --relay=host:port` to drive an external relay, the README's config table and night-of table. Rehearsed on the dev machine 2026-09-22: built relay against `npm run fake`, 600 s of `sim --relay`: 12 stations, 122 sets completed, 749 Wii requests (peak 80/min), 8 benign ST_SET_TAKEN races, **0 errors**; upstream 643 calls, **peak 67/min** against the 70/min guard (the sim paces one action every ~12 s per station — 5× the §6.3 estimate — a stress number, not the venue rate). Windows-side kit verified 2026-09-24 (dry-run bundle, generated config through `loadConfig`, `smoke.ts` against the fake stack). **Not yet run on a real Pi.**
 

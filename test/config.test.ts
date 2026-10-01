@@ -15,7 +15,7 @@ const VALID = {
   streamStation: 1,
   tcpPort: 29470,
   httpPort: 29473,
-  auditDir: '/var/lib/tournament-reporter',
+  auditDir: '/var/lib/lazyto',
 };
 
 let dir: string;
@@ -140,7 +140,7 @@ test('empty auditDir', () => {
   expectProblems(JSON.stringify({ ...VALID, auditDir: '' }), 'auditDir must be a non-empty string');
 });
 
-// deploy/push.ps1 is what writes /etc/tournament-reporter/config.json on the
+// deploy/push.ps1 is what writes /etc/lazyto/config.json on the
 // Pi (from .env). Its $config block must name exactly the fields config.ts
 // validates, or the first push after a config change fails on the Pi instead
 // of here.

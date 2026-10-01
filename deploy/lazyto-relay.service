@@ -1,11 +1,11 @@
-# systemd unit for the Tournament Reporter relay (docs/design.md section 10).
+# systemd unit for the LazyTO relay (docs/design.md section 10).
 # Installed to /etc/systemd/system by deploy/install.sh. Node lives at
 # /opt/node (a pinned official tarball), the compiled relay at
-# /opt/tournament-reporter/dist, config at /etc/tournament-reporter.
+# /opt/lazyto/dist, config at /etc/lazyto.
 
 [Unit]
-Description=Tournament Reporter relay (Wii <-> start.gg)
-Documentation=file:///opt/tournament-reporter/README.md
+Description=LazyTO relay (Wii <-> start.gg)
+Documentation=file:///opt/lazyto/README.md
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
 # Never give up: a Pi that boots without Wi-Fi, or before tonight's
@@ -17,9 +17,9 @@ StartLimitIntervalSec=0
 Type=simple
 User=relay
 Group=relay
-WorkingDirectory=/opt/tournament-reporter
-Environment=CONFIG=/etc/tournament-reporter/config.json
-ExecStart=/opt/node/bin/node /opt/tournament-reporter/dist/main.js
+WorkingDirectory=/opt/lazyto
+Environment=CONFIG=/etc/lazyto/config.json
+ExecStart=/opt/node/bin/node /opt/lazyto/dist/main.js
 # The relay exits non-zero on a bad config or an unreachable start.gg at
 # startup (fail fast). on-failure brings it back when the network returns;
 # a genuinely bad config shows up as a restart loop in `systemctl status`.
@@ -37,7 +37,7 @@ Restart=on-failure
 RestartSec=10
 RestartSteps=5
 RestartMaxDelaySec=120
-SyslogIdentifier=tournament-reporter
+SyslogIdentifier=lazyto-relay
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true

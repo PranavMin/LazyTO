@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh -- Pi-side installer for the Tournament Reporter relay.
+# install.sh -- Pi-side installer for the LazyTO relay.
 # Run as root on the Pi from an extracted bundle made by deploy/push.ps1:
 #   sudo bash /tmp/tr/deploy/install.sh /tmp/tr
 # The bundle holds dist/ (compiled relay), package.json ("type": "module",
@@ -8,7 +8,7 @@
 #
 # Runs on a Pi of its own or next to other software on a shared one (the
 # venue's matchcaller Pi Zero 2 W): everything lives under /opt/node*,
-# /opt/tournament-reporter, /etc/tournament-reporter, /var/lib/tournament-reporter,
+# /opt/lazyto, /etc/lazyto, /var/lib/lazyto,
 # one system user "relay" and one unit; deploy/uninstall.sh removes exactly that.
 set -euo pipefail
 
@@ -23,12 +23,30 @@ case "$(uname -m)" in
   *) echo "install.sh: unsupported architecture $(uname -m) (want aarch64 or armv7l)" >&2; exit 1 ;;
 esac
 NODE_TARBALL="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
-APP=/opt/tournament-reporter
-CONF_DIR=/etc/tournament-reporter
-DATA_DIR=/var/lib/tournament-reporter
-UNIT=tournament-reporter
+APP=/opt/lazyto
+CONF_DIR=/etc/lazyto
+DATA_DIR=/var/lib/lazyto
+UNIT=lazyto-relay
 
 [[ $EUID -eq 0 ]] || { echo "install.sh: run with sudo" >&2; exit 1; }
+
+# --- one-time migration from the pre-rename install ("tournament-reporter",
+#     renamed to LazyTO 2026-09-30): stop and remove the old unit, carry the
+#     audit logs over (a mid-tournament push must keep its claims), drop the
+#     old code, config and NetworkManager drop-in. No-op on a fresh Pi. ---
+if [[ -f /etc/systemd/system/tournament-reporter.service ]]; then
+  echo "migrating from the tournament-reporter install"
+  systemctl disable --now tournament-reporter >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/tournament-reporter.service
+  systemctl daemon-reload
+fi
+if [[ -d /var/lib/tournament-reporter ]]; then
+  mkdir -p "$DATA_DIR"
+  cp -an /var/lib/tournament-reporter/. "$DATA_DIR"/
+  rm -rf /var/lib/tournament-reporter
+fi
+rm -rf /opt/tournament-reporter /etc/tournament-reporter
+rm -f /etc/NetworkManager/conf.d/tournament-reporter-wifi.conf
 for f in dist/main.js package.json config.json deploy/$UNIT.service; do
   [[ -f "$BUNDLE/$f" ]] || { echo "install.sh: $BUNDLE/$f missing (bundle not built by push.ps1?)" >&2; exit 1; }
 done
@@ -49,7 +67,7 @@ echo "node $(/opt/node/bin/node --version) at /opt/node"
 
 # --- Wi-Fi power saving off: it adds latency spikes of hundreds of ms and
 #     drops mDNS, and the Wiis give up on the relay after 3 s ---
-install -o root -g root -m 0644 /dev/stdin /etc/NetworkManager/conf.d/tournament-reporter-wifi.conf <<'CONF'
+install -o root -g root -m 0644 /dev/stdin /etc/NetworkManager/conf.d/lazyto-wifi.conf <<'CONF'
 [connection]
 wifi.powersave = 2
 CONF

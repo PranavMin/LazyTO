@@ -87,7 +87,7 @@ From the repo root in PowerShell:
 .\deploy\push.ps1
 ```
 
-This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 29470/29473, the production start.gg endpoint, audit dir `/var/lib/tournament-reporter`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
+This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 29470/29473, the production start.gg endpoint, audit dir `/var/lib/lazyto`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
 
 The relay has two modes, chosen at push time:
 
@@ -122,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File .\deploy\push.ps1
 **The venue's Wi-Fi.** Add it once, from home; the Pi keeps both networks and joins whichever is in range when it boots:
 
 ```bash
-ssh -t pi@relay.local sudo bash /opt/tournament-reporter/deploy/add-wifi.sh "Venue Network Name"
+ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Venue Network Name"
 ```
 
 It asks for the password (press Enter for an open network) and lists the saved networks.
@@ -143,7 +143,7 @@ A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no
 
 ## 6. Per tournament
 
-1. Power the Pi on at the venue (or `sudo systemctl restart tournament-reporter`). The relay looks the tournament up again at every start, so there is nothing to push. Open the status page and check the header names tonight's tournament and event and the footer shows a set count.
+1. Power the Pi on at the venue (or `sudo systemctl restart lazyto-relay`). The relay looks the tournament up again at every start, so there is nothing to push. Open the status page and check the header names tonight's tournament and event and the footer shows a set count.
 2. On start.gg, start every pool and phase (design.md §10); unstarted ones have preview-id sets the relay drops, and the status page warns until it is done.
 3. Check each Wii's `tournament.cfg` station number against its physical label; exactly one has `stream=1`, and that station number is the relay's `streamStation` (1 unless you pass `-StreamStation`).
 4. Boot one Wii and confirm the set list loads, or run the smoke test again.
@@ -183,22 +183,22 @@ You need three things from that Pi, found once with a keyboard on it or by askin
 Everything else in this guide then applies with `<hostname>.local` in place of `relay.local`. To take the relay off that Pi again, leaving matchcaller as it was:
 
 ```bash
-ssh -t abbey@<hostname>.local sudo bash /opt/tournament-reporter/deploy/uninstall.sh
+ssh -t abbey@<hostname>.local sudo bash /opt/lazyto/deploy/uninstall.sh
 ```
 
 ## Day-to-day commands
 
 | What | Command |
 |------|---------|
-| Is it running, last lines | `ssh pi@relay.local systemctl status tournament-reporter` |
-| Live log | `ssh pi@relay.local journalctl -u tournament-reporter -f` |
-| Restart (also re-finds tonight's tournament) | `ssh pi@relay.local sudo systemctl restart tournament-reporter` |
-| Audit log of the current event | `ssh pi@relay.local sudo cat /var/lib/tournament-reporter/<eventId>.jsonl` |
+| Is it running, last lines | `ssh pi@relay.local systemctl status lazyto-relay` |
+| Live log | `ssh pi@relay.local journalctl -u lazyto-relay -f` |
+| Restart (also re-finds tonight's tournament) | `ssh pi@relay.local sudo systemctl restart lazyto-relay` |
+| Audit log of the current event | `ssh pi@relay.local sudo cat /var/lib/lazyto/<eventId>.jsonl` |
 | Update the relay after a code change | `.\deploy\push.ps1` (add `-Test` while testing) |
-| Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/tournament-reporter/deploy/add-wifi.sh "Name"` |
+| Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Name"` |
 | Shut down cleanly | `ssh pi@relay.local sudo poweroff` (pulling power is also fine; claims replay from the audit log on boot) |
 
-The relay starts on boot and restarts on failure. A wrong token, no Wi-Fi yet, no findable Abbey tournament, or an event name that matches no event or several makes it exit immediately. systemd tries again after 10 s, stretching to every 2 min, and never gives up, so it recovers on its own once the problem clears while keeping its start.gg calls well under the rate limit. Meanwhile `systemctl status` shows `activating (auto-restart)` and the journal shows the exact problem. After fixing something, `sudo systemctl restart tournament-reporter` starts it at once.
+The relay starts on boot and restarts on failure. A wrong token, no Wi-Fi yet, no findable Abbey tournament, or an event name that matches no event or several makes it exit immediately. systemd tries again after 10 s, stretching to every 2 min, and never gives up, so it recovers on its own once the problem clears while keeping its start.gg calls well under the rate limit. Meanwhile `systemctl status` shows `activating (auto-restart)` and the journal shows the exact problem. After fixing something, `sudo systemctl restart lazyto-relay` starts it at once.
 
 ## Troubleshooting
 
@@ -209,7 +209,7 @@ The relay starts on boot and restarts on failure. A wrong token, no Wi-Fi yet, n
 - **FAILED with `N Melee singles events ... have "Melee Singles" in the name`** (or `no ...`). Tonight's tournament has zero or several singles events with that in the name; the message lists them. Rename one on start.gg, or push a more specific `-EventName`.
 - **FAILED with `no streams named "SFMelee"`.** The stream was not added to tonight's tournament; add it under the tournament's stream settings, then restart.
 - **FAILED with "cannot read ..." or "must be ..." lines.** The generated config failed validation; fix the parameter you passed and push again.
-- **FAILED with a fetch or TLS error.** The Pi has no internet, or its clock is wrong right after first boot. Check `ssh pi@relay.local curl -sI https://api.start.gg` and `timedatectl`; then `sudo systemctl restart tournament-reporter`.
+- **FAILED with a fetch or TLS error.** The Pi has no internet, or its clock is wrong right after first boot. Check `ssh pi@relay.local curl -sI https://api.start.gg` and `timedatectl`; then `sudo systemctl restart lazyto-relay`.
 - **Status page shows 0 sets.** No pool or phase is started on start.gg yet. The relay refreshes every 20 s; no restart needed after starting pools.
 - **A Wii shows "no secret in tournament.cfg" or "wrong relay secret".** Its SD card's `secret=` line is missing, mistyped, or from an old `.env`. Copy `RELAY_SECRET` from `.env` exactly. The status page footer shows refused requests with the Wii's address and station.
 - **The status page shows requests refused from an address that is not one of your Wiis.** Something else on the Wi-Fi is trying the relay. Nothing happened on start.gg; if it keeps up, change `RELAY_SECRET`, push, and update the cards.

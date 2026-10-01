@@ -21,7 +21,7 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 - [x] Umbrella README in this repo: what each repo does, how they fit.
 - [x] Default branch `vanilla-module` on the forks; stale branches pruned, `shifted-dol-final` kept as a tag.
 - [x] CI on this repo: `npm test` on push and PR, Node 22; protect `main`.
-- [ ] Decide renames (repo `tournament-reporter`, Pi service name) once, before docs cleanup.
+- [x] Rename: repo `tournament-reporter` to `lazyto`, Pi service to `lazyto-relay`, Pi paths to `/opt|/etc|/var/lib/lazyto`.
 
 ## 3. Branding
 

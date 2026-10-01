@@ -1,4 +1,4 @@
-// config.ts -- load and validate /etc/tournament-reporter/config.json
+// config.ts -- load and validate /etc/lazyto/config.json
 // (design.md section 6.3). Every field is required, every field is checked,
 // there are no defaults; any problem is a ConfigError listing everything
 // wrong so one restart fixes it all. main.ts turns that into a non-zero exit.
