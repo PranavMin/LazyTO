@@ -136,7 +136,7 @@ The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 
 
 #### Auto-score
 
-When a game ends by KO or time-out with exactly two human players, the module reads the match standings: winner (more stocks, then less damage), each player's character, stocks left and costume, and the stage. It appends the game and sends REPORT_SCORE on the first CSS frame back. An exact tie or a no-contest is left to the players. Who is who comes from the port claim, or from the nametags the module seeds at START_SET. Hand-scored games (C-stick) carry the winner only.
+When a game ends by KO or time-out with exactly two human players, the module reads the match standings: winner (more stocks, then less damage), each player's character, stocks left and costume, and the stage. It appends the game and sends REPORT_SCORE on the first CSS frame back. An exact tie or a no-contest is left to the players. Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner only.
 
 #### EXI device contract
 

@@ -106,7 +106,7 @@ Ids change every week; names do not. A short URL that the TO moves weekly means 
 
 **Auto-scored games carry each player's character, stage, stocks and costume from the match standings. Hand-scored games carry the winner only.**
 
-Characters were first read from CSS port order, which need not match entrant order, so they went to the wrong player. The match standings plus a port-to-entrant mapping (port claim or seeded nametags) make them correct. Stocks and costume go to start.gg as `(costume + 1) * 100 + stocks` in the per-game score fields, because start.gg has no colour field.
+Characters were first read from CSS port order, which need not match entrant order, so they went to the wrong player. The match standings plus a port-to-entrant mapping (the L + R port claim; seeded nametags were the other source until 2026-09-30, when writing them was found to crash the CSS Name Entry screen and was removed) make them correct. Stocks and costume go to start.gg as `(costume + 1) * 100 + stocks` in the per-game score fields, because start.gg has no colour field.
 
 ### R14: kiosk flow
 

@@ -4,6 +4,7 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 
 ## 2026-09-30
 
+- **Nametag seeding removed** (melee v41): writing the set's tags into persistent nametag slots 0/1 at START_SET crashed the CSS Name Entry screen when a player added a custom tag. The L + R port claim is the only who-is-who; the module no longer touches nametags.
 - Renamed to LazyTO: repository `lazyto`, service `lazyto-relay`, paths `/opt/lazyto`, `/etc/lazyto`, `/var/lib/lazyto`. The kiosk title is now a LazyTO wordmark.
 - Ports moved to 29470 (Wii TCP), 29471 (beacon), 29472 (telemetry and beacon requests), 29473 (status page).
 - No venue is hardcoded. `weeklyNamePrefix` replaces the built-in weekly fallback; `deploy/push.ps1` reads the event values from `.env`.
@@ -31,7 +32,7 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 ## 2026-09-22
 
 - **Auto-score shipped** (melee v37): game end decides the winner from the match standings. v38 adds characters and stage (R13 closed); the relay maps them with `chars.ts` and the new `stages.ts`.
-- Handwarmer mode (Z + X, count-up clock) and seeded nametags for who is who.
+- Handwarmer mode (Z + X, count-up clock). Seeded nametags for who is who shipped here too and were removed on 2026-09-30 (see above).
 - Button glyphs in overlays (melee v35), drawn as coloured shapes with the font's letters.
 - Status page complete (F7): per-station rows, sticky failures with ack, cache and rate footer, preview warning. Per-tournament checklist written.
 - `startggEndpoint` became a required config field so a built relay can be rehearsed against the fake.
