@@ -15,7 +15,10 @@ What it does (docs/wii-setup.md section 1):
   4. tournament.cfg: station / stream / secret. Station and stream default to what
      the card already has. The secret comes from -RelayConfig (a relay config.json,
      e.g. a dev relay) or else .env RELAY_SECRET (the venue relay); it is never printed.
-  5. checks every copied file by hash, then ejects the card (-NoEject to keep it).
+  5. loader config (slippi_nincfg.bin, written by the loader's own settings menu):
+     turns on Network (the relay needs it) and Auto Boot (straight into Melee; hold B
+     at the loader to get its menu), and Log unless -NoLog. Nothing else in it changes.
+  6. checks every copied file by hash, then ejects the card (-NoEject to keep it).
 
 Needs: gh (logged in), and for a fresh card a Melee 1.02 image at
 games/GALE01/game.iso or games/<name> GALE01/game.iso (not copied by this script).
@@ -29,7 +32,8 @@ param(
     [string]$MeleeSrc = (Join-Path $PSScriptRoot "..\..\melee\src\melee"),
     [string]$Repo = "PranavMin/Nintendont",
     [string]$Branch = "vanilla-module",
-    [switch]$NoEject
+    [switch]$NoEject,
+    [switch]$NoLog
 )
 $ErrorActionPreference = "Stop"
 $AppName = "Kegstand Tournament Mod"
@@ -109,7 +113,28 @@ if ($RelayConfig) {
 if ($secret -notmatch '^[A-Za-z0-9_-]{8,16}$') { Fail "no valid secret from $secretFrom (8-16 of A-Z a-z 0-9 - _)" }
 [IO.File]::WriteAllText($cfgPath, "station=$Station`nstream=$Stream`nsecret=$secret`n", [Text.Encoding]::ASCII)
 
-# ---- 5. verify, report, eject
+# ---- 5. loader config bits: Network, Auto Boot, Log (NIN_CFG.Config, big-endian u32 at offset 8;
+#         bits from Nintendont common/include/CommonConfig.h)
+$ninCfg = Join-Path $card "slippi_nincfg.bin"
+$cfgNote = "no slippi_nincfg.bin yet (the loader writes it on first save; set Network and Auto Boot in its settings)"
+if (Test-Path $ninCfg) {
+    $b = [IO.File]::ReadAllBytes($ninCfg)
+    $magic = ([uint32]$b[0] -shl 24) -bor ([uint32]$b[1] -shl 16) -bor ([uint32]$b[2] -shl 8) -bor [uint32]$b[3]
+    if ($b.Length -ge 12 -and $magic -eq 0x01070CF6) {
+        $want = (1 -shl 13) -bor (1 -shl 10)            # NIN_CFG_NETWORK, NIN_CFG_AUTO_BOOT
+        if (-not $NoLog) { $want = $want -bor (1 -shl 8) }  # NIN_CFG_LOG
+        $cfgWord = ([uint32]$b[8] -shl 24) -bor ([uint32]$b[9] -shl 16) -bor ([uint32]$b[10] -shl 8) -bor [uint32]$b[11]
+        $newWord = $cfgWord -bor $want
+        if ($newWord -ne $cfgWord) {
+            $b[8] = [byte](($newWord -shr 24) -band 0xFF); $b[9] = [byte](($newWord -shr 16) -band 0xFF)
+            $b[10] = [byte](($newWord -shr 8) -band 0xFF); $b[11] = [byte]($newWord -band 0xFF)
+            [IO.File]::WriteAllBytes($ninCfg, $b)
+        }
+        $cfgNote = ("loader config {0:X8} -> {1:X8}: network on, auto boot on, log {2}" -f $cfgWord, $newWord, $(if ($NoLog) { "left as is" } else { "on" }))
+    } else { $cfgNote = "slippi_nincfg.bin not recognised (magic {0:X8}); left alone" -f $magic }
+}
+
+# ---- 6. verify, report, eject
 $checks = @()
 foreach ($f in Get-ChildItem $srcApp.FullName -File) { $checks += [pscustomobject]@{ File = "apps\$AppName\$($f.Name)"; Ok = (Md5 $f.FullName) -eq (Md5 (Join-Path $dstApp $f.Name)) } }
 $checks += [pscustomobject]@{ File = "tournament.bin"; Ok = (Md5 $srcMod) -eq (Md5 (Join-Path $card "tournament.bin")) }
@@ -120,6 +145,7 @@ if ($checks | Where-Object { -not $_.Ok }) { Fail "a file on the card does not m
 Write-Host ("loader : CI build {0} (commit {1}, {2})" -f $run.databaseId, $sha, $run.createdAt)
 Write-Host ("module : {0} bytes, md5 {1}" -f (Get-Item $srcMod).Length, (Md5 $srcMod))
 Write-Host ("config : station={0} stream={1} secret from {2}" -f $Station, $Stream, $secretFrom)
+Write-Host ("loader : {0}" -f $cfgNote)
 
 if (-not $NoEject) {
     $shell = New-Object -ComObject Shell.Application

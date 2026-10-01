@@ -78,9 +78,14 @@ table shows every request the Wii makes.
 
 ## 4. Nintendont settings on the Wii
 
-Start **Kegstand's Tournament Mod** from the Homebrew Channel (not Slippi Nintendont). In its settings:
+Start **Kegstand's Tournament Mod** from the Homebrew Channel (not Slippi Nintendont).
+`sync-card.ps1` already sets the two settings that matter in the loader's config file; if you
+set up a card by hand, in the loader's settings:
 
-- **Network: on.** Without it every action says `no network`.
+- **Network: on.** Without it the kiosk only ever says `NO RELAY FOUND` (no beacon can arrive).
+- **Auto Boot: on.** The loader then starts Melee by itself; hold B while it starts to get its
+  menu back. With Priiloader autobooting the Homebrew Channel this makes power-on -> kiosk a
+  single click; a forwarder installed in Priiloader would remove even that.
 - Boot device: SD, and pick `GALE01` from the list.
 - Leave the venue's own toggles (UCF, tournament mods, stages, music/mono) as the venue runs
   them. They are the venue's gecko sets and apply unchanged; the kiosk adds nothing to them.
@@ -92,6 +97,11 @@ line, then a `tournament.bin` line with its load address at 0x817E0000, then
 `RelayEXI: relay is a.b.c.d:7780 (event N)` once the beacon is heard.
 
 ## 5. What to expect, in order
+
+**First confirmed end to end on 2026-09-30** (loader from Nintendont `1851533`, module from melee
+`3f19a12b6`): station 1 heard the beacon, loaded the module, listed the sets in 55 ms and showed
+the Tournament screen. The Wi-Fi join is not always quick: one boot in four never associated and
+the kiosk timed out; a power cycle fixed it.
 
 1. **Boot.** No intro, no title: the main menu comes up and the Tournament screen opens on its
    own with `LOOKING FOR THE RELAY` pulsing. Within about 4 s (two beacons) it should switch to
@@ -122,6 +132,10 @@ Also check while you are there (open items from design.md and the checklist):
 
 ## 6. If it does not work
 
+**Loader changes without the card:** with the Wii on the Homebrew Channel (its IP is bottom-left),
+`powershell -ExecutionPolicy Bypass -File deploy/wiiload.ps1 -Wii <ip>` boots the newest
+GitHub-built loader over Wi-Fi. The card still supplies the module, the config and the game.
+
 **Look at the relay's status page first** (http://<relay>:8083). Since Nintendont 140bb77 every
 Wii sends its own kernel log and its module load result to the relay, so the **Wii consoles**
 table says whether the module loaded and why not, with the last log lines; "full log" shows the
@@ -135,7 +149,9 @@ log: turn on **Log** in the loader's settings, boot once, and read `slippi_ndebu
 |---|---|---|
 | `NO RELAY FOUND` after 10 s | No beacon heard | Same LAN? Relay log shows the beacon going out? If both yes, suspect the kernel's `recvfromAddr` (never run on hardware before, Nintendont docs/relay-exi-report.md section 3.7). |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
-| Status page: `NOT LOADED: module overlaps game memory (arena top 0x0)`, or the SD log says `TMOD:arena top 00000000 below module end` | A kernel older than Nintendont 140bb77: Nintendont never sets the boot arena word, and the old check refused the module | Use the current loader (sync-card.ps1 installs it). |
+| Status page: `NOT LOADED: module overlaps game memory (arena top 0x0)`, or the SD log says `TMOD:arena top 00000000 below module end` | A kernel older than Nintendont 140bb77 | Use the current loader (sync-card.ps1 installs it). |
+| Crash `Illegal instruction at 817E88D8` (the module's first instruction) a second after boot; the RAM watch shows the module zeroed | A loader older than Nintendont f32740f: the apploader's arena top (the FST base) stayed above the module, so Melee's heap setup zeroed it. The kernel could not see or fix that word (it sits in the PPC's data cache), so the PPC entry stub lowers it now | Current loader. The status page's crash line and `melee/tools/resolve_crash.py` name the address if it ever recurs. |
+| `NO RELAY FOUND` and the Wii never appears on the status page | The Wii's Wi-Fi did not associate this boot (it answers no ping), or Network is off in the loader | Power-cycle and retry; check Network in the loader settings. |
 | Boots to the VS character select, not the Tournament screen | A module older than melee 7f88d95f0: Slippi's core codes force VS mode at boot (`04 801BFA20 38600002`) | Use the current `tournament.bin`; it re-requests the main menu after the boot scene. |
 | Nintendont: `Failed to load IOS58 from NAND` | With `ES_GetStoredTMDSize() returned -4352`: a **locally built loader** (libogc "ES not initialised"), not a missing IOS58; the title bar then already says IOS58. Other codes: the Wii really lacks IOS58 | -4352: put the CI-built loader on the card. Test: if plain Nintendont reaches its game list, IOS58 is fine. Genuinely missing IOS58: an IOS58 installer from the Homebrew Channel; avoid a full system update on a softmodded Wii. |
 | `no network` on every action | Nintendont's Network option is off | Turn it on. |
