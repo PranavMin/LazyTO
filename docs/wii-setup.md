@@ -86,6 +86,14 @@ set up a card by hand, in the loader's settings:
 - **Auto Boot: on.** The loader then starts Melee by itself; hold B while it starts to get its
   menu back. With Priiloader autobooting the Homebrew Channel this makes power-on -> kiosk a
   single click; a forwarder installed in Priiloader would remove even that.
+- **Melee Music / Melee Audio** (Slippi settings page, below Custom Cheats): the kiosk forces
+  music off and mono unless these say On / Stereo. They reach the game through the relay EXI
+  poll header (`exi_poll_hdr.host_opts`), so they apply on the next boot; Dolphin always gets the
+  defaults.
+
+The set list shows the module's version top-right (`66d01ab 2026-09-30 WII 1`: module git hash and
+build date, then the loader's hand-bumped build number). A `+` after the hash means the module was
+built from an uncommitted tree.
 - Boot device: SD, and pick `GALE01` from the list.
 - Leave the venue's own toggles (UCF, tournament mods, stages, music/mono) as the venue runs
   them. They are the venue's gecko sets and apply unchanged; the kiosk adds nothing to them.
