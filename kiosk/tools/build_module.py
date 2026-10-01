@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 KIOSK = Path(__file__).resolve().parent.parent      # kiosk/
-REPO = KIOSK.parent                                  # the lazyto repo
+REPO = KIOSK.parent                                  # the LazyTO repo
 DECOMP = REPO / "melee"                              # doldecomp/melee submodule
 OUT_DIR = KIOSK / "build" / "obj"
 DOL = DECOMP / "orig" / "GALE01" / "sys" / "main.dol"

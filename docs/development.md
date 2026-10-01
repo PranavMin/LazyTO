@@ -6,16 +6,16 @@ the LazyTO loader fork. Each is pinned to the commit that goes with this repo's 
 everything at once:
 
 ```
-git clone --recursive https://github.com/PranavMin/lazyto.git
+git clone --recursive https://github.com/PranavMin/LazyTO.git
 ```
 
 In an existing clone, run `git submodule update --init`. CI checks out the submodules too.
 
 | Repo | Branch | Builds |
 |---|---|---|
-| lazyto (this repo) | `main` | the relay, the kiosk module (`kiosk/`), the protocol, the deploy scripts |
+| LazyTO (this repo) | `main` | the relay, the kiosk module (`kiosk/`), the protocol, the deploy scripts |
 | [doldecomp/melee](https://github.com/doldecomp/melee) | `master`, pinned | nothing itself; the kiosk builds against it, unmodified |
-| [Nintendont](https://github.com/PranavMin/Nintendont) | `lazyto` | the LazyTO loader |
+| [Nintendont](https://github.com/PranavMin/Nintendont) | `LazyTO` | the LazyTO loader |
 
 How the parts fit together is in [architecture.md](architecture.md). Why they are built that way
 is in [decisions.md](decisions.md).
@@ -76,7 +76,7 @@ The loader that runs on a Wii must come from the Nintendont repo's GitHub Action
 locally built loader stops at "Preparing IOS58 Kernel" on hardware. Start a build with:
 
 ```
-gh workflow run build.yml -R PranavMin/Nintendont --ref lazyto
+gh workflow run build.yml -R PranavMin/Nintendont --ref LazyTO
 ```
 
 The kernel itself builds locally for quick checks. See the Nintendont repo's
@@ -116,7 +116,7 @@ fixed commit, not a branch, so before changing the loader:
 
 ```
 cd Nintendont
-git switch lazyto
+git switch LazyTO
 git pull
 ```
 

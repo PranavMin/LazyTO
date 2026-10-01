@@ -5,7 +5,7 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 ## 2026-09-30
 
 - **Nametag seeding removed** (melee v41): writing the set's tags into persistent nametag slots 0/1 at START_SET crashed the CSS Name Entry screen when a player added a custom tag. The L + R port claim is the only who-is-who; the module no longer touches nametags.
-- Renamed to LazyTO: repository `lazyto`, service `lazyto-relay`, paths `/opt/lazyto`, `/etc/lazyto`, `/var/lib/lazyto`. The kiosk title is now a LazyTO wordmark.
+- Renamed to LazyTO: repository `LazyTO`, service `lazyto-relay`, paths `/opt/lazyto`, `/etc/lazyto`, `/var/lib/lazyto`. The kiosk title is now a LazyTO wordmark.
 - Ports moved to 29470 (Wii TCP), 29471 (beacon), 29472 (telemetry and beacon requests), 29473 (status page).
 - No venue is hardcoded. `weeklyNamePrefix` replaces the built-in weekly fallback; `deploy/push.ps1` reads the event values from `.env`.
 - Beacon request: a station that hears no broadcast asks on UDP 29472 and gets a unicast beacon.
