@@ -3,8 +3,8 @@
 // shows up as a row on the status page until the next restart) and fetches
 // the status page. Read-only: nothing is started or reported.
 //
-// Run: npx tsx scripts/smoke.ts relay.local          (ports 7777 / 8080)
-//      npx tsx scripts/smoke.ts 192.168.1.10 7777 8080
+// Run: npx tsx scripts/smoke.ts relay.local          (ports 29470 / 29473)
+//      npx tsx scripts/smoke.ts 192.168.1.10 29470 29473
 // Sends RELAY_SECRET from .env as its relay_auth, like a Wii (design R16).
 
 import { readFileSync } from 'node:fs';
@@ -20,8 +20,8 @@ function relaySecret(): string {
 }
 
 const host = process.argv[2] ?? 'relay.local';
-const tcpPort = Number(process.argv[3] ?? 7777);
-const httpPort = Number(process.argv[4] ?? 8080);
+const tcpPort = Number(process.argv[3] ?? 29470);
+const httpPort = Number(process.argv[4] ?? 29473);
 const STATION = 999;
 
 async function main(): Promise<void> {

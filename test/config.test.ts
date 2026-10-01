@@ -13,8 +13,8 @@ const VALID = {
   streamName: 'SFMelee',
   secret: 'abcd-EFGH_1234xy',
   streamStation: 1,
-  tcpPort: 7777,
-  httpPort: 8080,
+  tcpPort: 29470,
+  httpPort: 29473,
   auditDir: '/var/lib/tournament-reporter',
 };
 

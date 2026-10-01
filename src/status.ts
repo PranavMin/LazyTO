@@ -1,4 +1,4 @@
-// status.ts -- server-rendered status page on :8080 (design.md section 6.3,
+// status.ts -- server-rendered status page on :29473 (design.md section 6.3,
 // requirement F7). Read-only, no auth: the LAN is the trust boundary, same
 // as the TSH laptop. One row per station with its set, score, last action
 // (with the status and message the player saw), and any failed start.gg

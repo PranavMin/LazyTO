@@ -45,7 +45,7 @@ test('a station receives the beacon and learns the relay from the source address
     station.once('message', (msg, rinfo) => resolve({ msg, from: rinfo.address })),
   );
 
-  const beacon = new RelayBeacon({ tcpPort: 7777, eventId: 1613010, targets: () => ['127.0.0.1'], port, intervalMs: 50 });
+  const beacon = new RelayBeacon({ tcpPort: 29470, eventId: 1613010, targets: () => ['127.0.0.1'], port, intervalMs: 50 });
   await beacon.start();
   try {
     const { msg, from } = await received;
@@ -53,7 +53,7 @@ test('a station receives the beacon and learns the relay from the source address
     const b = decodeRelayBeacon(msg);
     assert.deepEqual([...b.magic], [MAGIC_0, MAGIC_1]);
     assert.equal(b.version, PROTO_VERSION);
-    assert.equal(b.tcp_port, 7777);
+    assert.equal(b.tcp_port, 29470);
     assert.equal(b.event_id, 1613010);
     assert.equal(from, '127.0.0.1', 'the relay address is the datagram source');
     await new Promise((r) => setTimeout(r, 30));
@@ -68,7 +68,7 @@ test('a station receives the beacon and learns the relay from the source address
 });
 
 test('an empty interface list is reported, not thrown', async () => {
-  const beacon = new RelayBeacon({ tcpPort: 7777, eventId: 1, targets: () => [], intervalMs: 50 });
+  const beacon = new RelayBeacon({ tcpPort: 29470, eventId: 1, targets: () => [], intervalMs: 50 });
   await beacon.start();
   try {
     assert.match(beacon.status().lastError ?? '', /no IPv4 network interface/);

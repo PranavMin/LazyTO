@@ -39,7 +39,7 @@ constants:
     value: 16
     doc: "player tag"
   BEACON_PORT:
-    value: 7778
+    value: 29471
     doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address)"
   BEACON_INTERVAL_MS:
     value: 2000
@@ -54,7 +54,7 @@ constants:
     value: 0x4B
     doc: "'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so"
   TELEMETRY_PORT:
-    value: 7779
+    value: 29472
     doc: "UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from"
   TELEMETRY_MAGIC_1:
     value: 0x4C

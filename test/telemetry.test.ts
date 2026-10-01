@@ -104,7 +104,7 @@ test('a real UDP datagram from a station is received and decoded', async () => {
 });
 
 test('a beacon request (relay_beacon with tcp_port 0) is answered with the relay beacon, unicast', async () => {
-  const beaconPayload = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0x1e, 0x64, 0, 0, 0, 0x18, 0x9c, 0x92]); // tcp 7780, event 1613010
+  const beaconPayload = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0x73, 0x1e, 0, 0, 0, 0x18, 0x9c, 0x92]); // tcp 29470, event 1613010
   const station = createSocket('udp4');
   await new Promise<void>((resolve) => station.bind(0, '127.0.0.1', () => resolve()));
   const replyPort = (station.address() as AddressInfo).port;

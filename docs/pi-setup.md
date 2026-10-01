@@ -87,7 +87,7 @@ From the repo root in PowerShell:
 .\deploy\push.ps1
 ```
 
-This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 7777/8080, the production start.gg endpoint, audit dir `/var/lib/tournament-reporter`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
+This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 29470/29473, the production start.gg endpoint, audit dir `/var/lib/tournament-reporter`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
 
 The relay has two modes, chosen at push time:
 
@@ -109,7 +109,7 @@ Then prove it from this PC without a Wii (it lists sets over the real wire proto
 npx tsx scripts/smoke.ts relay.local
 ```
 
-and open http://relay.local:8080 in a browser. Its header names the tournament and event.
+and open http://relay.local:29473 in a browser. Its header names the tournament and event.
 
 If PowerShell refuses to run the script ("running scripts is disabled"), run it once as:
 
@@ -129,7 +129,7 @@ It asks for the password (press Enter for an open network) and lists the saved n
 
 **Check once at the venue that a Wii can reach the Pi at all.** Guest Wi-Fi often has client isolation, which blocks device-to-device traffic: a Wii would then never reach the relay, whatever its address. With the Pi and this PC both on the venue Wi-Fi, `npx tsx scripts/smoke.ts relay.local` passing means the network allows it.
 
-**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 7778 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has the station number, the stream flag and the relay's secret:
+**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 29471 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has the station number, the stream flag and the relay's secret:
 
 ```
 station=3
@@ -158,7 +158,7 @@ From then on the relay follows start.gg/abbey with no push per week. At every st
 
 ## Sharing the matchcaller Pi instead
 
-The venue already has a Pi on a monitor running matchcaller (a Pi Zero 2 W that shows start.gg/abbey's sets). The relay can live on it instead of a second Pi: it has no screen, listens on its own ports (7777 TCP, 8080 web), and installs into its own folders, a `relay` system user and one service, without touching matchcaller or its user. What sharing costs: the Zero 2 W's Wi-Fi is 2.4 GHz only (fine for Wiis), its 512 MB of RAM is enough for both (the relay uses well under 100 MB), and if both use the same start.gg token their calls add up against start.gg's limit of 80 a minute, so give the relay its own token.
+The venue already has a Pi on a monitor running matchcaller (a Pi Zero 2 W that shows start.gg/abbey's sets). The relay can live on it instead of a second Pi: it has no screen, listens on its own ports (29470 TCP, 29473 web), and installs into its own folders, a `relay` system user and one service, without touching matchcaller or its user. What sharing costs: the Zero 2 W's Wi-Fi is 2.4 GHz only (fine for Wiis), its 512 MB of RAM is enough for both (the relay uses well under 100 MB), and if both use the same start.gg token their calls add up against start.gg's limit of 80 a minute, so give the relay its own token.
 
 You need three things from that Pi, found once with a keyboard on it or by asking its owner: its hostname, the user it runs matchcaller as (matchcaller's scripts use `abbey`), and that user's password. Then, from this PC:
 

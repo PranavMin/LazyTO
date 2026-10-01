@@ -33,8 +33,8 @@ param(
   [string]$EventName = 'Melee Singles',
   [string]$StreamName = 'SFMelee',
   [int]$StreamStation = 1,
-  [int]$TcpPort = 7777,
-  [int]$HttpPort = 8080,
+  [int]$TcpPort = 29470,
+  [int]$HttpPort = 29473,
   [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'

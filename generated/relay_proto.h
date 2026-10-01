@@ -42,12 +42,12 @@ typedef unsigned long uint32_t;
 #define MSG_LEN             30  /* human-readable status text in relay_resp */
 #define ROUND_LEN           24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
 #define TAG_LEN             16  /* player tag */
-#define BEACON_PORT         7778  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_PORT         29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
 #define BEACON_INTERVAL_MS  2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
 #define SECRET_LEN          16  /* relay shared secret, printable ASCII, NUL-padded (design R16) */
 #define AUTH_MAGIC_0        77  /* 'M', first byte of relay_auth */
 #define AUTH_MAGIC_1        75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
-#define TELEMETRY_PORT      7779  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
+#define TELEMETRY_PORT      29472  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
 #define TELEMETRY_MAGIC_1   76  /* 'L', second byte of telemetry_hdr ('M','L') */
 #define TELEMETRY_TEXT_MAX  480  /* most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame */
 #define TELEMETRY_STATUS_MS 5000  /* a station sends a TM_STATUS datagram at least this often once it knows the relay */

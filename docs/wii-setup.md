@@ -49,7 +49,7 @@ secret=<shared secret>
 
 For the first test use the relay on this PC. It is running now from
 `C:\Users\Pranav\AppData\Local\Temp\claude\P--Projects-tournament-reporter\19e72634-3389-4c9c-9a4e-d5fdce10da5c\scratchpad\relay-config-beacon.json`
-(TCP 7780, status page http://localhost:8083, beacon on UDP 7778, test tournament
+(TCP 29470, status page http://localhost:29473, beacon on UDP 29471, test tournament
 `tournament/sf-melee-discord-test`). Take the `secret` value for the card from that file.
 For the venue Pi the secret is `RELAY_SECRET` in `.env`; `deploy/push.ps1` puts it in the
 Pi's config, so the cards for the venue carry that one.
@@ -63,8 +63,8 @@ CONFIG="C:\Users\Pranav\AppData\Local\Temp\claude\P--Projects-tournament-reporte
 Two network conditions:
 
 - The Wii and the PC must be on the same LAN. The beacon goes to each interface's directed
-  broadcast (the log line `beacon: udp :7778 to ...` lists them; `192.168.1.255` is the house LAN).
-- Windows Firewall must let node accept inbound TCP 7780. If the kiosk finds the relay (the
+  broadcast (the log line `beacon: udp :29471 to ...` lists them; `192.168.1.255` is the house LAN).
+- Windows Firewall must let node accept inbound TCP 29470. If the kiosk finds the relay (the
   loading pane shows the PC's address) but then says `NO LINK TO THE RELAY`, this is the first
   thing to check.
 
@@ -102,7 +102,7 @@ built from an uncommitted tree.
 
 If you keep a debug log (`SLIPPI_DEBUG`), the boot log should show the Slippi core patch
 line, then a `tournament.bin` line with its load address at 0x817E0000, then
-`RelayEXI: relay is a.b.c.d:7780 (event N)` once the beacon is heard.
+`RelayEXI: relay is a.b.c.d:29470 (event N)` once the beacon is heard.
 
 ## 5. What to expect, in order
 
@@ -117,7 +117,7 @@ WI-FI`. Before that build the loader itself sat at `Slippi network init...` with
 1. **Boot.** No intro, no title: the main menu comes up and the Tournament screen opens on its
    own with `LOOKING FOR THE RELAY` pulsing. Within about 4 s (two beacons) it should switch to
    `LOADING SETS` and then the set list. The loading pane shows `STATION n / RELAY a.b.c.d /
-   PORT 7780`.
+   PORT 29470`.
 2. **Set list.** Two panes, TOURNAMENT wordmark top-left, rows grouped by round, the right pane
    describing the highlighted set. Y refreshes, Z is friendlies, B goes to the main menu.
 3. **Start a set.** A asks `START THIS SET?` in the pane, A again starts it, and you land on
@@ -147,7 +147,7 @@ Also check while you are there (open items from design.md and the checklist):
 `powershell -ExecutionPolicy Bypass -File deploy/wiiload.ps1 -Wii <ip>` boots the newest
 GitHub-built loader over Wi-Fi. The card still supplies the module, the config and the game.
 
-**Look at the relay's status page first** (http://<relay>:8083). Since Nintendont 140bb77 every
+**Look at the relay's status page first** (http://<relay>:29473). Since Nintendont 140bb77 every
 Wii sends its own kernel log and its module load result to the relay, so the **Wii consoles**
 table says whether the module loaded and why not, with the last log lines; "full log" shows the
 whole boot. The lines are also saved as `wii-station-N.log` in the relay's audit folder. A Wii
@@ -173,7 +173,7 @@ log: turn on **Log** in the loader's settings, boot once, and read `slippi_ndebu
 | `no tournament.cfg` | `sd:` not mounted, or the file is malformed | Boot the game from SD (or enable replays); check both `station=` and `stream=` are present with no spaces. |
 | `no secret in tournament.cfg` | `secret=` missing or bad characters | 8-16 of `A-Z a-z 0-9 - _`. |
 | `RELAY SECRET MISMATCH` | Card and relay disagree | The card's secret must match the relay you are running. |
-| `NO LINK TO THE RELAY` with the relay's address shown | Beacon heard, TCP refused | Windows Firewall on TCP 7780 for node. |
+| `NO LINK TO THE RELAY` with the relay's address shown | Beacon heard, TCP refused | Windows Firewall on TCP 29470 for node. |
 | `NO SETS LOADED YET` and the status page shows sets | Game and kernel disagree on the wire protocol | Rebuild the module and the loader from the same `protocol.yaml` copy. |
 | Freeze with FPS 0 on entering the set list | SIS text pool exhausted | The module's pool hooks are missing; rebuild the module. |
 

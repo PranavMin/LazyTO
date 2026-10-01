@@ -9,7 +9,7 @@
 // Two modes:
 //   npm run sim                          in-process: fake start.gg + the real
 //                                        client/cache/state/tcp/status stack
-//   npx tsx scripts/sim-wii.ts --relay=127.0.0.1:7777 --secret=<relay's secret>
+//   npx tsx scripts/sim-wii.ts --relay=127.0.0.1:29470 --secret=<relay's secret>
 //                                        external: drive an already-running
 //                                        relay (e.g. `node dist/main.js`
 //                                        pointed at `npm run fake`). The

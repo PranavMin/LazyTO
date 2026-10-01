@@ -67,8 +67,8 @@ One JSON file, every field required, unknown fields rejected, every problem repo
 | `streamName` | Picks the stream to assign stream-station sets to, by exact name (case-insensitive). | `SFMelee`. |
 | `secret` | Shared secret every Wii request must carry (design R16); 8-16 of `A-Z a-z 0-9 - _`. Refusals are counted on the status page. | `RELAY_SECRET` in `.env`; the same value is `secret=` on every SD card and `SlippiRelaySecret` in Dolphin. |
 | `streamStation` | Station number (1–65535) of the Wii whose `tournament.cfg` has `stream=1`. | Physical station label. |
-| `tcpPort` | Port the Wiis connect to; matches `tournament.cfg` on every SD card. | `7777` unless something else owns it. |
-| `httpPort` | Status page port; must differ from `tcpPort`. | `8080`. |
+| `tcpPort` | Port the Wiis connect to; matches `tournament.cfg` on every SD card. | `29470` unless something else owns it. |
+| `httpPort` | Status page port; must differ from `tcpPort`. | `29473`. |
 | `auditDir` | Directory for the audit log, written as `<eventId>.jsonl`; one file per tournament. | `/var/lib/tournament-reporter` on the Pi. |
 
 ### Pi install
@@ -79,7 +79,7 @@ Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-
 .\deploy\push.ps1
 ```
 
-[deploy/push.ps1](deploy/push.ps1) runs `npm run build` here, writes `config.json` (token from `.env`; tournament `abbey` by default, the test tournament with `-Test`; `-EventName`/`-StreamName`), and ships `dist/`, `package.json`, `deploy/` and the config to the Pi over scp, where [deploy/install.sh](deploy/install.sh) (sudo, idempotent) installs a pinned Node 22 tarball at `/opt/node`, creates the unprivileged `relay` user, installs [deploy/tournament-reporter.service](deploy/tournament-reporter.service), restarts it and waits for the relay's `relay up:` line, reporting `OK` with the status page URL or `FAILED` with the journal. The Pi never needs git, npm or a GitHub credential. `npx tsx scripts/smoke.ts relay.local` then lists sets over the real wire protocol from the PC. [deploy/add-wifi.sh](deploy/add-wifi.sh) saves the venue's Wi-Fi. The Pi needs no fixed address: the relay broadcasts a discovery beacon (UDP 7778, every 2 s, [src/beacon.ts](src/beacon.ts)) and the Wiis take the relay's address from it (design R15).
+[deploy/push.ps1](deploy/push.ps1) runs `npm run build` here, writes `config.json` (token from `.env`; tournament `abbey` by default, the test tournament with `-Test`; `-EventName`/`-StreamName`), and ships `dist/`, `package.json`, `deploy/` and the config to the Pi over scp, where [deploy/install.sh](deploy/install.sh) (sudo, idempotent) installs a pinned Node 22 tarball at `/opt/node`, creates the unprivileged `relay` user, installs [deploy/tournament-reporter.service](deploy/tournament-reporter.service), restarts it and waits for the relay's `relay up:` line, reporting `OK` with the status page URL or `FAILED` with the journal. The Pi never needs git, npm or a GitHub credential. `npx tsx scripts/smoke.ts relay.local` then lists sets over the real wire protocol from the PC. [deploy/add-wifi.sh](deploy/add-wifi.sh) saves the venue's Wi-Fi. The Pi needs no fixed address: the relay broadcasts a discovery beacon (UDP 29471, every 2 s, [src/beacon.ts](src/beacon.ts)) and the Wiis take the relay's address from it (design R15).
 
 | On the Pi | |
 |-----------|--|
@@ -88,7 +88,7 @@ Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-
 | Audit log | `/var/lib/tournament-reporter/<eventId>.jsonl` |
 | Unit | `/etc/systemd/system/tournament-reporter.service`, runs as `relay`, `Restart=on-failure`, logs to journald |
 | Logs | `journalctl -u tournament-reporter -f` |
-| Status | `systemctl status tournament-reporter`; status page `http://relay.local:8080/` |
+| Status | `systemctl status tournament-reporter`; status page `http://relay.local:29473/` |
 
 ### Per-tournament checklist (design §10)
 
