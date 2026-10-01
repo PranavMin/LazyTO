@@ -49,3 +49,7 @@ The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Mele
 | **LazyTO** (this repo) | The relay, the kiosk module `tournament.bin`, the Wii-to-relay protocol ([protocol.yaml](protocol.yaml)), the deploy scripts and the docs |
 | [doldecomp/melee](https://github.com/doldecomp/melee) | The Melee decompilation, unmodified. The kiosk builds against its headers, compilers and symbol map. |
 | [Nintendont](https://github.com/PranavMin/Nintendont) | The LazyTO loader for the Wii |
+
+## Licence
+
+Copyright (C) 2026 Pranav Minasandram. LazyTO is free software under the GNU General Public License, version 2: see [LICENSE](LICENSE). The LazyTO loader is a fork of Slippi Nintendont and stays under its GPLv2.

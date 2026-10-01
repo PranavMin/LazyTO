@@ -1,6 +1,7 @@
 {
   "name": "lazyto-relay",
-  "version": "0.1.0",
+  "version": "0.9.0-beta.1",
+  "license": "GPL-2.0-only",
   "private": true,
   "main": "dist/main.js",
   "type": "module",
