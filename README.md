@@ -42,10 +42,10 @@ It has not run a full night at a venue yet.
 
 ## Repositories
 
-melee and Nintendont are git submodules of this repo, pinned to the commits that go together. Clone with `git clone --recursive`.
+The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Melee decompilation, a git submodule at `melee/`. The loader is the Nintendont fork, a submodule at `Nintendont/`. Clone with `git clone --recursive`.
 
 | Repo | What it builds |
 |---|---|
-| **lazyto** (this repo) | The relay, the Wii-to-relay protocol ([protocol.yaml](protocol.yaml)), the deploy scripts and the docs |
-| [melee](https://github.com/PranavMin/melee) | `tournament.bin`, the kiosk module, built from the Melee decompilation |
+| **lazyto** (this repo) | The relay, the kiosk module `tournament.bin`, the Wii-to-relay protocol ([protocol.yaml](protocol.yaml)), the deploy scripts and the docs |
+| [doldecomp/melee](https://github.com/doldecomp/melee) | The Melee decompilation, unmodified. The kiosk builds against its headers, compilers and symbol map. |
 | [Nintendont](https://github.com/PranavMin/Nintendont) | The LazyTO loader for the Wii |

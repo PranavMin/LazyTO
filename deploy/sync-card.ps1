@@ -10,7 +10,7 @@ What it does (docs/wii-setup.md section 1):
      vanilla-module branch ("CI Slippi Nintendont Builds"), downloaded once into
      deploy/.cache, copied to apps/LazyTO. Never a locally built
      loader: those fail on hardware (Nintendont docs/build-windows.md).
-  3. module: the melee submodule's build/GALE01/tournament.bin (or -Module), refused if the melee sources have a
+  3. module: kiosk/build/tournament.bin (or -Module), refused if the kiosk sources have a
      dev switch on (TM_DEMO_AUTOSTART, LB_TOURNEY_DEMO_CLAIM, LB_TOURNEY_TRIGGER_READOUT)
   4. tournament.cfg: station / stream / secret. Station and stream default to what
      the card already has. The secret comes from -RelayConfig (a relay config.json,
@@ -28,8 +28,8 @@ param(
     [ValidateSet(-1, 0, 1)][int]$Stream = -1,
     [string]$Drive = "",
     [string]$RelayConfig = "",
-    [string]$Module = (Join-Path $PSScriptRoot "..\melee\build\GALE01\tournament.bin"),
-    [string]$MeleeSrc = (Join-Path $PSScriptRoot "..\melee\src\melee"),
+    [string]$Module = (Join-Path $PSScriptRoot "..\kiosk\build\tournament.bin"),
+    [string]$MeleeSrc = (Join-Path $PSScriptRoot "..\kiosk\src\melee"),
     [string]$Repo = "PranavMin/Nintendont",
     [string]$Branch = "vanilla-module",
     [switch]$NoEject,
@@ -75,7 +75,7 @@ New-Item -ItemType Directory -Force $dstApp | Out-Null
 foreach ($f in Get-ChildItem $srcApp.FullName -File) { Copy-Item $f.FullName (Join-Path $dstApp $f.Name) -Force }
 
 # ---- 3. the module, refused if a dev switch is on
-if (-not (Test-Path $Module)) { Fail "module not found: $Module (build it: python tools/build_module.py in the melee repo)" }
+if (-not (Test-Path $Module)) { Fail "module not found: $Module (build it: python kiosk/tools/build_module.py)" }
 $hdr = [IO.File]::ReadAllBytes($Module)[0..3]
 if ([Text.Encoding]::ASCII.GetString($hdr) -ne "TMOD") { Fail "$Module is not a TMOD module" }
 $switches = @(

@@ -1,8 +1,9 @@
 # Developing LazyTO
 
-LazyTO is three repositories. This one holds the other two as git submodules, `melee/` and
-`Nintendont/`, each pinned to the commit that goes with this repo's commit. Clone everything at
-once:
+This repo holds the relay and the kiosk module's source (`kiosk/`). Two git submodules supply the
+rest: `melee/`, the unmodified Melee decompilation the kiosk builds against, and `Nintendont/`,
+the LazyTO loader fork. Each is pinned to the commit that goes with this repo's commit. Clone
+everything at once:
 
 ```
 git clone --recursive https://github.com/PranavMin/lazyto.git
@@ -12,8 +13,8 @@ In an existing clone, run `git submodule update --init`. CI checks out the submo
 
 | Repo | Branch | Builds |
 |---|---|---|
-| lazyto (this repo) | `main` | the relay, the protocol, the deploy scripts |
-| [melee](https://github.com/PranavMin/melee) | `vanilla-module` | `tournament.bin`, the kiosk module |
+| lazyto (this repo) | `main` | the relay, the kiosk module (`kiosk/`), the protocol, the deploy scripts |
+| [doldecomp/melee](https://github.com/doldecomp/melee) | `master`, pinned | nothing itself; the kiosk builds against it, unmodified |
 | [Nintendont](https://github.com/PranavMin/Nintendont) | `vanilla-module` | the LazyTO loader |
 
 How the parts fit together is in [architecture.md](architecture.md). Why they are built that way
@@ -47,25 +48,27 @@ fake's fixture values. Then run `CONFIG=<that file> node dist/main.js`, and driv
 `generated/` by hand. After changing `protocol.yaml`:
 
 1. Run `python tools/gen_protocol.py`. It writes `generated/` and the header copies in both
-   submodules, `melee/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
+   copies, `kiosk/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
    `npm test` fails if any of them drift.
-2. Commit the header in each submodule and push it, then commit `generated/` and the new
-   submodule commits here.
+2. Commit and push the header in the Nintendont submodule, then commit `generated/`,
+   `kiosk/include` and the new Nintendont position here.
 3. Rebuild the module and the loader together. A Wii with a module and loader from different
    protocol versions shows `NO SETS LOADED YET`.
 
 ## The kiosk module
 
-In the melee repo, once: `python configure.py --non-matching`. That sets up the compilers and
-needs your own Melee 1.02 `main.dol` at `orig/GALE01/sys/main.dol`. Then:
+The kiosk's source is `kiosk/`. It builds against the decomp in the `melee/` submodule, which
+needs setting up once: put your own Melee 1.02 `main.dol` at `melee/orig/GALE01/sys/main.dol`,
+then run `python configure.py --non-matching` and `python -m ninja` inside `melee/`. Then, from
+the repo root:
 
 ```
-python tools/build_module.py
+python kiosk/tools/build_module.py
 ```
 
-writes `build/GALE01/tournament.bin`. The module's sources, hooks and file format are described
-in the melee repo's `docs/tournament-module.md`. Walk through `docs/version-checklist.md` there
-for each new build.
+writes `kiosk/build/tournament.bin`. The module's sources, hooks and file format are described
+in [kiosk.md](kiosk.md). Walk through [kiosk-checklist.md](kiosk-checklist.md) for each new
+build.
 
 ## The loader
 
@@ -101,26 +104,26 @@ the config and the game.
 status page's **Wii consoles** table and `/log?station=N` are the first place to look. The relay
 also saves each Wii's log as `wii-station-N.log` in its audit folder. If a Wii never reports,
 turn on **Log** in the loader and read `slippi_ndebug.log` on the SD card. A crash line names an
-address. `tools/resolve_crash.py` in the melee repo turns it into a function name.
+address. `python kiosk/tools/resolve_crash.py <address>` turns it into a function name.
 
 **Testing in Dolphin.** The module can also run in a patched Slippi Dolphin, kept as a separate
 development setup. It is not part of LazyTO's public builds.
 
 ## Working in a submodule
 
-A submodule checkout starts on a fixed commit, not a branch. Before changing one:
+`melee/` is never edited. `Nintendont/` is the loader fork. A submodule checkout starts on a
+fixed commit, not a branch, so before changing the loader:
 
 ```
-cd melee
+cd Nintendont
 git switch vanilla-module
 git pull
 ```
 
-Commit and push inside the submodule first, then commit the submodule's new position in this
-repo with `git add melee`. `git submodule update --remote` moves both submodules to the newest
-commit on `vanilla-module`.
+Commit and push inside the submodule first, then commit its new position in this repo with
+`git add Nintendont`.
 
 ## Upstream changes
 
-The melee and Nintendont forks merge their upstream projects from time to time. The procedure is
-in [upstream-sync.md](upstream-sync.md).
+Moving the decomp forward and merging upstream Nintendont are described in
+[upstream-sync.md](upstream-sync.md).

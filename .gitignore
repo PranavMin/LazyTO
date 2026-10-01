@@ -4,3 +4,5 @@ __pycache__/
 dist/
 .claude/settings.local.json
 deploy/.cache/
+kiosk/build/
+kiosk/src/melee/lb/lbmodule_version.inc

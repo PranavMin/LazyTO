@@ -1,0 +1,79 @@
+# Tournament module hook table (tools/build_module.py).
+# One patch per line, applied to the VANILLA Melee 1.02 DOL in RAM by the loaders
+# (Nintendont kernel / Ishiiruka fork) after the module blob is copied in:
+#   ptr    <addr> <module symbol>   write the symbol's address at addr
+#   branch <addr> <module symbol>   write "b <symbol>" at addr (function hijack)
+#   word   <addr> <hex>             write a literal 32-bit word
+# Addresses are vanilla (config/GALE01/symbols.txt); the builder verifies each
+# against orig/GALE01/sys/main.dol where noted.
+
+# gmscdata.c scene table `scenes` (0x803DA920, rows of 0x14: kind, on_frame,
+# on_enter, on_exit, unused).
+ptr    0x803DA940 mnTourney_MenuSceneExit   # GS_MENU on_exit (vanilla NULL)
+ptr    0x803DA94C lbTourney_MatchFrame      # GS_VS on_frame (vanilla gm_Scene_Vs_OnFrame)
+ptr    0x803DA954 lbTourney_MatchExit       # GS_VS on_exit  (vanilla gm_Scene_Vs_OnExit)
+ptr    0x803DA9B0 lbTourney_CSSFrame        # GS_CSS on_frame (vanilla mnCharSel_Scene_OnFrame)
+ptr    0x803DA9B8 lbTourney_CSSExit         # GS_CSS on_exit  (vanilla mnCharSel_Scene_OnExit)
+ptr    0x803DA9C8 lbTourney_SSSEnter        # GS_SSS on_enter (vanilla mnStageSel_Scene_OnEnter): Z+X handwarmer -> Battlefield
+
+# mnmain.c menu-kind table mn_803EB6B0 (rows of 0x14: anim_loop, start_frame,
+# description_indices, selection_count, think).
+ptr    0x803EB6C0 mnTourney_MainMenuThink   # row 0 (MAIN) think (vanilla mn_8022DB10)
+# The Tournament menu hijacks row 3 (MENU_KIND_TOY, "Trophies"): the vanilla
+# table cannot grow, and a kiosk has no use for the trophy menu - picking
+# "Trophies" on the main menu now opens the set list. anim_loop/start_frame
+# are zeroed so the panel keeps the plain frame instead of the green
+# Trophies one.
+word   0x803EB6EC 0x00000000                # row 3 anim_loop = NULL (was the Trophies panel anim)
+word   0x803EB6F0 0x00000000                # row 3 start_frame = 0.0f (frame 60 = green Trophies frame)
+# The menu PANEL's title/frame animation per kind lives in a second table,
+# mn_803EAE8C[kind][3] (AnimLoopSettings {start,end,loop} x3: enter, leave,
+# idle). Kind 3's rows are the green "Trophies" frames (600-799); every kind's
+# range carries that kind's title texture (the main menu's 0-199 says "Main
+# Menu"). Row 3 gets what the shifted-DOL kiosk read by accident for its
+# out-of-table kind 35 (the statics after the table, 0x803EB378): enter plays
+# frames 0-49 and idle holds frames 0-10 of the main-menu enter animation -
+# the plain frame with the bottom description box, before any title fades in.
+word   0x803EAEF8 0x00000000                # [3][0].start  0
+word   0x803EAEFC 0x42440000                # [3][0].end    49
+word   0x803EAF00 0xBDCCCCCD                # [3][0].loop   -0.1 (no loop)
+word   0x803EAF04 0x42480000                # [3][1].start  50
+word   0x803EAF08 0x437A0000                # [3][1].end    250
+word   0x803EAF0C 0x42480000                # [3][1].loop   50
+word   0x803EAF10 0x00000000                # [3][2].start  0
+word   0x803EAF14 0x41200000                # [3][2].end    10
+word   0x803EAF18 0xBDCCCCCD                # [3][2].loop   -0.1 (no loop)
+ptr    0x803EB6F4 mnTourney_DescIndices     # row 3 description_indices
+word   0x803EB6F8 0x01000000                # row 3 selection_count = 1
+ptr    0x803EB6FC mnTourney_Think           # row 3 think (vanilla mn_8022D34C)
+
+# gmboot.c: boot straight to the menu.
+branch 0x801BF948 tm_bootOnLoad             # bootOnLoad (vanilla body: 0x60 bytes)
+# gm_Mode_Boot_States (0x803DFDD8) row 0 on_leave (vanilla bootOnLeave): Slippi's
+# core codeset forces GM_VS inside bootOnLeave (04 801BFA20 = li r3,2); the
+# wrapper re-requests GM_MENU after it. See tm_bootOnLeave.
+ptr    0x803DFDE0 tm_bootOnLeave            # boot on_leave (vanilla bootOnLeave 0x801BF9A8)
+
+# mnmain.c: menu light colour by kind - the Trophies row (kind 3) maps to
+# colour 2, green. mn_8022C010 is inlined into both real users (the light
+# GObj's create mn_8022C304 and its per-frame lerp fn_8022C128), each with its
+# own jump table in .data; the out-of-line copy is only reached from one other
+# bl (0x8022E6A0). Kind 3's jump-table entry is pointed at the "colour 0"
+# (main-menu blue) case in both tables, and the out-of-line copy is branched
+# to a module replacement with the same mapping.
+word   0x803EBA44 0x8022C190                # fn_8022C128 table[3] -> colour 0 case (was 0x8022C1A0, colour 2)
+word   0x803EBACC 0x8022C3B8                # mn_8022C304 table[3] -> colour 0 case (was 0x8022C3C8, colour 2)
+branch 0x8022C010 tm_menuLightColor         # mn_8022C010 (vanilla body: 0x58 bytes)
+
+# gm_1A3F.c preloadState: the SIS text pool each scene gets (HSD_SisLib_803A6048).
+# GS_MENU falls in the default case, 0x4800 = 18 KB, which the kiosk's set list
+# (four text objects, ~100 entries with the rounded panels) exhausts - the
+# allocator's "Memory Empty" OSPanic halts the CPU (seen 2026-09-25). The
+# operand is an li immediate, which is SIGN-EXTENDED: 0x7800 (30 KB) is the
+# largest size a single li can express (0xC000 became -16 KB and panicked at
+# boot). The CSS case (0x801A3F9C, 0x2400) is left alone: the CSS overlay is a
+# handful of entries.
+word   0x801A3FA8 0x38607800                # li r3, 0x7800 (was li r3, 0x4800)
+# The CSS case gets headroom too: the CSS overlay is three lines, but each now
+# has a shadow and the score line a rounded panel (three text objects).
+word   0x801A3F9C 0x38604800                # li r3, 0x4800 (was li r3, 0x2400)

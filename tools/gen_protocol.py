@@ -582,10 +582,10 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 
 # ---------------------------------------------------------------- main
 
-# The C header's copies in the submodules (melee builds tournament.bin with
-# it, Nintendont's kernel builds the relay EXI device with it). Written and
-# checked with generated/, so the three never drift.
-SUBMODULE_HEADERS = (ROOT / "melee" / "include" / "relay_proto.h",
+# The C header's other copies: the kiosk module builds with one, and the
+# Nintendont submodule's kernel builds the relay EXI device with the other.
+# Written and checked with generated/, so the three never drift.
+SUBMODULE_HEADERS = (ROOT / "kiosk" / "include" / "relay_proto.h",
                      ROOT / "Nintendont" / "kernel" / "relay_proto.h")
 
 

@@ -1,7 +1,7 @@
 [submodule "melee"]
 	path = melee
-	url = https://github.com/PranavMin/melee.git
-	branch = vanilla-module
+	url = https://github.com/doldecomp/melee.git
+	branch = master
 [submodule "Nintendont"]
 	path = Nintendont
 	url = https://github.com/PranavMin/Nintendont.git

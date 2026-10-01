@@ -78,7 +78,7 @@ LazyTO has three parts, each in its own repository:
 
 ### Kiosk module (tournament.bin)
 
-Melee has no networking. The kiosk is a small position-fixed module, `tournament.bin` (about 26 KB), built from the melee decomp fork by `tools/build_module.py`. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
+Melee has no networking. The kiosk is a small position-fixed module, `tournament.bin` (about 81 KB), built from `kiosk/` in this repo by `kiosk/tools/build_module.py` against the unmodified Melee decompilation. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
 
 The module file format:
 
@@ -88,12 +88,12 @@ The module file format:
 | load address | `0x817E0000` |
 | blob length, patch count | sizes |
 | guard `{0x8016D800, 0x7C0802A6}` | a word that is only there in stock 1.02 |
-| patches `{addr, u32}` | the hook table (`tools/module_hooks.txt` in the melee fork) |
+| patches `{addr, u32}` | the hook table (`kiosk/tools/module_hooks.txt`) |
 | blob | `.text`, `.rodata`, `.data`, zeroed `.bss` |
 
 A loader refuses the file unless the guard word is in RAM and the arena top is above the load address. After copying it writes the load address to `0x80000034`, which Melee's `OSInit` adopts as the arena top, so the module sits above the heap. The build refuses any patch address that a venue codeset also writes.
 
-Source files in the melee fork:
+Source files, under `kiosk/src/`:
 
 | File | Role |
 |------|------|
