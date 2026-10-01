@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSocket } from 'node:dgram';
+import type { AddressInfo } from 'node:net';
 import { MAX_LINES, MAX_STATIONS, StationTelemetry, crashText, moduleStateText } from '../src/telemetry.js';
 import {
   AUTH_MAGIC_0,
@@ -98,6 +99,27 @@ test('a real UDP datagram from a station is received and decoded', async () => {
     assert.equal(row.uptimeMs, 1000);
   } finally {
     sock.close();
+    await t.stop();
+  }
+});
+
+test('a beacon request (relay_beacon with tcp_port 0) is answered with the relay beacon, unicast', async () => {
+  const beaconPayload = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0x1e, 0x64, 0, 0, 0, 0x18, 0x9c, 0x92]); // tcp 7780, event 1613010
+  const station = createSocket('udp4');
+  await new Promise<void>((resolve) => station.bind(0, '127.0.0.1', () => resolve()));
+  const replyPort = (station.address() as AddressInfo).port;
+  const t = new StationTelemetry({ secret: TEST_SECRET, port: 0, host: '127.0.0.1', beaconPayload, beaconReplyPort: replyPort });
+  await t.start();
+  try {
+    const got = new Promise<Buffer>((resolve) => station.once('message', (m) => resolve(m)));
+    const request = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // tcp_port 0 = please send it
+    await new Promise<void>((resolve, reject) => station.send(request, t.address().port, '127.0.0.1', (e) => (e ? reject(e) : resolve())));
+    const reply = await got;
+    assert.deepEqual([...reply], [...beaconPayload]);
+    assert.equal(t.beaconRequested()?.count, 1);
+    assert.equal(t.stations().length, 0, 'a request is not a station report');
+  } finally {
+    station.close();
     await t.stop();
   }
 });

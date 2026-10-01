@@ -36,7 +36,7 @@ export interface StatusDeps {
   /** Requests refused for their secret (design R16): a mis-copied SD card, or someone else on the Wi-Fi. */
   tcp: { refused(): RefusedStatus | null };
   /** Each Wii's own boot report: module load status and kernel log (telemetry.ts). */
-  telemetry: { stations(): StationTelemetryRow[]; get(station: number): StationTelemetryRow | undefined; refused(): TelemetryRefused | null };
+  telemetry: { stations(): StationTelemetryRow[]; get(station: number): StationTelemetryRow | undefined; refused(): TelemetryRefused | null; beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null };
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -192,6 +192,10 @@ export class StatusServer {
     if (wiiRows.length === 0) {
       wiiRows.push('<tr><td colspan="4" class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</td></tr>');
     }
+    const br = telemetry.beaconRequested?.() ?? null;
+    const beaconRequestLine = br
+      ? `<p class="muted">${br.count} beacon request(s) answered — a Wii that could not hear the broadcast asked instead; last ${age(br.lastAt)} ago from ${escapeHtml(br.lastFrom)}.</p>`
+      : '';
     const trf = telemetry.refused();
     const telemetryRefusedLine = trf
       ? `<p class="warn">✗ ${trf.count} Wii report(s) dropped for a wrong relay secret — last ${age(trf.lastAt)} ago from ${escapeHtml(trf.lastFrom)} claiming station ${trf.lastStation}.</p>`
@@ -234,6 +238,7 @@ ${rows.join('\n')}
 ${wiiRows.join('\n')}
 </table></div>
 ${telemetryRefusedLine}
+${beaconRequestLine}
 <p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${beaconLine}
 ${refusedLine}

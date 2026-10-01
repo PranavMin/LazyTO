@@ -156,7 +156,11 @@ RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, host_build) == 11, exi_poll_hd
  * Slippi Dolphin forwarder) listens on BEACON_PORT, ignores datagrams whose
  * size, magic or version do not match, and takes the datagram's SOURCE address
  * plus tcp_port as the relay; the latest valid beacon wins, so a relay that
- * changes address is followed. One relay per LAN.
+ * changes address is followed. One relay per LAN. BEACON REQUEST (2026-09-30):
+ * some access points do not deliver broadcasts to a power-saving Wi-Fi client,
+ * so a station that has heard nothing may broadcast this same struct with
+ * tcp_port = 0 and event_id = 0 to TELEMETRY_PORT; the relay answers with a
+ * unicast relay_beacon to the sender's address at BEACON_PORT.
  */
 struct relay_beacon {
     uint8_t  magic[2];  /* 'M','T' */

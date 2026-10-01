@@ -67,6 +67,7 @@ async function main(): Promise<void> {
   // appended to <auditDir>/wii-station-N.log so a boot can be read after the fact.
   const telemetry = new StationTelemetry({
     secret: config.secret,
+    beaconPayload: beacon.beaconPayload,
     onLine: (station, line) => {
       try {
         appendFileSync(join(config.auditDir, `wii-station-${station}.log`), `${new Date().toISOString()} ${line}\n`);

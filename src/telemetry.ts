@@ -17,7 +17,11 @@ import type { AddressInfo } from 'node:net';
 import {
   AUTH_MAGIC_0,
   AUTH_MAGIC_1,
+  BEACON_PORT,
   MAGIC_0,
+  MAGIC_1,
+  RELAY_BEACON_SIZE,
+  decodeRelayBeacon,
   ModuleState,
   PROTO_VERSION,
   RELAY_AUTH_SIZE,
@@ -97,6 +101,21 @@ export interface TelemetryOptions {
   host?: string;
   /** Called with every complete log line (the relay appends them to a per-station file). */
   onLine?: (station: number, line: string) => void;
+  /**
+   * The relay's own relay_beacon. A station that hears no broadcast (some
+   * access points drop broadcasts to a power-saving Wi-Fi client) broadcasts
+   * a relay_beacon with tcp_port 0 to this port; it is answered with this
+   * payload, unicast to the sender at BEACON_PORT (protocol.yaml relay_beacon).
+   */
+  beaconPayload?: Uint8Array;
+  /** Where the unicast answer goes; tests override it. */
+  beaconReplyPort?: number;
+}
+
+export interface BeaconRequestStatus {
+  count: number;
+  lastAt: number;
+  lastFrom: string;
 }
 
 /** Human text for a module_state, for the status page. */
@@ -130,6 +149,7 @@ export class StationTelemetry {
   private readonly expectedSecret: Buffer;
   private readonly rows = new Map<number, StationTelemetryRow & { seq: number; partial: string }>();
   private refusals: TelemetryRefused | null = null;
+  private beaconRequests: BeaconRequestStatus | null = null;
 
   constructor(private readonly opts: TelemetryOptions) {
     this.expectedSecret = Buffer.alloc(SECRET_LEN);
@@ -138,7 +158,10 @@ export class StationTelemetry {
 
   async start(): Promise<void> {
     const socket = createSocket('udp4');
-    socket.on('message', (msg, rinfo) => this.receive(msg, rinfo.address));
+    socket.on('message', (msg, rinfo) => {
+      if (this.answerBeaconRequest(msg, rinfo.address)) return;
+      this.receive(msg, rinfo.address);
+    });
     await new Promise<void>((resolve, reject) => {
       socket.once('error', reject);
       socket.bind(this.opts.port ?? TELEMETRY_PORT, this.opts.host ?? '0.0.0.0', () => {
@@ -175,6 +198,26 @@ export class StationTelemetry {
 
   refused(): TelemetryRefused | null {
     return this.refusals ? { ...this.refusals } : null;
+  }
+
+  /** Beacon requests answered so far (a station that could not hear the broadcast). */
+  beaconRequested(): BeaconRequestStatus | null {
+    return this.beaconRequests ? { ...this.beaconRequests } : null;
+  }
+
+  /** A 12-byte relay_beacon with tcp_port 0 is a station asking for the beacon; answer it unicast. */
+  private answerBeaconRequest(msg: Uint8Array, from: string, now = Date.now()): boolean {
+    if (msg.length !== RELAY_BEACON_SIZE || msg[0] !== MAGIC_0 || msg[1] !== MAGIC_1) return false;
+    const b = decodeRelayBeacon(msg);
+    if (b.version !== PROTO_VERSION || b.tcp_port !== 0) return false;
+    const payload = this.opts.beaconPayload;
+    if (payload && this.socket) {
+      this.socket.send(payload, this.opts.beaconReplyPort ?? BEACON_PORT, from, (err) => {
+        if (err) console.error(`beacon request from ${from}: reply failed: ${err.message}`);
+      });
+    }
+    this.beaconRequests = { count: (this.beaconRequests?.count ?? 0) + 1, lastAt: now, lastFrom: from };
+    return true;
   }
 
   /** Parse one datagram; public so tests can drive it without a socket. */

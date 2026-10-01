@@ -99,6 +99,11 @@ export class RelayBeacon {
     return { ...this.state, targets: [...this.state.targets] };
   }
 
+  /** The 12-byte relay_beacon this relay sends; telemetry.ts answers beacon requests with it. */
+  get beaconPayload(): Uint8Array {
+    return this.payload;
+  }
+
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
