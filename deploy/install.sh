@@ -78,6 +78,14 @@ cp -r "$BUNDLE/dist" "$APP/dist"
 cp -r "$BUNDLE/deploy" "$APP/deploy"
 cp "$BUNDLE/package.json" "$APP/package.json"
 [[ -f "$BUNDLE/README.md" ]] && cp "$BUNDLE/README.md" "$APP/README.md"
+[[ -f "$BUNDLE/LICENSE" ]] && cp "$BUNDLE/LICENSE" "$APP/LICENSE"
+chmod 0755 "$APP"/deploy/*.sh
+# VERSION: what deploy/update.sh compares against the newest main. A CI bundle
+# carries the commit it was built from; a push.ps1 bundle is a local build,
+# which the updater replaces at the next relay start unless
+# /etc/lazyto/no-auto-update exists (keep a dev build) - see docs/pi-setup.md.
+if [[ -f "$BUNDLE/VERSION" ]]; then cp "$BUNDLE/VERSION" "$APP/VERSION"; else echo "local-$(date +%Y%m%d-%H%M%S)" > "$APP/VERSION"; fi
+rm -f "$DATA_DIR/update-check" "$DATA_DIR/update-bad"
 chown -R root:root "$APP"
 
 # --- config: holds the start.gg token, so root-owned and readable by relay only ---

@@ -5,10 +5,18 @@ name: release
 # outside CI: the kiosk build is Windows-only and needs the vanilla main.dol;
 # the loader comes from the Nintendont repo's CI), then publish the draft.
 # Run by hand (workflow_dispatch) it only uploads the bundles as artifacts.
+#
+# Every push to main also runs the tests and republishes the relay bundle as
+# lazyto-relay-main.tgz (+ VERSION, .sha256) on the moving prerelease tag
+# `latest`. The Pi's deploy/update.sh fetches it at every relay start, so a
+# push to main reaches a venue Pi at its next boot or service restart with no
+# push.ps1. Only the relay: the Wii side still ships by hand. Dev clones see
+# the tag move on fetch; that is expected.
 
 on:
   push:
     tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -23,17 +31,23 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - name: Version
         id: v
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then echo "ver=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT";
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then echo "ver=main" >> "$GITHUB_OUTPUT";
           else echo "ver=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"; fi
       - name: Relay bundle (what push.ps1 sends to the Pi, minus config.json)
         run: |
           mkdir -p out/relay
           cp -r dist deploy package.json package-lock.json README.md LICENSE out/relay/
+          # VERSION: what deploy/update.sh compares; one token, the commit it was built from.
+          echo "$(git rev-parse --short HEAD)" > out/relay/VERSION
+          cp out/relay/VERSION out/VERSION
           tar -czf "out/lazyto-relay-${{ steps.v.outputs.ver }}.tgz" -C out/relay .
+          (cd out && sha256sum "lazyto-relay-${{ steps.v.outputs.ver }}.tgz" > "lazyto-relay-${{ steps.v.outputs.ver }}.tgz.sha256")
       - name: Wii kit (everything for the SD cards except the two built files)
         run: |
           mkdir -p out/wii
@@ -53,6 +67,18 @@ jobs:
           path: |
             out/*.tgz
             out/*.zip
+      - name: Publish main to the `latest` prerelease (deploy/update.sh reads it)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Recreate so the tag follows main; a Pi that checks during the gap
+          # gets no VERSION and keeps what it has (update.sh treats that as offline).
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest --prerelease --target "$GITHUB_SHA" \
+            --title "latest (main $(git rev-parse --short HEAD))" \
+            --notes "Moving prerelease: the relay bundle built from the newest main for Pi auto-update (deploy/update.sh). Not a release; see the v* releases." \
+            out/lazyto-relay-main.tgz out/lazyto-relay-main.tgz.sha256 out/VERSION
       - name: Draft release
         if: startsWith(github.ref, 'refs/tags/')
         env:
