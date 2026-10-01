@@ -9,7 +9,7 @@ Nintendont `52b5a23`, relay `290eb6c`.
 
 | SD path | From | Notes |
 |---|---|---|
-| `sd:/apps/Slippi Nintendont/boot.dol` | `P:\Projects\Nintendont\nintendont\boot.dol` (1,581,696 bytes, 2026-09-25 14:03) | Our loader with the relay EXI device, beacon listener, shared secret and module loader built in. Replaces the venue's Slippi Nintendont build for this card. |
+| `sd:/apps/Slippi Nintendont/boot.dol` | the **CI-built** loader: `release-*` artifact of the fork's "CI Slippi Nintendont Builds" workflow on `vanilla-module` (first good one: run 36793882676, commit 52b5a23, 1,580,096 bytes) | Our loader with the relay EXI device, beacon listener, shared secret and module loader built in. Never the locally built `nintendont/boot.dol`: it stops at the IOS58 step on hardware (see section 6). |
 | `sd:/apps/Slippi Nintendont/icon.png`, `meta.xml` | `P:\Projects\Nintendont\nintendont\` | So the Homebrew Channel lists it. |
 | `sd:/tournament.bin` | `P:\Projects\melee\build\GALE01\tournament.bin` (80,248 bytes) | The kiosk module. Same file on every card. Rebuild with `python tools/build_module.py` in the melee repo; the shipped build must have `TM_DEMO_AUTOSTART`, `LB_TOURNEY_DEMO_CLAIM` and `LB_TOURNEY_TRIGGER_READOUT` all 0 (they are). |
 | `sd:/tournament.cfg` | you write it, see below | One per Wii. |
@@ -60,7 +60,7 @@ table shows every request the Wii makes.
 ## 3. Before Nintendont: the Wii must be online and have IOS58
 
 - **Internet connection.** The Wii keeps one saved connection profile, and only Wii Settings (Wiimote required) can create it; Nintendont's Network option reuses it. The router's 2.4 GHz band must allow 802.11b/g: on an AT&T BGW320 the Wii only joined with mode **B/G/N** and a separate 2.4 GHz network name (error 51330 otherwise). Not the guest network: it isolates the Wii from the relay.
-- **IOS58.** Nintendont refuses to start without it (`Failed to load IOS58 from NAND`). Any Wii that already runs Slippi Nintendont has it; otherwise install it once with an IOS58 installer app from the Homebrew Channel.
+- **IOS58.** Nintendont needs it. Any Wii that runs plain or Slippi Nintendont has it (the Homebrew Channel itself runs on it). A `-4352` IOS58 error means the loader build, not the Wii; see section 6.
 
 ## 4. Nintendont settings on the Wii
 
@@ -112,7 +112,7 @@ Also check while you are there (open items from design.md and the checklist):
 |---|---|---|
 | `NO RELAY FOUND` after 10 s | No beacon heard | Same LAN? Relay log shows the beacon going out? If both yes, suspect the kernel's `recvfromAddr` (never run on hardware before, Nintendont docs/relay-exi-report.md section 3.7). |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi (password, security type, or the router's 2.4 GHz mode) | Found 2026-09-30 on an AT&T BGW320: with the correct password and WPA2, the Wii failed on mode G/N and joined once the 2.4 GHz band was set to **B/G/N** and given its own name. Check the router's 2.4 GHz mode includes B and G. Router firewall and MTU settings don't matter. |
-| Nintendont: `Failed to load IOS58 from NAND` | The Wii has no IOS58 (System Menu older than 4.3) | Install IOS58 once with an IOS58 installer from the Homebrew Channel (needs the Wii online), or update to 4.3. Stock Nintendont check, not ours. |
+| Nintendont: `Failed to load IOS58 from NAND` | With `ES_GetStoredTMDSize() returned -4352`: a **locally built loader** (libogc "ES not initialised"), not a missing IOS58; the title bar then already says IOS58. Other codes: the Wii really lacks IOS58 | -4352: put the CI-built loader on the card. Test: if plain Nintendont reaches its game list, IOS58 is fine. Genuinely missing IOS58: an IOS58 installer from the Homebrew Channel; avoid a full system update on a softmodded Wii. |
 | `no network` on every action | Nintendont's Network option is off | Turn it on. |
 | `no tournament.cfg` | `sd:` not mounted, or the file is malformed | Boot the game from SD (or enable replays); check both `station=` and `stream=` are present with no spaces. |
 | `no secret in tournament.cfg` | `secret=` missing or bad characters | 8-16 of `A-Z a-z 0-9 - _`. |
