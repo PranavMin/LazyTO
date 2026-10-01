@@ -15,11 +15,11 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 
 ## 2. GitHub organization (user account, all repos public)
 
-- [ ] Relay repo public (forks already were).
-- [ ] Descriptions, topics and homepage on all four repos.
-- [ ] Fork READMEs: a header naming the LazyTO changes and the upstream sync procedure.
-- [ ] Umbrella README in this repo: what each repo does, how they fit.
-- [ ] Default branch `vanilla-module` on the forks; stale branches pruned, `shifted-dol-final` kept as a tag.
+- [x] Relay repo public (forks already were).
+- [x] Descriptions, topics and homepage on all four repos.
+- [x] Fork READMEs: a header naming the LazyTO changes and the upstream sync procedure.
+- [x] Umbrella README in this repo: what each repo does, how they fit.
+- [ ] Default branch `vanilla-module` on the forks (done); stale branches pruned, `shifted-dol-final` kept as a tag.
 - [ ] CI on this repo: `npm test` on push and PR, Node 22; protect `main`.
 - [ ] Decide renames (repo `tournament-reporter`, Pi service name) once, before docs cleanup.
 

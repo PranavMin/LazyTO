@@ -1,10 +1,37 @@
-# LazyTO — LAN relay
+# LazyTO
 
-The relay is the piece of [LazyTO](docs/design.md) (the project was called Tournament Reporter until 2026-09-30; the repo and the Pi service keep that name for now) that runs on the venue's Raspberry Pi. Players at any Wii pick their set from a list on the console, start it, update the score from the character select screen, and end it; the relay turns each of those button presses into the matching start.gg call (`markSetInProgress`, `assignStream` on the stream station, `reportBracketSet`, `resetSet`) and hands the result straight back to the console. start.gg stays the source of truth; TSH keeps driving the overlay from it. Design: [docs/design.md](docs/design.md), especially §5 (wire protocol), §6.3 (this component), §8 (error table) and §10 (deployment).
+LazyTO lets players at a Melee weekly run their own start.gg sets from the Wii. They pick their
+set from a list on the console, start it, play, and the score reaches start.gg as each game
+ends. The TO only steps in when something goes wrong.
+
+The venue Wiis run a stock Melee 1.02 ISO through a LazyTO build of Slippi Nintendont, which
+loads a small kiosk module from the SD card. A Raspberry Pi on the venue network runs the relay,
+which turns each button press into a start.gg call. start.gg stays the source of truth, so a
+stream overlay such as TSH keeps working unchanged.
+
+| Repo | Role |
+|---|---|
+| **tournament-reporter** (this repo) | The relay, the wire protocol (`protocol.yaml`), design docs, setup guides, deploy scripts |
+| [melee](https://github.com/PranavMin/melee) (`vanilla-module`) | `tournament.bin`, the kiosk module: Tournament screen, CSS score banner, auto-scoring |
+| [Nintendont](https://github.com/PranavMin/Nintendont) (`vanilla-module`) | The Wii loader: relay EXI device, module loader, relay discovery, station telemetry |
+| [Ishiiruka](https://github.com/PranavMin/Ishiiruka) (`vanilla-module`) | Slippi Dolphin with a relay forwarder, for development without a Wii |
+
+| Guide | For |
+|---|---|
+| [docs/pi-setup.md](docs/pi-setup.md) | Setting up the relay Pi |
+| [docs/wii-setup.md](docs/wii-setup.md) | Preparing SD cards and venue Wiis, and troubleshooting |
+| [docs/design.md](docs/design.md) | How it works and why |
+| [docs/beta-plan.md](docs/beta-plan.md) | What is left before the beta release |
+
+Status: in development. Tested end to end in Dolphin and on one real Wii; not yet run at a venue.
+
+## The relay
+
+The relay is the piece of LazyTO (called Tournament Reporter until 2026-09-30; the repo and the Pi service keep that name for now) that runs on the venue's Raspberry Pi. Players at any Wii pick their set from a list on the console, start it, update the score from the character select screen, and end it; the relay turns each of those button presses into the matching start.gg call (`markSetInProgress`, `assignStream` on the stream station, `reportBracketSet`, `resetSet`) and hands the result straight back to the console. start.gg stays the source of truth; TSH keeps driving the overlay from it. Design: [docs/design.md](docs/design.md), especially §5 (wire protocol), §6.3 (this component), §8 (error table) and §10 (deployment).
 
 It is one Node 22 process with no framework and no runtime dependencies: a TCP server for the Wiis (fixed-size big-endian structs generated from [protocol.yaml](protocol.yaml), one request per connection), a pending-set cache refreshed from start.gg every 20 s, an in-memory station→set map rebuilt from an append-only JSONL audit log after a restart, a rate-limited GraphQL client (retries on 5xx only, max 2), and a server-rendered status page for the TO's phone. Principles from [CLAUDE.md](CLAUDE.md): one path, no fallbacks, fail fast at startup on bad config.
 
-## Dev loop
+### Dev loop
 
 Needs Node 22+ and, for the protocol drift check, Python 3 on `PATH` as `python` with PyYAML (`pip install pyyaml`).
 
@@ -27,7 +54,7 @@ npm run fake -- --port=18081
 
 then a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`, `"tournament": "tournament/sf-melee-discord-test"`, `"eventName": "Melee Singles"`, `"streamName": "SFMelee"` (the fake's copy of the test tournament), a `"secret"` of your choice and non-default ports, `CONFIG=that.json node dist/main.js`, and `npx tsx scripts/sim-wii.ts --relay=127.0.0.1:<tcpPort> --secret=<that secret>`. The sim reports Wii-side request rate and errors; the fake reports the upstream call rate.
 
-## Config
+### Config
 
 One JSON file, every field required, unknown fields rejected, every problem reported at once, exit 1 on any of them (so the systemd unit ends up `failed` rather than half-running). On the Pi it is written by [deploy/push.ps1](deploy/push.ps1) from `.env`, never by hand; [src/config.ts](src/config.ts) is the rule book.
 
@@ -44,7 +71,7 @@ One JSON file, every field required, unknown fields rejected, every problem repo
 | `httpPort` | Status page port; must differ from `tcpPort`. | `8080`. |
 | `auditDir` | Directory for the audit log, written as `<eventId>.jsonl`; one file per tournament. | `/var/lib/tournament-reporter` on the Pi. |
 
-## Pi install
+### Pi install
 
 Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-setup.md). The short version: flash Raspberry Pi OS Lite (64-bit) with Imager (hostname `relay`, user `pi`, your Wi-Fi, your ssh public key), power it on, then from this repo:
 
@@ -63,14 +90,14 @@ Step by step, from a Windows PC and a blank Pi 5, in [docs/pi-setup.md](docs/pi-
 | Logs | `journalctl -u tournament-reporter -f` |
 | Status | `systemctl status tournament-reporter`; status page `http://relay.local:8080/` |
 
-## Per-tournament checklist (design §10)
+### Per-tournament checklist (design §10)
 
 1. Power the Pi on at the venue (or `sudo systemctl restart tournament-reporter`); the relay finds tonight's tournament from its short URL at startup, so nothing is pushed per tournament. Open the status page on your phone: the header names the tournament and event, the footer shows `Cache: N sets`. N must be > 0 and the header must be tonight's. If the relay will not start, `journalctl -u tournament-reporter -n 20` says why (short URL not moved yet, event name matching zero or several events, stream missing).
 2. **Start every pool and every phase on start.gg** (bracket page → each phase, later phases included). Unstarted ones have preview-id sets the relay cannot represent and drops (design R8); the status page shows `⚠ N preview-id set(s) dropped -- start all pools on start.gg` until they are all started (it clears within 20 s).
-3. Every SD card's `tournament.cfg` has the station number on the physical label, the Pi's IP and `tcpPort`. Exactly one card has `stream=1`, and it is the one at station `streamStation`.
+3. Every SD card's `tournament.cfg` has the station number on the physical label and the relay's `secret=`. No address is needed: the Wiis find the relay by its beacon. Exactly one card has `stream=1`, and it is the one at station `streamStation`.
 4. Boot one Wii, open the Tournament menu, confirm the set list loads. Its station row appears on the status page with `LIST_SETS … ago`.
 
-## The night of
+### The night of
 
 What the status page shows, what it means, what to do. Rows with ✗ stay until you press **ack** on them; that is the only button.
 
