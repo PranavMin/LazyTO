@@ -5,6 +5,8 @@ push.ps1 -- build the relay on this Windows machine and install it on the Pi.
   .\deploy\push.ps1 -Test            # testing: TEST_TOURNAMENT in .env instead
   .\deploy\push.ps1 -DryRun          # build the bundle, install nothing
   .\deploy\push.ps1 -PiHost <name> -User <user>   # a Pi with another name or user
+  .\deploy\push.ps1 -NoAutoUpdate      # keep THIS build: the Pi's auto-update stays off
+                                       # until the next push without the switch
 
 Everything about your event comes from .env (see .env.example):
   TOURNAMENT          your start.gg short URL (e.g. "mybar"). The relay finds
@@ -37,7 +39,8 @@ param(
   [switch]$Test,
   [int]$TcpPort = 29470,
   [int]$HttpPort = 29473,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$NoAutoUpdate
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -122,11 +125,17 @@ Write-Host "copying to $target ..."
 & scp -q $tgz "${target}:/tmp/lazyto.tgz"
 if ($LASTEXITCODE -ne 0) { throw "scp to $target failed" }
 Write-Host 'installing (sudo on the Pi) ...'
+# Auto-update (deploy/update.sh, docs/pi-setup.md "Updates"): at every relay
+# start the Pi replaces a local build with the newest main. -NoAutoUpdate
+# leaves the marker that turns that off, so a build pushed from this machine
+# stays until the next push without the switch, which removes the marker.
+$marker = if ($NoAutoUpdate) { 'sudo touch /etc/lazyto/no-auto-update' } else { 'sudo rm -f /etc/lazyto/no-auto-update' }
 $remote = 'rm -rf /tmp/tr && mkdir -p /tmp/tr && tar -xzf /tmp/lazyto.tgz -C /tmp/tr ' +
-  '&& sudo bash /tmp/tr/deploy/install.sh /tmp/tr && rm -rf /tmp/tr /tmp/lazyto.tgz'
+  "&& sudo bash /tmp/tr/deploy/install.sh /tmp/tr && $marker && rm -rf /tmp/tr /tmp/lazyto.tgz"
 & ssh -t $target $remote
 if ($LASTEXITCODE -ne 0) { throw 'install on the Pi failed (see output above)' }
 # The bundle carries the token; don't leave it lying in %TEMP%.
 Remove-Item -Recurse -Force $stage
 Remove-Item -Force $tgz
+if ($NoAutoUpdate) { Write-Host 'auto-update OFF on the Pi (this build stays); push again without -NoAutoUpdate to turn it back on' }
 Write-Host "done. status page: http://${PiHost}:$HttpPort   smoke test: npx tsx scripts/smoke.ts $PiHost"

@@ -208,7 +208,7 @@ stops the relay with a list of everything wrong.
 | Is it running | `ssh pi@relay.local systemctl status lazyto-relay` |
 | Live log | `ssh pi@relay.local journalctl -u lazyto-relay -f` |
 | Restart, which also finds this week's tournament again | `ssh pi@relay.local sudo systemctl restart lazyto-relay` |
-| Update the relay | `.\deploy\push.ps1` |
+| Update the relay by hand | `.\deploy\push.ps1` (needed only for a config change; code updates itself, see Updates) |
 | Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Name"` |
 | Shut down | `ssh pi@relay.local sudo poweroff`. Pulling the power is also safe. |
 | Remove the relay | `ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/uninstall.sh` |
@@ -217,6 +217,33 @@ The relay restarts by itself on failure. A wrong token, no Wi-Fi yet, or an even
 stops it at startup with a clear message in the log. It then retries every 10 seconds, slowing to
 every 2 minutes, so it recovers once the problem clears. After fixing something, restart it to
 try at once.
+
+## Updates
+
+The relay updates itself, the way a phone app does: **at every start**, never while running.
+Each push to `main` on GitHub runs the tests and publishes the relay as a bundle on the moving
+prerelease tag `latest`. When the relay starts (boot, crash, `systemctl restart lazyto-relay`),
+`deploy/update.sh` runs first: it compares the installed `/opt/lazyto/VERSION` with the
+published one, downloads the bundle, checks its SHA-256, runs the **new** build's config check
+against `/etc/lazyto/config.json`, and swaps the code in. Then the relay starts. Any failure,
+including no internet, logs one `update:` line and the installed version starts as before. It
+checks at most once every 10 minutes, so the restart pacing above costs nothing.
+
+What it never does: change `config.json`. Your event, token, ports and secret only move with
+`push.ps1`. If a new version needs a config field that your `config.json` does not have, the
+updater refuses that version (`update: bundle ... rejects /etc/lazyto/config.json`) and keeps
+the old one until you push; the relay stays up throughout.
+
+| What | How |
+|---|---|
+| Which version is running | `ssh pi@relay.local cat /opt/lazyto/VERSION` (a commit hash, or `local-<date>` for a push.ps1 build) |
+| Did it update | `ssh pi@relay.local journalctl -u lazyto-relay -b -o cat \| grep ^update:` |
+| Update now | `ssh pi@relay.local sudo systemctl restart lazyto-relay` (outside a tournament; the restart itself is safe, claimed sets come back from the action log) |
+| Keep a build pushed from this PC | `.\deploy\push.ps1 -NoAutoUpdate`; the next `push.ps1` without the switch turns updates back on |
+| Turn it off on the Pi | `ssh pi@relay.local sudo touch /etc/lazyto/no-auto-update`; `sudo rm` that file to turn it on |
+
+Only the relay updates itself. The Wii side (`tournament.bin`, the loader) ships by hand with
+`sync-card.ps1`.
 
 ## Sharing a Pi with other software
 

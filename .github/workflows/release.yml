@@ -26,6 +26,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true   # npm test checks the protocol header copy in Nintendont/kernel/
       - uses: actions/setup-node@v4
         with:
           node-version: 22

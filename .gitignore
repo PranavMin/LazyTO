@@ -6,3 +6,4 @@ dist/
 deploy/.cache/
 kiosk/build/
 kiosk/src/melee/lb/lbmodule_version.inc
+/private/
