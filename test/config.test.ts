@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, ConfigError } from '../src/config.js';
+import { relayConfigFromEnv } from '../scripts/lib/pushconfig.js';
 
 const VALID = {
   startggEndpoint: 'https://api.start.gg/gql/alpha',
@@ -156,14 +157,15 @@ test('empty auditDir', () => {
   expectProblems(JSON.stringify({ ...VALID, auditDir: '' }), 'auditDir must be a non-empty string');
 });
 
-// deploy/push.ps1 is what writes /etc/lazyto/config.json on the
-// Pi (from .env). Its $config block must name exactly the fields config.ts
+// scripts/push.ts (relayConfigFromEnv) is what writes /etc/lazyto/config.json
+// on the Pi, from .env. It must produce exactly the fields config.ts
 // validates, or the first push after a config change fails on the Pi instead
 // of here.
-test('deploy/push.ps1 writes exactly the validated fields', () => {
-  const script = readFileSync(join(import.meta.dirname, '..', 'deploy', 'push.ps1'), 'utf8');
-  const block = /\$config = \[ordered\]@\{([^}]*)\}/.exec(script);
-  assert.ok(block, 'push.ps1 has no $config = [ordered]@{ ... } block');
-  const written = [...block[1].matchAll(/^\s*([A-Za-z]+)\s*=/gm)].map((m) => m[1]);
-  assert.deepEqual(written.sort(), Object.keys(VALID).sort());
+test('scripts/push.ts writes exactly the validated fields', () => {
+  const written = relayConfigFromEnv(
+    { STARTGG_TOKEN: 't', RELAY_SECRET: 'abcdefgh', TOURNAMENT: 'x', EVENT_NAME: 'e', STREAM_NAME: 's' },
+    { test: false, tcpPort: 1, httpPort: 2 },
+  );
+  assert.deepEqual(Object.keys(written).sort(), Object.keys(VALID).sort());
+  assert.doesNotThrow(() => loadConfig(writeConfig(JSON.stringify(written))));
 });

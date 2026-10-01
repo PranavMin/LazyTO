@@ -10,7 +10,7 @@ name: release
 # lazyto-relay-main.tgz (+ VERSION, .sha256) on the moving prerelease tag
 # `latest`. The Pi's deploy/update.sh fetches it at every relay start, so a
 # push to main reaches a venue Pi at its next boot or service restart with no
-# push.ps1. Only the relay: the Wii side still ships by hand. Dev clones see
+# npm run push. Only the relay: the Wii side still ships by hand. Dev clones see
 # the tag move on fetch; that is expected.
 
 on:
@@ -41,7 +41,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then echo "ver=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT";
           elif [[ "$GITHUB_REF" == refs/heads/main ]]; then echo "ver=main" >> "$GITHUB_OUTPUT";
           else echo "ver=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"; fi
-      - name: Relay bundle (what push.ps1 sends to the Pi, minus config.json)
+      - name: Relay bundle (what npm run push sends to the Pi, minus config.json)
         run: |
           mkdir -p out/relay
           cp -r dist deploy package.json package-lock.json README.md LICENSE out/relay/
@@ -53,14 +53,14 @@ jobs:
       - name: Wii kit (everything for the SD cards except the two built files)
         run: |
           mkdir -p out/wii
-          cp deploy/tournament.cfg.example deploy/sync-card.ps1 docs/kiosk-poster.html docs/wii-setup.md docs/night-of.md LICENSE out/wii/
+          cp deploy/tournament.cfg.example docs/kiosk-poster.html docs/wii-setup.md docs/night-of.md LICENSE out/wii/
           cat > out/wii/README.txt <<'EOF'
           LazyTO Wii kit. Each SD card needs:
             apps/LazyTO/        the loader (attached to the release as a zip)
             tournament.bin      the kiosk module (attached to the release)
             tournament.cfg      from tournament.cfg.example: station number, stream=1 on the stream Wii only, the relay's secret
             games/GALE01/game.iso   your own stock Melee 1.02 image
-          See wii-setup.md. sync-card.ps1 does all of it from a clone of the repo.
+          See wii-setup.md. `npm run sync-card` does all of it from a clone of the repo (Windows, macOS, Linux).
           EOF
           (cd out/wii && zip -qr "../lazyto-wii-kit-${{ steps.v.outputs.ver }}.zip" .)
       - uses: actions/upload-artifact@v4

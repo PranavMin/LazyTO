@@ -2,6 +2,12 @@
 
 Dated progress, newest first. How things work now is in [architecture.md](architecture.md); why, in [decisions.md](decisions.md).
 
+## 2026-10-01
+
+- **Operator scripts run everywhere**: `sync-card`, `push` and `wiiload` are Node/TypeScript (`scripts/*.ts`, `npm run sync-card|push|wiiload`), tested in `test/deploy-scripts.test.ts`; wiiload speaks the Homebrew Channel protocol itself. The `deploy/*.ps1` files are shims onto them for one release.
+- **The Pi updates itself** at every relay start from the `latest` prerelease that every push to `main` publishes (`deploy/update.sh`); a build whose config schema disagrees with the installed `config.json` is refused. `npm run push -- --no-auto-update` keeps a dev build.
+- Set format override: `SET_FORMAT=top8q` makes Bo3 into Bo5 from the top-8 qualifiers.
+
 ## 2026-09-30
 
 - **Nametag seeding removed** (melee v41): writing the set's tags into persistent nametag slots 0/1 at START_SET crashed the CSS Name Entry screen when a player added a custom tag. The L + R port claim is the only who-is-who; the module no longer touches nametags.

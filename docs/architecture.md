@@ -247,7 +247,7 @@ Startup validates every config field and exits non-zero on any problem. There ar
 | `tcpPort`, `httpPort` | 29470, 29473 |
 | `auditDir` | where audit logs go |
 
-`deploy/push.ps1` writes the file from `.env`. The relay turns names into ids once at startup, because ids change every week and names do not.
+`npm run push` (`scripts/push.ts`) writes the file from `.env`. The relay turns names into ids once at startup, because ids change every week and names do not.
 
 - **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament needs no weekly push.
 - **Numbered-weekly fallback:** if `weeklyNamePrefix` is set and no admin tournament carries the short URL, the relay takes the admin tournament named `<prefix><number>` whose start is nearest to now, within 30 days (for example a weekly named "Melee @ Abbey Tavern #N"). The startup log says which rule matched.
@@ -344,7 +344,7 @@ A Raspberry Pi (5, 4 or Zero 2 W) on Raspberry Pi OS Lite 64-bit, on the venue W
 
 | File | Role |
 |------|------|
-| `deploy/push.ps1` | Run on a Windows PC: builds, writes `config.json` from `.env`, copies the bundle, runs the installer over ssh. Only needed to update the relay or change the config. |
+| `scripts/push.ts` (`npm run push`) | Run from a clone on any OS with Node 22 and ssh: builds, writes `config.json` from `.env`, copies the bundle, runs the installer over ssh. Only needed to change the config or push a dev build; code updates itself (deploy/update.sh). |
 | `deploy/install.sh` | On the Pi: pinned Node 22 in `/opt/node`, Wi-Fi power saving off, system user `relay`, code in `/opt/lazyto`, config in `/etc/lazyto/config.json`, installs and restarts the unit. Idempotent. |
 | `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure, waits for time sync. |
 | `deploy/uninstall.sh` | Removes what install.sh added; audit logs are kept unless `--purge`. |

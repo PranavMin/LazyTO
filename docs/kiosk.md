@@ -41,7 +41,7 @@ and the wordmark generator uses GDI+.
 
 Three compile-time switches exist for development runs with no controller, such as a Dolphin
 session capturing screenshots. Each is a `#define` that must stay `0` in a shipped build;
-`deploy/sync-card.ps1` refuses to write a card while any is non-zero. Set one to `1`, rebuild,
+`npm run sync-card` refuses to write a card while any is non-zero. Set one to `1`, rebuild,
 and set it back before committing.
 
 | Flag | File | With `1` |

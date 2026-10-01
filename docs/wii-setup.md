@@ -25,6 +25,10 @@ stock Melee image. Every card is the same except for its config file.
 The loader appears in the Homebrew Channel as **LazyTO**. Your usual Slippi Nintendont can stay
 installed beside it.
 
+From a clone of the repo, one command writes all of this except the game image and checks it:
+`npm run sync-card -- --station 3` (`--stream 1` on the stream Wii; Windows, macOS or Linux; see
+[development.md](development.md)). The rest of this section is what it does, for doing it by hand.
+
 `tournament.cfg` is a plain text file with one `key=value` per line and no spaces:
 
 ```

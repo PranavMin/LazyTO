@@ -86,21 +86,27 @@ The kernel itself builds locally for quick checks. See the Nintendont repo's
 
 ## Testing on a Wii
 
-`deploy/sync-card.ps1` prepares an SD card from your builds in one command. It finds the card,
-downloads the newest successful CI loader, copies `melee/build/GALE01/tournament.bin` from the submodule (`-Module` for another file), writes
-`tournament.cfg` with the secret from `.env`, turns on the loader's Network, Auto Boot and Log
-settings, checks every file by hash, and ejects the card. It refuses a module built with a debug
-switch on. It needs the GitHub CLI, logged in.
+`npm run sync-card` prepares an SD card from your builds in one command (`scripts/sync-card.ts`;
+Windows, macOS and Linux). It finds the card (the one removable FAT32 volume, or `--drive F` /
+`--drive /Volumes/NO NAME`), downloads the newest successful CI loader, copies
+`kiosk/build/tournament.bin` (`--module` for another file), writes `tournament.cfg` with the
+secret from `.env`, turns on the loader's Network, Auto Boot and Log settings, checks every file
+by hash, and ejects the card. It refuses a module built with a debug switch on. It needs the
+GitHub CLI, logged in.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File deploy/sync-card.ps1 -Station 1 -Stream 0
+```bash
+npm run sync-card -- --station 1 --stream 0
 ```
 
-Use `-RelayConfig <config.json>` to take the secret from a development relay's config instead.
+Use `--relay-config <config.json>` to take the secret from a development relay's config instead.
 
-`deploy/wiiload.ps1 -Wii <ip>` boots the newest CI loader over Wi-Fi while the Wii sits in the
-Homebrew Channel. Its address is shown bottom left there. The card still supplies the module,
+`npm run wiiload -- --wii <ip>` boots the newest CI loader over Wi-Fi while the Wii sits in the
+Homebrew Channel. Its address is shown bottom left there. It speaks the Homebrew Channel's
+protocol itself, so no devkitPro `wiiload` tool is needed. The card still supplies the module,
 the config and the game.
+
+The `deploy/*.ps1` files are shims that forward the old `-Flag` spelling to these scripts and
+will go away; `npm test` covers the scripts (`test/deploy-scripts.test.ts`).
 
 **Debugging on hardware.** Each Wii sends its kernel log and module status to the relay, so the
 status page's **Wii consoles** table and `/log?station=N` are the first place to look. The relay

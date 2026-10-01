@@ -22,7 +22,7 @@ It has not run a full night at a venue yet.
 
 ## What you need
 
-- A Raspberry Pi (a Pi 5, or any Pi that runs 64-bit or 32-bit Raspberry Pi OS) and a Windows PC
+- A Raspberry Pi (a Pi 5, or any Pi that runs 64-bit or 32-bit Raspberry Pi OS) and a PC with Node 22 (Windows, macOS or Linux)
   to set it up from.
 - Wiis with the Homebrew Channel, one SD card each, and a stock NTSC 1.02 Melee image.
 - A Wi-Fi network the Wiis and the Pi share, where devices can reach each other. Guest networks
