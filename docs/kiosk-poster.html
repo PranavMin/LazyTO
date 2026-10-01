@@ -12,8 +12,10 @@
     - give it a real visual pass (it has had none - written blind, no render seen);
     - consider a big-type "quick card" variant with only the CSS scoring binds;
     - bump the build footer whenever the poster is re-verified.
-  Stage select comes from the venue's own Slippi codes, so the poster does not
-  describe its binds. Verify the character select cards on a real Wii.
+  Stage select binds come from the venue's Slippi "Stage Striking" code
+  (Tournament mods): its SSS hook tests pad masks 0x400 (X) and 0x10 (Z) and
+  nothing else. Verify on a real Wii that Z resets all strikes, and the
+  character select cards.
 -->
 <title>LazyTO Controls Poster</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;700&display=swap">
@@ -170,7 +172,7 @@
   <div class="mast">
     <div>
       <h1>Lazy<span>TO</span><br>How to play your set</h1>
-      <p class="sub">The setup reports your bracket set to start.gg for you. Find your set, say who is who, play: each game is scored automatically when it ends. The controller binds are there to fix mistakes. Any port can use them.</p>
+      <p class="sub">Pick your set, say who is who, play. Every game is scored automatically.</p>
     </div>
     <div class="flow">
       <div><b>1</b> Set list</div>
@@ -185,16 +187,16 @@
     <section class="screen">
       <header><span class="n">1</span> Set list</header>
       <div class="body">
-        <p class="lead">Every set that's ready to play, grouped by round, names on the VS line. The highlighted set is described on the right. Pick yours.</p>
-        <div class="bind"><div class="keys"><span class="k stick">&uarr;&darr;</span></div><div class="does">Move up / down<small>&larr; &rarr; jump a page</small></div></div>
+        <p class="lead">Find your set and pick it.</p>
+        <div class="bind"><div class="keys"><span class="k stick">&uarr;&darr;</span></div><div class="does">Move up / down</div></div>
         <div class="bind"><div class="keys"><span class="k l">L</span><span class="k l">R</span></div><div class="does">Filter by first letter of a tag</div></div>
         <div class="bind"><div class="keys"><span class="k x">X</span></div><div class="does">Jump to the set this setup is playing</div></div>
-        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does"><b>Start the set</b><small>Check both names in the panel, then A again to accept</small></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span></div><div class="does"><b>Friendlies</b><small>Play without a set. Nothing is reported.</small></div></div>
-        <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Refresh the list<small>Your place is kept</small></div></div>
+        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does"><b>Start the set</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span></div><div class="does"><b>Friendlies</b></div></div>
+        <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Refresh the list</div></div>
         <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to the main menu</div></div>
         <div class="sep"></div>
-        <p class="lead">No sets showing? Press Y. If it still says NO SETS, tell the TO, the bracket may not be started yet.</p>
+        <p class="lead">No sets? Press Y. Still none? Tell the TO.</p>
       </div>
     </section>
 
@@ -202,16 +204,16 @@
     <section class="screen">
       <header><span class="n">2</span> Character select</header>
       <div class="body">
-        <p class="lead"><b>Say who is who first.</b> The player named on the <b>left</b> of the set holds L + R on their own controller; the other port is then the other player. Picking your name tag from the top of the tag list works too.</p>
-        <div class="bind"><div class="keys"><span class="k l">L</span><span class="plus">+</span><span class="k l">R</span></div><div class="does"><b>I am the player named first</b> (hold 1 second, a light press is enough)<small>Wrong player? The right one holds L + R and it moves. L + R + B clears it.</small></div></div>
+        <p class="lead"><b>First:</b> the player named on the <b>left</b> holds L + R.</p>
+        <div class="bind"><div class="keys"><span class="k l">L</span><span class="plus">+</span><span class="k l">R</span></div><div class="does"><b>I am the player named first</b> (hold 1 s)</div></div>
         <div class="sep"></div>
         <span class="tag">Corrections only &mdash; hold Z + flick the C-stick</span>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b><small>Left as shown on the banner. Only if the auto-score got it wrong or was skipped</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b></div></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Give the right player a game</b></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game<small>Also removes an auto-scored game</small></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 second)<small>Only once someone has the winning score</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game</div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 s)</div></div>
         <div class="sep"></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k x">X</span></div><div class="does"><b>Handwarmer: starts right now</b><small>Everyone ready? Straight to Battlefield, no striking, not scored. Not ready? It arms for the next game instead.</small></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k x">X</span></div><div class="does"><b>Handwarmer</b> (not scored)</div></div>
         <div class="bind"><div class="keys"><span class="k d">&uarr;</span><span class="k d">&darr;</span></div><div class="does">D-pad: rumble on / off for your port</div></div>
         <div class="bind"><div class="keys"><span class="k st">START</span></div><div class="does">Go to stage select</div></div>
         <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to the set list</div></div>
@@ -222,47 +224,18 @@
     <section class="screen">
       <header><span class="n">3</span> Stage select</header>
       <div class="body">
-        <p class="lead">Stage striking works the way your venue's Slippi setup does. LazyTO doesn't change this screen.</p>
+        <div class="bind"><div class="keys"><span class="k x">X</span></div><div class="does"><b>Strike the stage</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span></div><div class="does">Bring back all struck stages</div></div>
         <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does">Pick the stage</div></div>
         <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to character select</div></div>
         <div class="sep"></div>
-        <p class="lead"><b>After the game</b> you land back on character select with the score already updated (<code>GAME 2 TO MANGO</code>). Quitting with L+R+A+Start is a no contest and is not scored.</p>
+        <p class="lead"><b>After the game</b> the score updates by itself.</p>
       </div>
     </section>
   </div>
 
-  <div class="band">
-    <div>
-      <h3>What the banner under MELEE / VS says</h3>
-      <div class="status">
-        <div><code>ZAIN P1 &nbsp;1 - 2&nbsp; P3 MANGO</code> the score, with each player's port. The lower port is always on the left, so the sides can swap once both ports are known</div>
-        <div><code>HOLD L+R IF YOU ARE MANGO</code> nobody is placed yet &nbsp;&middot;&nbsp; <code>MANGO IS P3</code> the hold was seen &nbsp;&middot;&nbsp; <code>PORTS CLEARED</code> after L + R + B</div>
-        <div><code>GAME 2 TO MANGO</code> auto-scored &nbsp;&middot;&nbsp; <code>PICK A TAG OR HOLD L+R TO AUTO-SCORE</code> the game couldn't tell who won, score by hand</div>
-        <div>Score digits: yellow normal &nbsp;&middot;&nbsp; amber sending &nbsp;&middot;&nbsp; green start.gg has it &nbsp;&middot;&nbsp; <span class="red"><code>SEND FAILED - TELL THE TO</code></span> flick again, or tell the TO</div>
-        <div><code>HANDWARMER - NOT SCORED</code> the next game won't count (top-left <code>Z+X CANCELS</code> turns it off)</div>
-      </div>
-    </div>
-    <div>
-      <h3>Already set for you</h3>
-      <ul>
-        <li>4 stock, 8:00, items off</li>
-        <li>Your venue's usual settings, such as UCF and neutral spawns</li>
-        <li>All characters and stages unlocked</li>
-        <li>Music off; a handwarmer shows a count-up clock top-left that goes red after 1:00</li>
-      </ul>
-    </div>
-    <div>
-      <h3>Random picks from</h3>
-      <div class="stages">
-        <span>Battlefield</span><span>Final Destination</span>
-        <span>Fountain of Dreams</span><span>Yoshi's Story</span>
-        <span>Dream Land</span><span>Pok&eacute;mon Stadium</span>
-      </div>
-    </div>
-  </div>
-
   <div class="foot">
     <span>Wrong set started, or a score you can't fix with undo? Get the TO before ending the set.</span>
-    <span>LazyTO &middot; module build 2026-09-30 (set list verified on a Wii; character select cards verified in development)</span>
+    <span>LazyTO</span>
   </div>
 </main>
