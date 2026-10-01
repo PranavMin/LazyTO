@@ -90,6 +90,12 @@ enum exi_poll_flags {
     PF_NO_SECRET  = 4,  /* tournament.cfg has no valid secret= */
 };
 
+/* bit flags in exi_poll_hdr.host_opts: what the host's settings ask the kiosk to do with Melee's audio (the kiosk forces mono and music off unless told otherwise) */
+enum exi_host_opts {
+    HO_MUSIC_ON = 1,  /* leave Melee's music on (sound balance untouched) */
+    HO_STEREO   = 2,  /* leave Melee in stereo (no OSSetSoundMode(mono)) */
+};
+
 /* state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 enum exi_poll_state {
     RELAY_IDLE  = 0,
@@ -131,7 +137,8 @@ struct exi_poll_hdr {
     uint16_t station;  /* tournament.cfg station; 0 in Dolphin (design R10) */
     uint32_t relay_ip;  /* relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown */
     uint16_t relay_port;  /* relay TCP port; 0 = unknown */
-    uint16_t _pad2;
+    uint8_t  host_opts;  /* exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin) */
+    uint8_t  host_build;  /* the host's build number for the set list's version text (Nintendont NIN_HOST_BUILD, bumped by hand per loader release); 0 = unknown (Dolphin) */
 };  /* 12 bytes */
 
 RELAY_STATIC_ASSERT(sizeof(struct exi_poll_hdr) == 12, exi_poll_hdr_size);
@@ -140,7 +147,8 @@ RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, flags) == 1, exi_poll_hdr_flag
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, station) == 2, exi_poll_hdr_station);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_ip) == 4, exi_poll_hdr_relay_ip);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_port) == 8, exi_poll_hdr_relay_port);
-RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, _pad2) == 10, exi_poll_hdr__pad2);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, host_opts) == 10, exi_poll_hdr_host_opts);
+RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, host_build) == 11, exi_poll_hdr_host_build);
 
 /* Relay discovery (design R15). Not on the TCP wire: one UDP datagram,
  * broadcast by the relay every BEACON_INTERVAL_MS to each IPv4 interface's

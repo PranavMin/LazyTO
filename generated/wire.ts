@@ -63,6 +63,12 @@ export enum ExiPollFlags {
   PF_NO_SECRET = 4, // tournament.cfg has no valid secret=
 }
 
+/** bit flags in exi_poll_hdr.host_opts: what the host's settings ask the kiosk to do with Melee's audio (the kiosk forces mono and music off unless told otherwise) */
+export enum ExiHostOpts {
+  HO_MUSIC_ON = 1, // leave Melee's music on (sound balance untouched)
+  HO_STEREO = 2, // leave Melee in stereo (no OSSetSoundMode(mono))
+}
+
 /** state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns */
 export enum ExiPollState {
   RELAY_IDLE = 0,
@@ -126,6 +132,8 @@ export interface ExiPollHdr {
   station: number; // tournament.cfg station; 0 in Dolphin (design R10)
   relay_ip: number; // relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown
   relay_port: number; // relay TCP port; 0 = unknown
+  host_opts: number; // exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)
+  host_build: number; // the host's build number for the set list's version text (Nintendont NIN_HOST_BUILD, bumped by hand per loader release); 0 = unknown (Dolphin)
 }
 export const EXI_POLL_HDR_SIZE = 12;
 
@@ -137,6 +145,8 @@ export function encodeExiPollHdr(v: ExiPollHdr): Uint8Array {
   dv.setUint16(2, v.station, false);
   dv.setUint32(4, v.relay_ip, false);
   dv.setUint16(8, v.relay_port, false);
+  dv.setUint8(10, v.host_opts);
+  dv.setUint8(11, v.host_build);
   return bytes;
 }
 
@@ -149,6 +159,8 @@ export function decodeExiPollHdr(buf: Uint8Array, off = 0): ExiPollHdr {
     station: dv.getUint16(off + 2, false),
     relay_ip: dv.getUint32(off + 4, false),
     relay_port: dv.getUint16(off + 8, false),
+    host_opts: dv.getUint8(off + 10),
+    host_build: dv.getUint8(off + 11),
   };
 }
 

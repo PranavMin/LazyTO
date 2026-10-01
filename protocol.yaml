@@ -116,6 +116,12 @@ enums:
       PF_NO_CFG:     {value: 2, doc: "no usable sd:/tournament.cfg"}
       PF_NO_SECRET:  {value: 4, doc: "tournament.cfg has no valid secret="}
 
+  exi_host_opts:
+    doc: "bit flags in exi_poll_hdr.host_opts: what the host's settings ask the kiosk to do with Melee's audio (the kiosk forces mono and music off unless told otherwise)"
+    values:
+      HO_MUSIC_ON: {value: 1, doc: "leave Melee's music on (sound balance untouched)"}
+      HO_STEREO:   {value: 2, doc: "leave Melee in stereo (no OSSetSoundMode(mono))"}
+
   exi_poll_state:
     doc: "state byte of exi_poll_hdr, the first thing an EXI_RELAY_POLL read returns"
     values:
@@ -160,7 +166,8 @@ structs:
       - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (design R10)"}
       - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
       - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
-      - {name: _pad2,      type: u16}
+      - {name: host_opts,  type: u8,  doc: "exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)"}
+      - {name: host_build, type: u8,  doc: "the host's build number for the set list's version text (Nintendont NIN_HOST_BUILD, bumped by hand per loader release); 0 = unknown (Dolphin)"}
 
   relay_beacon:
     doc: >-
