@@ -1,0 +1,15 @@
+# Generated, vendored or not ours to format
+generated/
+kiosk/
+melee/
+Nintendont/
+dist/
+node_modules/
+private/
+.claude/
+package-lock.json
+# Prose and YAML are wrapped by hand
+*.md
+*.html
+*.yml
+*.yaml

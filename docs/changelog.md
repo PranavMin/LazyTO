@@ -2,6 +2,10 @@
 
 Dated progress, newest first. How things work now is in [architecture.md](architecture.md); why, in [decisions.md](decisions.md).
 
+## [Unreleased]: 0.9.0-beta.1
+
+The first public beta. Everything below is the work leading up to it, by date.
+
 ## 2026-10-01
 
 - **Operator scripts run everywhere**: `sync-card`, `push` and `wiiload` are Node/TypeScript (`scripts/*.ts`, `npm run sync-card|push|wiiload`), tested in `test/deploy-scripts.test.ts`; wiiload speaks the Homebrew Channel protocol itself. The `deploy/*.ps1` files are shims onto them for one release.

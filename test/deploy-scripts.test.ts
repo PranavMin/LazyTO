@@ -27,8 +27,8 @@ const throwsTool = (fn: () => unknown, re: RegExp): void => assert.throws(fn, (e
 // ---------- .env
 test('loadDotEnv: KEY=value, quotes dropped, other lines ignored, missing file is empty', () => {
   const d = tmp();
-  writeFileSync(join(d, '.env'), '# c\nSTARTGG_TOKEN=abc \nRELAY_SECRET="s3cret-ok"\nlower=no\n\nTOURNAMENT=abbey\n');
-  assert.deepEqual(loadDotEnv(join(d, '.env')), { STARTGG_TOKEN: 'abc', RELAY_SECRET: 's3cret-ok', TOURNAMENT: 'abbey' });
+  writeFileSync(join(d, '.env'), '# c\nSTARTGG_TOKEN=abc \nRELAY_SECRET="s3cret-ok"\nlower=no\n\nTOURNAMENT=lazyto-weekly\n');
+  assert.deepEqual(loadDotEnv(join(d, '.env')), { STARTGG_TOKEN: 'abc', RELAY_SECRET: 's3cret-ok', TOURNAMENT: 'lazyto-weekly' });
   assert.deepEqual(loadDotEnv(join(d, 'none')), {});
 });
 
@@ -257,7 +257,7 @@ test('sync-card warns when kiosk sources are newer than the module, and when the
 });
 
 // ---------- push: config from .env and the dry run
-const ENV = { STARTGG_TOKEN: 'tok-1234567', RELAY_SECRET: 'venue-secret1', TOURNAMENT: 'abbey', WEEKLY_NAME_PREFIX: 'Abbey Weekly #', EVENT_NAME: 'Melee Singles', STREAM_NAME: 'SFMelee', TEST_TOURNAMENT: 'tournament/sf-test' };
+const ENV = { STARTGG_TOKEN: 'tok-1234567', RELAY_SECRET: 'venue-secret1', TOURNAMENT: 'lazyto-weekly', WEEKLY_NAME_PREFIX: 'LazyTO Weekly #', EVENT_NAME: 'Melee Singles', STREAM_NAME: 'LazyTOStream', TEST_TOURNAMENT: 'tournament/lazyto-test' };
 const PO = { test: false, tcpPort: 29470, httpPort: 29473 };
 
 test('relayConfigFromEnv: production vs --test, defaults, and the same errors push.ps1 gave', () => {
@@ -265,10 +265,10 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
   assert.deepEqual(prod, {
     startggEndpoint: 'https://api.start.gg/gql/alpha',
     token: 'tok-1234567',
-    tournament: 'abbey',
+    tournament: 'lazyto-weekly',
     eventName: 'Melee Singles',
-    streamName: 'SFMelee',
-    weeklyNamePrefix: 'Abbey Weekly #',
+    streamName: 'LazyTOStream',
+    weeklyNamePrefix: 'LazyTO Weekly #',
     secret: 'venue-secret1',
     streamStation: 1,
     setFormat: 'startgg',
@@ -277,17 +277,17 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
     auditDir: '/var/lib/lazyto',
   });
   const t = relayConfigFromEnv({ ...ENV, STREAM_STATION: '3', SET_FORMAT: 'top8q' }, { ...PO, test: true });
-  assert.equal(t.tournament, 'tournament/sf-test');
+  assert.equal(t.tournament, 'tournament/lazyto-test');
   assert.equal(t.weeklyNamePrefix, '', 'no weekly fallback for a test slug');
   assert.equal(t.streamStation, 3);
   assert.equal(t.setFormat, 'top8q');
   assert.equal(relayConfigFromEnv({ ...ENV, TOURNAMENT: 'tournament/full-slug' }, PO).weeklyNamePrefix, '', 'a full slug needs no prefix');
-  assert.equal(describeRelayConfig(t, { ...PO, test: true }), "config: tournament/sf-test (TEST), event ~ 'Melee Singles', stream 'SFMelee', stream station 3, format top8q, tcp 29470, http 29473, token tok-...");
+  assert.equal(describeRelayConfig(t, { ...PO, test: true }), "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream', stream station 3, format top8q, tcp 29470, http 29473, token tok-...");
   throwsTool(() => relayConfigFromEnv({ ...ENV, STARTGG_TOKEN: '' }, PO), /STARTGG_TOKEN missing from \.env/);
   throwsTool(() => relayConfigFromEnv({ ...ENV, RELAY_SECRET: 'bad secret!' }, PO), /RELAY_SECRET in \.env must be 8-16 letters/);
   throwsTool(() => relayConfigFromEnv({ ...ENV, EVENT_NAME: '' }, PO), /EVENT_NAME missing from \.env \(see \.env\.example\)/);
   throwsTool(() => relayConfigFromEnv({ ...ENV, SET_FORMAT: 'bo5' }, PO), /SET_FORMAT in \.env must be startgg or top8q, not 'bo5'/);
-  throwsTool(() => relayConfigFromEnv({ ...ENV, TEST_TOURNAMENT: 'sf-test' }, { ...PO, test: true }), /TEST_TOURNAMENT must be a full slug/);
+  throwsTool(() => relayConfigFromEnv({ ...ENV, TEST_TOURNAMENT: 'lazyto-test' }, { ...PO, test: true }), /TEST_TOURNAMENT must be a full slug/);
   throwsTool(() => relayConfigFromEnv({ ...ENV, TOURNAMENT: '' }, PO), /TOURNAMENT missing from \.env/);
   throwsTool(() => relayConfigFromEnv({ ...ENV, STREAM_STATION: 'x' }, PO), /STREAM_STATION in \.env must be a station number/);
 });
@@ -329,7 +329,7 @@ test('push --dry-run stages dist, deploy (no .cache), package.json, README and c
   assert.equal(cfg.setFormat, 'startgg');
   assert.deepEqual(calls.map((c) => c[0]), ['tar'], 'dry run: tar only, no scp/ssh/npm');
   assert.ok(lines.includes('dry run: not pushing'));
-  assert.ok(lines.some((l) => l.startsWith("config: abbey (production), event ~ 'Melee Singles'")));
+  assert.ok(lines.some((l) => l.startsWith("config: lazyto-weekly (production), event ~ 'Melee Singles'")));
   assert.ok(!lines.some((l) => l.includes('tok-1234567')), 'full token never printed');
 });
 

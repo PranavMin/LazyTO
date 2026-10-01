@@ -250,7 +250,7 @@ Startup validates every config field and exits non-zero on any problem. There ar
 `npm run push` (`scripts/push.ts`) writes the file from `.env`. The relay turns names into ids once at startup, because ids change every week and names do not.
 
 - **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament needs no weekly push.
-- **Numbered-weekly fallback:** if `weeklyNamePrefix` is set and no admin tournament carries the short URL, the relay takes the admin tournament named `<prefix><number>` whose start is nearest to now, within 30 days (for example a weekly named "Melee @ Abbey Tavern #N"). The startup log says which rule matched.
+- **Numbered-weekly fallback:** if `weeklyNamePrefix` is set and no admin tournament carries the short URL, the relay takes the admin tournament named `<prefix><number>` whose start is nearest to now, within 30 days (for example a weekly named "LazyTO Weekly #N"). The startup log says which rule matched.
 - **Full slug:** looked up directly. This is the only way to reach an unpublished tournament.
 
 The event is the one Melee singles event whose name contains `eventName`. The stream is the one named `streamName`. Zero or several matches is a startup failure that lists what was found. A restart re-resolves. The status page header names the tournament and event, so a stale week is visible.

@@ -2,12 +2,13 @@
 
 Bug reports from a venue are the most useful thing you can send. Use the issue templates: they
 ask for the status page lines and the Wii's message, which is usually enough to find the cause.
+Security problems go through [SECURITY.md](SECURITY.md) instead, never a public issue.
 
 ## Code
 
 - Set up with [docs/development.md](docs/development.md). The relay needs Node 22; the kiosk
   module needs Windows and a configured Melee decomp.
-- `npm test` must pass. It checks the generated protocol files, type-checks the relay and runs
+- Run `npm run format` before opening a pull request. `npm test` must pass. It checks the generated protocol files, type-checks the relay and runs
   every test. CI runs it on every pull request.
 - A change to `protocol.yaml` means regenerating with `python tools/gen_protocol.py` and
   rebuilding the module and the loader together. `npm test` fails until the header copies match.

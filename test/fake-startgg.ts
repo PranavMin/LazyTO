@@ -52,7 +52,7 @@ export interface FakeSet {
 }
 
 export interface FakeTournament {
-  slug: string; // "tournament/sf-melee-discord-test"
+  slug: string; // "tournament/lazyto-test"
   shortSlug: string | null;
   published: boolean; // unpublished tournaments are absent from every list query (probe.ts --find-short)
   startAt: number | null; // unix seconds
@@ -257,7 +257,7 @@ export class FakeStartgg {
   private assignStream(variables: Record<string, unknown>): { status: number; body: string } {
     const set = this.findSet(variables);
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
-    set.stream = { id: Number(variables.streamId), streamName: 'SFMelee', streamSource: 'TWITCH' };
+    set.stream = { id: Number(variables.streamId), streamName: 'LazyTOStream', streamSource: 'TWITCH' };
     return {
       status: 200,
       body: JSON.stringify({ data: { assignStream: { id: set.id, state: set.state, stream: set.stream } } }),
@@ -422,57 +422,57 @@ export function defaultFixture(): FakeSet[] {
 
 // ---- admin tournaments: the shape probe.ts --mine / --tournament recorded ----
 // 2026-09-25. The test tournament has three Melee singles events and two
-// streams, so "Melee Singles" + "SFMelee" is the unambiguous pick; it is
+// streams, so "Melee Singles" + "LazyTOStream" is the unambiguous pick; it is
 // unpublished, so no list returns it and the relay is given its full slug.
-// The weekly Abbey tournaments are in the admin list (newest first) and each
-// week's gets the "abbey" short URL.
+// The LazyTO Weekly tournaments are in the admin list (newest first) and each
+// week's gets the "lazyto-weekly" short URL.
 
-export const FIXTURE_TOURNAMENT = 'tournament/sf-melee-discord-test';
+export const FIXTURE_TOURNAMENT = 'tournament/lazyto-test';
 
-/** Melee @ Abbey Tavern #160's real start (2026-09-30T01:30:00Z, probe.ts --tournament); weeks step back from it. */
-export const ABBEY_160_START = 1790731800;
+/** LazyTO Weekly #160's start (2026-09-30T01:30:00Z, a Tuesday evening weekly as probe.ts --tournament records it); weeks step back from it. */
+export const WEEKLY_160_START = 1790731800;
 const WEEK = 7 * 24 * 60 * 60;
 export const FIXTURE_EVENT_NAME = 'Melee Singles';
-export const FIXTURE_STREAM_NAME = 'SFMelee';
+export const FIXTURE_STREAM_NAME = 'LazyTOStream';
 export const FIXTURE_STREAM_ID = 1358079;
 
 export function defaultTournaments(): FakeTournament[] {
-  const abbey = (n: number, short: string): FakeTournament => ({
-    slug: `tournament/melee-abbey-tavern-${n}`,
+  const weekly = (n: number, short: string): FakeTournament => ({
+    slug: `tournament/lazyto-weekly-${n}`,
     shortSlug: short,
     published: true,
-    // Weekly on Tuesdays: #160 starts at ABBEY_160_START, each earlier week 7 days before.
-    startAt: ABBEY_160_START - (160 - n) * WEEK,
+    // Weekly on Tuesdays: #160 starts at WEEKLY_160_START, each earlier week 7 days before.
+    startAt: WEEKLY_160_START - (160 - n) * WEEK,
     id: 956000 + n,
-    name: `Melee @ Abbey Tavern #${n}`,
+    name: `LazyTO Weekly #${n}`,
     events: [
       { id: 1717000 + n * 3, name: 'Melee Doubles (6:30 pm Start)', type: 5, videogame: { id: 1 } },
       { id: 1717001 + n * 3, name: 'Melee Singles! (7:30 Start)', type: 1, videogame: { id: 1 } },
       { id: 1717002 + n * 3, name: 'Melee Waitlist', type: 1, videogame: { id: 1 } },
     ],
     streams: [
-      { id: 1420000 + n * 2, streamName: 'SFMelee' },
+      { id: 1420000 + n * 2, streamName: 'LazyTOStream' },
       { id: 1420001 + n * 2, streamName: 'sidestream' },
     ],
   });
   return [
-    abbey(160, 'abbey'),
-    abbey(159, 'abbey159'),
-    abbey(158, 'abbey158'),
+    weekly(160, 'lazyto-weekly'),
+    weekly(159, 'lazyto-weekly159'),
+    weekly(158, 'lazyto-weekly158'),
     {
-      slug: 'tournament/sf-melee-discord-test',
-      shortSlug: 'sfmeleetest',
+      slug: 'tournament/lazyto-test',
+      shortSlug: 'lazytotest',
       published: false,
       startAt: 1777316400, // 2026-04-27T19:00:00Z, as the probe recorded
       id: 905882,
-      name: 'SF Melee Discord Test',
+      name: 'LazyTO Test Tournament',
       events: [
         { id: FIXTURE_EVENT_ID, name: 'Melee Singles! (7:30 Start)', type: 1, videogame: { id: 1 } },
         { id: 1613012, name: 'Melee Ladder (9:30pm)', type: 1, videogame: { id: 1 } },
         { id: 1613011, name: 'Melee Waitlist', type: 1, videogame: { id: 1 } },
       ],
       streams: [
-        { id: FIXTURE_STREAM_ID, streamName: 'SFMelee' },
+        { id: FIXTURE_STREAM_ID, streamName: 'LazyTOStream' },
         { id: 1358080, streamName: 'sidestream' },
       ],
     },

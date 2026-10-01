@@ -38,8 +38,8 @@ check.
 
 **Rehearsing the built relay without start.gg.** Run `npm run build` and `npm run fake -- --port=18081`.
 Write a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`,
-`"tournament": "tournament/sf-melee-discord-test"`, `"eventName": "Melee Singles"`,
-`"streamName": "SFMelee"`, `"weeklyNamePrefix": ""`, a secret, and free ports. Those are the
+`"tournament": "tournament/lazyto-test"`, `"eventName": "Melee Singles"`,
+`"streamName": "LazyTOStream"`, `"weeklyNamePrefix": ""`, a secret, and free ports. Those are the
 fake's fixture values. Then run `CONFIG=<that file> node dist/main.js`, and drive it with
 `npx tsx scripts/sim-wii.ts --relay=127.0.0.1:<tcpPort> --secret=<secret>`.
 

@@ -8,8 +8,8 @@
 // http://127.0.0.1:18080/gql/alpha with token "test-token", as event 1613010
 // of the fixture's tournament list (test/fake-startgg.ts defaultTournaments).
 // Point a config.json's startggEndpoint/token at those with tournament
-// "tournament/sf-melee-discord-test", eventName "Melee Singles", streamName
-// "SFMelee" (or the fixture's short URL "abbey" to exercise the short-URL lookup, which
+// "tournament/lazyto-test", eventName "Melee Singles", streamName
+// "LazyTOStream" (or the fixture's short URL "lazyto-weekly" to exercise the short-URL lookup, which
 // resolves to a different event id and so to no sets), start the relay, then
 // `npm run sim -- --relay=127.0.0.1:<tcpPort>`.
 //

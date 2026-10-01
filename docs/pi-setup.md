@@ -14,7 +14,7 @@ time it starts, so a new week needs no push.
 - A microSD card of 16 GB or more, and a way to plug it into the PC.
 - The name and password of a Wi-Fi network the PC is on. The Pi joins it for setup. You add the
   venue's Wi-Fi later. An Ethernet cable also works.
-- On the PC: Windows 10 or 11, Git, Node.js 22 or newer, and a clone of this repo.
+- On the PC: Windows 10 or 11, macOS or Linux, with Git, Node.js 22 or newer, and a clone of this repo.
 - A start.gg API token from an admin of your tournament: start.gg, Developer Settings, Personal
   Access Tokens.
 
@@ -137,7 +137,7 @@ npx tsx scripts/smoke.ts relay.local
 
 Then open http://relay.local:29473 in a browser. The header names your tournament and event.
 
-When testing is done, push once without `-Test` to go live:
+When testing is done, push once without `--test` to go live:
 
 ```bash
 npm run push
@@ -183,7 +183,7 @@ stops the relay with a list of everything wrong.
 |---|---|---|
 | `startggEndpoint` | start.gg's API address | always the production address |
 | `token` | start.gg API token | `STARTGG_TOKEN` |
-| `tournament` | short URL, or `tournament/<slug>` | `TOURNAMENT`, or `TEST_TOURNAMENT` with `-Test` |
+| `tournament` | short URL, or `tournament/<slug>` | `TOURNAMENT`, or `TEST_TOURNAMENT` with `--test` |
 | `eventName` | picks the one Melee singles event whose name contains it | `EVENT_NAME` |
 | `streamName` | picks the stream with exactly this name | `STREAM_NAME` |
 | `weeklyNamePrefix` | the weekly backup described above. Empty turns it off. | `WEEKLY_NAME_PREFIX` |

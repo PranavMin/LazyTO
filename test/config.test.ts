@@ -9,9 +9,9 @@ import { relayConfigFromEnv } from '../scripts/lib/pushconfig.js';
 const VALID = {
   startggEndpoint: 'https://api.start.gg/gql/alpha',
   token: 'tok-abc',
-  tournament: 'tournament/sf-melee-discord-test',
+  tournament: 'tournament/lazyto-test',
   eventName: 'Melee Singles',
-  streamName: 'SFMelee',
+  streamName: 'LazyTOStream',
   weeklyNamePrefix: '',
   secret: 'abcd-EFGH_1234xy',
   streamStation: 1,
@@ -108,16 +108,16 @@ test('empty token', () => {
 });
 
 test('tournament is a short URL or a full tournament slug, nothing else', () => {
-  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'abbey' }))).tournament, 'abbey');
-  for (const bad of ['', 'https://start.gg/abbey', 'tournament/x/event/melee-singles', 'start.gg/abbey', 905882]) {
+  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).tournament, 'lazyto-weekly');
+  for (const bad of ['', 'https://start.gg/lazyto-weekly', 'tournament/x/event/melee-singles', 'start.gg/lazyto-weekly', 905882]) {
     expectProblems(JSON.stringify({ ...VALID, tournament: bad }), 'tournament must be a start.gg short URL');
   }
 });
 
 test('weeklyNamePrefix: a string, "" for none, and only with a short URL', () => {
-  const withShort = { ...VALID, tournament: 'abbey', weeklyNamePrefix: 'Melee @ Abbey Tavern #' };
-  assert.equal(loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix, 'Melee @ Abbey Tavern #');
-  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'abbey' }))).weeklyNamePrefix, '');
+  const withShort = { ...VALID, tournament: 'lazyto-weekly', weeklyNamePrefix: 'LazyTO Weekly #' };
+  assert.equal(loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix, 'LazyTO Weekly #');
+  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).weeklyNamePrefix, '');
   expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 3 }), 'weeklyNamePrefix must be a string');
   expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 'Weekly #' }), 'weeklyNamePrefix only applies to a short URL');
 });

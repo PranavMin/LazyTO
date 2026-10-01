@@ -23,7 +23,7 @@ test('status page', async (t) => {
   const tcp = new RelayTcpServer({ cache, state, startgg, audit: nullAudit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
   await tcp.listen(0, '127.0.0.1');
   const telemetry = new StationTelemetry({ secret: TEST_SECRET });
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `SF Melee Discord Test · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: ['192.168.1.255'], sent: 1, lastSentAt: Date.now(), lastError: null }) }, tcp, telemetry });
+  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: ['192.168.1.255'], sent: 1, lastSentAt: Date.now(), lastError: null }) }, tcp, telemetry });
   await status.listen(0, '127.0.0.1');
   const statusUrl = `http://127.0.0.1:${status.address().port}`;
   t.after(async () => {
@@ -58,7 +58,7 @@ test('status page', async (t) => {
 
   await t.test('before any Wii connects: event id, empty table, cache line', async () => {
     const html = await (await fetch(statusUrl)).text();
-    assert.match(html, /<b>SF Melee Discord Test · Melee Singles! \(7:30 Start\) \(1613010\)<\/b>/, 'tournament, event and id are shown');
+    assert.match(html, /<b>LazyTO Test Tournament · Melee Singles! \(7:30 Start\) \(1613010\)<\/b>/, 'tournament, event and id are shown');
     assert.match(html, /no station has connected yet/);
     assert.match(html, /Cache: 4 sets \(4 selectable, 0 on stations\), refreshed \d+s ago/);
     assert.match(html, /<meta name="viewport"/, 'phone-readable');
