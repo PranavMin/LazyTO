@@ -1,0 +1,8 @@
+[submodule "melee"]
+	path = melee
+	url = https://github.com/PranavMin/melee.git
+	branch = vanilla-module
+[submodule "Nintendont"]
+	path = Nintendont
+	url = https://github.com/PranavMin/Nintendont.git
+	branch = vanilla-module

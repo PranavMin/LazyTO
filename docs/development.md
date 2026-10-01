@@ -1,7 +1,14 @@
 # Developing LazyTO
 
-LazyTO is three repositories. Clone them side by side in one folder. The scripts here find the
-others by relative path (`../melee`, `../Nintendont`).
+LazyTO is three repositories. This one holds the other two as git submodules, `melee/` and
+`Nintendont/`, each pinned to the commit that goes with this repo's commit. Clone everything at
+once:
+
+```
+git clone --recursive https://github.com/PranavMin/lazyto.git
+```
+
+In an existing clone, run `git submodule update --init`. CI checks out the submodules too.
 
 | Repo | Branch | Builds |
 |---|---|---|
@@ -39,9 +46,11 @@ fake's fixture values. Then run `CONFIG=<that file> node dist/main.js`, and driv
 `protocol.yaml` defines every message between the Wii and the relay. Never edit the files under
 `generated/` by hand. After changing `protocol.yaml`:
 
-1. Run `python tools/gen_protocol.py` and commit `generated/`.
-2. Copy `generated/relay_proto.h` to `../melee/include/relay_proto.h` and
-   `../Nintendont/kernel/relay_proto.h`.
+1. Run `python tools/gen_protocol.py`. It writes `generated/` and the header copies in both
+   submodules, `melee/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
+   `npm test` fails if any of them drift.
+2. Commit the header in each submodule and push it, then commit `generated/` and the new
+   submodule commits here.
 3. Rebuild the module and the loader together. A Wii with a module and loader from different
    protocol versions shows `NO SETS LOADED YET`.
 
@@ -73,7 +82,7 @@ The kernel itself builds locally for quick checks. See the Nintendont repo's
 ## Testing on a Wii
 
 `deploy/sync-card.ps1` prepares an SD card from your builds in one command. It finds the card,
-downloads the newest successful CI loader, copies `../melee/build/GALE01/tournament.bin`, writes
+downloads the newest successful CI loader, copies `melee/build/GALE01/tournament.bin` from the submodule (`-Module` for another file), writes
 `tournament.cfg` with the secret from `.env`, turns on the loader's Network, Auto Boot and Log
 settings, checks every file by hash, and ejects the card. It refuses a module built with a debug
 switch on. It needs the GitHub CLI, logged in.
@@ -96,6 +105,20 @@ address. `tools/resolve_crash.py` in the melee repo turns it into a function nam
 
 **Testing in Dolphin.** The module can also run in a patched Slippi Dolphin, kept as a separate
 development setup. It is not part of LazyTO's public builds.
+
+## Working in a submodule
+
+A submodule checkout starts on a fixed commit, not a branch. Before changing one:
+
+```
+cd melee
+git switch vanilla-module
+git pull
+```
+
+Commit and push inside the submodule first, then commit the submodule's new position in this
+repo with `git add melee`. `git submodule update --remote` moves both submodules to the newest
+commit on `vanilla-module`.
 
 ## Upstream changes
 

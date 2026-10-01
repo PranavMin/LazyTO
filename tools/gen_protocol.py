@@ -582,12 +582,24 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 
 # ---------------------------------------------------------------- main
 
+# The C header's copies in the submodules (melee builds tournament.bin with
+# it, Nintendont's kernel builds the relay EXI device with it). Written and
+# checked with generated/, so the three never drift.
+SUBMODULE_HEADERS = (ROOT / "melee" / "include" / "relay_proto.h",
+                     ROOT / "Nintendont" / "kernel" / "relay_proto.h")
+
+
 def generate(out_dir: Path) -> dict[Path, str]:
     p = load_protocol(PROTOCOL_YAML)
-    return {
-        out_dir / "relay_proto.h": emit_c(p),
+    header = emit_c(p)
+    files = {
+        out_dir / "relay_proto.h": header,
         out_dir / "wire.ts": emit_ts(p),
     }
+    if out_dir == DEFAULT_OUT_DIR:
+        for path in SUBMODULE_HEADERS:
+            files[path] = header
+    return files
 
 
 def main() -> int:

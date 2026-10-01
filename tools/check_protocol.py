@@ -2,7 +2,8 @@
 """Fail if generated/ is out of date with protocol.yaml (the CI drift check).
 
 Regenerates relay_proto.h and wire.ts in memory and compares them against the
-committed copies in generated/. Prints a unified diff and exits non-zero on
+committed copies in generated/ and the header copies in the melee and
+Nintendont submodules. Prints a unified diff and exits non-zero on
 any mismatch, so a PR that touches protocol.yaml without regenerating (or
 hand-edits a generated file) fails CI.
 
@@ -33,7 +34,8 @@ def main() -> int:
     for path, want in expected.items():
         rel = path.relative_to(ROOT).as_posix()
         if not path.exists():
-            print(f"MISSING: {rel} — run: python tools/gen_protocol.py", file=sys.stderr)
+            print(f"MISSING: {rel} — run: git submodule update --init, then python tools/gen_protocol.py",
+                  file=sys.stderr)
             rc = max(rc, 2)
             continue
         # Normalize line endings so a CRLF checkout doesn't false-positive.
@@ -46,9 +48,9 @@ def main() -> int:
             rc = max(rc, 1)
 
     if rc == 0:
-        print("generated/ is up to date with protocol.yaml")
+        print("generated/ and the submodule headers are up to date with protocol.yaml")
     else:
-        print("\nfix: python tools/gen_protocol.py  (then commit generated/)",
+        print("\nfix: python tools/gen_protocol.py  (then commit generated/ and the submodule headers)",
               file=sys.stderr)
     return rc
 

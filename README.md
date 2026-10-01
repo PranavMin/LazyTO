@@ -42,6 +42,8 @@ It has not run a full night at a venue yet.
 
 ## Repositories
 
+melee and Nintendont are git submodules of this repo, pinned to the commits that go together. Clone with `git clone --recursive`.
+
 | Repo | What it builds |
 |---|---|
 | **lazyto** (this repo) | The relay, the Wii-to-relay protocol ([protocol.yaml](protocol.yaml)), the deploy scripts and the docs |
