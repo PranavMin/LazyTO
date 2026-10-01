@@ -125,12 +125,12 @@ export class WiiClient {
 // Defaults are what an auto-scored game carries: Fox (ext 2) vs Marth (ext 9)
 // on Battlefield (StKind 0x1F). A hand-scored game sends 0xFF, 0xFF, 0
 // (0 is Captain Falcon on the external character scale).
-export function game(winnerSlot: 1 | 2, p1Char = 2, p2Char = 9, stage = 0x1f): GameResult {
-  return { winner_slot: winnerSlot, p1_char: p1Char, p2_char: p2Char, stage };
+export function game(winnerSlot: 1 | 2, p1Char = 2, p2Char = 9, stage = 0x1f, stocks: [number, number] = [0xff, 0xff], costumes: [number, number] = [0xff, 0xff]): GameResult {
+  return { winner_slot: winnerSlot, p1_char: p1Char, p2_char: p2Char, stage, p1_stocks: stocks[0], p2_stocks: stocks[1], p1_costume: costumes[0], p2_costume: costumes[1] };
 }
 
 function padGames(games: GameResult[]): GameResult[] {
   const out = [...games];
-  while (out.length < 5) out.push({ winner_slot: 0, p1_char: 0, p2_char: 0, stage: 0 });
+  while (out.length < 5) out.push({ winner_slot: 0, p1_char: 0, p2_char: 0, stage: 0, p1_stocks: 0, p2_stocks: 0, p1_costume: 0, p2_costume: 0 });
   return out;
 }

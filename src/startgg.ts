@@ -36,6 +36,9 @@ export interface GameDataInput {
   winnerId: number;
   stageId?: number;
   selections?: { entrantId: number; characterId: number }[];
+  /** Per-game entrant scores. For Melee start.gg reads them as stocks remaining; the relay packs the costume in as (costume + 1) * 100 + stocks, the Replay Reporter for Slippi convention. */
+  entrant1Score?: number;
+  entrant2Score?: number;
 }
 
 /** A set node as the event-sets query returns it (states 1 and 2 only). */

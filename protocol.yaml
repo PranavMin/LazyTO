@@ -326,19 +326,28 @@ structs:
       - {name: _pad,   type: u8, array: 3}
 
   game_result:
-    doc: "One completed game."
-    size: 4
+    doc: >-
+      One completed game. The stock and costume fields (2026-09-30) feed
+      start.gg's per-game entrant scores the way Replay Reporter for Slippi
+      does: score = (costume + 1) * 100 + stocks remaining, so the set page
+      shows the colour and the stock icons; both 0xFF = unknown (a game scored
+      by hand), and the relay then sends no score for that game.
+    size: 8
     fields:
       - {name: winner_slot, type: u8, doc: "1 or 2"}
       - {name: p1_char,     type: u8, doc: "Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected."}
       - {name: p2_char,     type: u8}
       - {name: stage,       type: u8, doc: "Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand"}
+      - {name: p1_stocks,   type: u8, doc: "entrant 1's stocks remaining at the end of the game (0 for the player who was KO'd); 0xFF = unknown"}
+      - {name: p2_stocks,   type: u8}
+      - {name: p1_costume,  type: u8, doc: "entrant 1's costume (colour) index, 0 = the default colour; 0xFF = unknown"}
+      - {name: p2_costume,  type: u8}
 
   report_score_req:
     doc: >-
       CMD_REPORT_SCORE request payload. Always the full game list;
       the relay does a full overwrite (idempotent).
-    size: 28
+    size: 48
     fields:
       - {name: set_id,     type: u32}
       - {name: game_count, type: u8, doc: "0-5 valid entries in games"}
@@ -347,7 +356,7 @@ structs:
 
   end_set_req:
     doc: "CMD_END_SET request payload. Relay derives the winner from the game list."
-    size: 28
+    size: 48
     fields:
       - {name: set_id,     type: u32}
       - {name: game_count, type: u8}

@@ -156,6 +156,21 @@ test('full set lifecycle on a non-stream station', async (t) => {
     const r2 = await wii.reportScore(SET, [game(1, 2, 9), game(2, 2, 9), game(1, 2, 9)]);
     assert.equal(r2.resp.msg, '2-1');
     assert.equal(env.fake.getSet(SET).games.length, 3);
+
+    // Stocks and costume (auto-scored games) become the per-game scores,
+    // Replay Reporter for Slippi style: (costume + 1) * 100 + stocks.
+    const r3 = await wii.reportScore(SET, [game(1, 2, 9, 0x1f, [3, 0], [1, 0])]);
+    assert.equal(r3.resp.msg, '1-0');
+    const scored = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as { entrant1Score?: number; entrant2Score?: number }[];
+    assert.equal(scored[0]!.entrant1Score, 203, 'second costume, 3 stocks');
+    assert.equal(scored[0]!.entrant2Score, 100, 'default costume, 0 stocks');
+    // Unknown costume: stocks only. Unknown stocks (hand-scored): no score at all.
+    const r4 = await wii.reportScore(SET, [game(2, 2, 9, 0x1f, [0, 4], [0xff, 0xff]), game(1)]);
+    assert.equal(r4.resp.msg, '1-1');
+    const mixed = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as { entrant1Score?: number; entrant2Score?: number }[];
+    assert.deepEqual([mixed[0]!.entrant1Score, mixed[0]!.entrant2Score], [0, 4]);
+    assert.equal(mixed[1]!.entrant1Score, undefined);
+    assert.equal(mixed[1]!.entrant2Score, undefined);
   });
 
   await t.test('a hand-scored game (0xFF characters, stage 0) reports the winner only', async () => {

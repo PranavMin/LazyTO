@@ -345,7 +345,7 @@ export class RelayTcpServer {
       p1Id: set.p1.id,
       p2Id: set.p2.id,
       bestOf: set.bestOf,
-      games: set.games.map((g) => ({ winner_slot: g.winnerSlot, p1_char: 0xff, p2_char: 0xff, stage: 0 })),
+      games: set.games.map((g) => ({ winner_slot: g.winnerSlot, p1_char: 0xff, p2_char: 0xff, stage: 0, p1_stocks: 0xff, p2_stocks: 0xff, p1_costume: 0xff, p2_costume: 0xff })),
     };
     this.deps.state.claim(station, claim);
     this.deps.audit.record({
@@ -487,9 +487,25 @@ function validGames(
     if (selections.length) entry.selections = selections;
     const stage = toStartggStage(g.stage);
     if (stage !== undefined) entry.stageId = stage;
+    // Stocks remaining as the per-game score, with the costume (colour) index
+    // folded in as hundreds, the way Replay Reporter for Slippi reports:
+    // 204 = second costume, 4 stocks. start.gg shows colour and stock icons
+    // from it. Only when the Wii knew the stocks (auto-scored games).
+    const s1 = packedScore(g.p1_stocks, g.p1_costume);
+    const s2 = packedScore(g.p2_stocks, g.p2_costume);
+    if (s1 !== undefined && s2 !== undefined) {
+      entry.entrant1Score = s1;
+      entry.entrant2Score = s2;
+    }
     data.push(entry);
   }
   return { list, data };
+}
+
+/** (costume + 1) * 100 + stocks; undefined when the stocks are unknown (0xFF). A costume of 0xFF leaves the hundreds off. */
+export function packedScore(stocks: number, costume: number): number | undefined {
+  if (stocks === 0xff || stocks > 99) return undefined;
+  return (costume === 0xff ? 0 : (costume + 1) * 100) + stocks;
 }
 
 function scoreText(games: GameResult[]): string {

@@ -273,6 +273,8 @@ export class FakeStartgg {
       winnerId?: unknown;
       stageId?: unknown;
       selections?: { entrantId?: unknown; characterId?: unknown }[];
+      entrant1Score?: unknown;
+      entrant2Score?: unknown;
     }[];
     for (const g of gameData) {
       if (!Number.isInteger(g.gameNum) || (g.gameNum as number) < 1) {
@@ -294,6 +296,11 @@ export class FakeStartgg {
       if (g.stageId !== undefined && (!Number.isInteger(g.stageId) || (g.stageId as number) < 1)) {
         return { status: 200, body: gqlErrorBody('gameData entry has invalid stageId') };
       }
+      for (const k of ['entrant1Score', 'entrant2Score'] as const) {
+        if (g[k] !== undefined && (!Number.isInteger(g[k]) || (g[k] as number) < 0)) {
+          return { status: 200, body: gqlErrorBody(`gameData entry has invalid ${k}`) };
+        }
+      }
     }
 
     // Full overwrite, as the probe confirmed: old rows deleted, fresh ids.
@@ -302,6 +309,8 @@ export class FakeStartgg {
       orderNum: g.gameNum as number,
       winnerId: Number(g.winnerId),
       ...(g.stageId !== undefined ? { stageId: Number(g.stageId) } : {}),
+      ...(g.entrant1Score !== undefined ? { entrant1Score: Number(g.entrant1Score) } : {}),
+      ...(g.entrant2Score !== undefined ? { entrant2Score: Number(g.entrant2Score) } : {}),
       ...(g.selections?.length
         ? { selections: g.selections.map((s) => ({ entrantId: Number(s.entrantId), characterId: Number(s.characterId) })) }
         : {}),

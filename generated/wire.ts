@@ -573,16 +573,20 @@ export function decodeStartSetReq(buf: Uint8Array, off = 0): StartSetReq {
 }
 
 
-// ---- game_result (4 bytes) ----
+// ---- game_result (8 bytes) ----
 
-/** One completed game. */
+/** One completed game. The stock and costume fields (2026-09-30) feed start.gg's per-game entrant scores the way Replay Reporter for Slippi does: score = (costume + 1) * 100 + stocks remaining, so the set page shows the colour and the stock icons; both 0xFF = unknown (a game scored by hand), and the relay then sends no score for that game. */
 export interface GameResult {
   winner_slot: number; // 1 or 2
   p1_char: number; // Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected.
   p2_char: number;
   stage: number; // Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand
+  p1_stocks: number; // entrant 1's stocks remaining at the end of the game (0 for the player who was KO'd); 0xFF = unknown
+  p2_stocks: number;
+  p1_costume: number; // entrant 1's costume (colour) index, 0 = the default colour; 0xFF = unknown
+  p2_costume: number;
 }
-export const GAME_RESULT_SIZE = 4;
+export const GAME_RESULT_SIZE = 8;
 
 export function encodeGameResult(v: GameResult): Uint8Array {
   const bytes = new Uint8Array(GAME_RESULT_SIZE);
@@ -591,6 +595,10 @@ export function encodeGameResult(v: GameResult): Uint8Array {
   dv.setUint8(1, v.p1_char);
   dv.setUint8(2, v.p2_char);
   dv.setUint8(3, v.stage);
+  dv.setUint8(4, v.p1_stocks);
+  dv.setUint8(5, v.p2_stocks);
+  dv.setUint8(6, v.p1_costume);
+  dv.setUint8(7, v.p2_costume);
   return bytes;
 }
 
@@ -602,11 +610,15 @@ export function decodeGameResult(buf: Uint8Array, off = 0): GameResult {
     p1_char: dv.getUint8(off + 1),
     p2_char: dv.getUint8(off + 2),
     stage: dv.getUint8(off + 3),
+    p1_stocks: dv.getUint8(off + 4),
+    p2_stocks: dv.getUint8(off + 5),
+    p1_costume: dv.getUint8(off + 6),
+    p2_costume: dv.getUint8(off + 7),
   };
 }
 
 
-// ---- report_score_req (28 bytes) ----
+// ---- report_score_req (48 bytes) ----
 
 /** CMD_REPORT_SCORE request payload. Always the full game list; the relay does a full overwrite (idempotent). */
 export interface ReportScoreReq {
@@ -614,7 +626,7 @@ export interface ReportScoreReq {
   game_count: number; // 0-5 valid entries in games
   games: GameResult[];
 }
-export const REPORT_SCORE_REQ_SIZE = 28;
+export const REPORT_SCORE_REQ_SIZE = 48;
 
 export function encodeReportScoreReq(v: ReportScoreReq): Uint8Array {
   const bytes = new Uint8Array(REPORT_SCORE_REQ_SIZE);
@@ -641,7 +653,7 @@ export function decodeReportScoreReq(buf: Uint8Array, off = 0): ReportScoreReq {
 }
 
 
-// ---- end_set_req (28 bytes) ----
+// ---- end_set_req (48 bytes) ----
 
 /** CMD_END_SET request payload. Relay derives the winner from the game list. */
 export interface EndSetReq {
@@ -649,7 +661,7 @@ export interface EndSetReq {
   game_count: number;
   games: GameResult[];
 }
-export const END_SET_REQ_SIZE = 28;
+export const END_SET_REQ_SIZE = 48;
 
 export function encodeEndSetReq(v: EndSetReq): Uint8Array {
   const bytes = new Uint8Array(END_SET_REQ_SIZE);

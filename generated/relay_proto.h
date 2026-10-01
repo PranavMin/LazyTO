@@ -379,19 +379,32 @@ RELAY_STATIC_ASSERT(offsetof(struct start_set_req, set_id) == 0, start_set_req_s
 RELAY_STATIC_ASSERT(offsetof(struct start_set_req, stream) == 4, start_set_req_stream);
 RELAY_STATIC_ASSERT(offsetof(struct start_set_req, _pad) == 5, start_set_req__pad);
 
-/* One completed game. */
+/* One completed game. The stock and costume fields (2026-09-30) feed
+ * start.gg's per-game entrant scores the way Replay Reporter for Slippi does:
+ * score = (costume + 1) * 100 + stocks remaining, so the set page shows the
+ * colour and the stock icons; both 0xFF = unknown (a game scored by hand), and
+ * the relay then sends no score for that game.
+ */
 struct game_result {
     uint8_t winner_slot;  /* 1 or 2 */
     uint8_t p1_char;  /* Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected. */
     uint8_t p2_char;
     uint8_t stage;  /* Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand */
-};  /* 4 bytes */
+    uint8_t p1_stocks;  /* entrant 1's stocks remaining at the end of the game (0 for the player who was KO'd); 0xFF = unknown */
+    uint8_t p2_stocks;
+    uint8_t p1_costume;  /* entrant 1's costume (colour) index, 0 = the default colour; 0xFF = unknown */
+    uint8_t p2_costume;
+};  /* 8 bytes */
 
-RELAY_STATIC_ASSERT(sizeof(struct game_result) == 4, game_result_size);
+RELAY_STATIC_ASSERT(sizeof(struct game_result) == 8, game_result_size);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, winner_slot) == 0, game_result_winner_slot);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, p1_char) == 1, game_result_p1_char);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, p2_char) == 2, game_result_p2_char);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, stage) == 3, game_result_stage);
+RELAY_STATIC_ASSERT(offsetof(struct game_result, p1_stocks) == 4, game_result_p1_stocks);
+RELAY_STATIC_ASSERT(offsetof(struct game_result, p2_stocks) == 5, game_result_p2_stocks);
+RELAY_STATIC_ASSERT(offsetof(struct game_result, p1_costume) == 6, game_result_p1_costume);
+RELAY_STATIC_ASSERT(offsetof(struct game_result, p2_costume) == 7, game_result_p2_costume);
 
 /* CMD_REPORT_SCORE request payload. Always the full game list; the relay does
  * a full overwrite (idempotent).
@@ -401,9 +414,9 @@ struct report_score_req {
     uint8_t            game_count;  /* 0-5 valid entries in games */
     uint8_t            _pad[3];
     struct game_result games[MAX_GAMES];
-};  /* 28 bytes */
+};  /* 48 bytes */
 
-RELAY_STATIC_ASSERT(sizeof(struct report_score_req) == 28, report_score_req_size);
+RELAY_STATIC_ASSERT(sizeof(struct report_score_req) == 48, report_score_req_size);
 RELAY_STATIC_ASSERT(offsetof(struct report_score_req, set_id) == 0, report_score_req_set_id);
 RELAY_STATIC_ASSERT(offsetof(struct report_score_req, game_count) == 4, report_score_req_game_count);
 RELAY_STATIC_ASSERT(offsetof(struct report_score_req, _pad) == 5, report_score_req__pad);
@@ -415,9 +428,9 @@ struct end_set_req {
     uint8_t            game_count;
     uint8_t            _pad[3];
     struct game_result games[MAX_GAMES];
-};  /* 28 bytes */
+};  /* 48 bytes */
 
-RELAY_STATIC_ASSERT(sizeof(struct end_set_req) == 28, end_set_req_size);
+RELAY_STATIC_ASSERT(sizeof(struct end_set_req) == 48, end_set_req_size);
 RELAY_STATIC_ASSERT(offsetof(struct end_set_req, set_id) == 0, end_set_req_set_id);
 RELAY_STATIC_ASSERT(offsetof(struct end_set_req, game_count) == 4, end_set_req_game_count);
 RELAY_STATIC_ASSERT(offsetof(struct end_set_req, _pad) == 5, end_set_req__pad);
