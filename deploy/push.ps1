@@ -1,25 +1,28 @@
 <#
 push.ps1 -- build the relay on this Windows machine and install it on the Pi.
 
-  .\deploy\push.ps1                  # production: follows start.gg/abbey every week
-  .\deploy\push.ps1 -Test            # testing: the unpublished SF Melee Discord Test
+  .\deploy\push.ps1                  # production: the tournament named by TOURNAMENT in .env
+  .\deploy\push.ps1 -Test            # testing: TEST_TOURNAMENT in .env instead
   .\deploy\push.ps1 -DryRun          # build the bundle, install nothing
-  .\deploy\push.ps1 -PiHost <name> -User <user>   # another Pi, e.g. the matchcaller one
+  .\deploy\push.ps1 -PiHost <name> -User <user>   # a Pi with another name or user
 
-Two modes, one config field (tournament):
-  production  "abbey". The relay finds the tournament the start.gg/abbey
-              short URL is on, among your admin tournaments; if the TO has
-              not moved it yet, the "Melee @ Abbey Tavern #N" nearest to now
-              (src/resolve.ts). Nothing to push per week: power the Pi on (or
-              restart the relay) on the night.
-  -Test       "tournament/sf-melee-discord-test", fetched by its full slug
-              (it is unpublished, so no list query returns it).
-Either way the event is the Melee singles event whose name contains
--EventName and the stream is the one named -StreamName. Switching modes is a
-push; the relay's first log line says which tournament it found and how.
+Everything about your event comes from .env (see .env.example):
+  TOURNAMENT          your start.gg short URL (e.g. "abbey"). The relay finds
+                      the tournament it is on among your admin tournaments, so
+                      a weekly that moves its short URL needs no push per week.
+  WEEKLY_NAME_PREFIX  optional. With e.g. "Melee @ Abbey Tavern #", a short URL
+                      not moved yet falls back to the tournament named that
+                      prefix plus a number, nearest to now (src/resolve.ts).
+  EVENT_NAME          picks the Melee singles event whose name contains it.
+  STREAM_NAME         the stream, by its exact name in the stream settings.
+  STREAM_STATION      optional, default 1: the station number of the stream Wii.
+  TEST_TOURNAMENT     for -Test: a full slug, "tournament/<slug>" (an
+                      unpublished tournament is never listed, so it needs one).
+Switching modes is a push; the relay's first log line says which tournament it
+found and how.
 
-Steps: npm run build -> write config.json (token from .env, the rest from the
-parameters; startggEndpoint is always the production URL) -> tar the bundle (dist/, deploy/, package.json,
+Steps: npm run build -> write config.json (all from .env; startggEndpoint is
+always the production URL) -> tar the bundle (dist/, deploy/, package.json,
 README.md, config.json) -> scp to the Pi -> run deploy/install.sh
 there over ssh. Needs Windows' built-in ssh/scp/tar and an ssh key the Pi
 trusts (docs/pi-setup.md). The token and RELAY_SECRET are read from .env and
@@ -30,9 +33,6 @@ param(
   [string]$PiHost = 'relay.local',
   [string]$User = 'pi',
   [switch]$Test,
-  [string]$EventName = 'Melee Singles',
-  [string]$StreamName = 'SFMelee',
-  [int]$StreamStation = 1,
   [int]$TcpPort = 29470,
   [int]$HttpPort = 29473,
   [switch]$DryRun
@@ -53,7 +53,21 @@ if (-not $dotenv['STARTGG_TOKEN']) { throw 'STARTGG_TOKEN missing from .env' }
 if ($dotenv['RELAY_SECRET'] -notmatch '^[A-Za-z0-9_-]{8,16}$') {
   throw 'RELAY_SECRET in .env must be 8-16 letters, digits, - or _ (it goes on every SD card as secret=)'
 }
-$Tournament = if ($Test) { 'tournament/sf-melee-discord-test' } else { 'abbey' }
+function Need([string]$key) {
+  if (-not $dotenv[$key]) { throw "$key missing from .env (see .env.example)" }
+  $dotenv[$key]
+}
+$EventName = Need 'EVENT_NAME'
+$StreamName = Need 'STREAM_NAME'
+$StreamStation = if ($dotenv['STREAM_STATION']) { [int]$dotenv['STREAM_STATION'] } else { 1 }
+if ($Test) {
+  $Tournament = Need 'TEST_TOURNAMENT'
+  if ($Tournament -notmatch '^tournament/') { throw 'TEST_TOURNAMENT must be a full slug, tournament/<slug>' }
+  $WeeklyPrefix = ''
+} else {
+  $Tournament = Need 'TOURNAMENT'
+  $WeeklyPrefix = if ($Tournament -match '^tournament/') { '' } else { [string]$dotenv['WEEKLY_NAME_PREFIX'] }
+}
 
 # --- build ---
 Push-Location $repo
@@ -77,6 +91,7 @@ $config = [ordered]@{
   tournament    = $Tournament
   eventName     = $EventName
   streamName    = $StreamName
+  weeklyNamePrefix = $WeeklyPrefix
   secret        = $dotenv['RELAY_SECRET']
   streamStation = $StreamStation
   tcpPort       = $TcpPort

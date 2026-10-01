@@ -6,12 +6,12 @@
 // end; on a mid-run failure it attempts a cleanup resetSet before exiting.
 //
 // Run: node scripts/probe.ts
-//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL> | --abbey-weekly   (read-only)
+//      node scripts/probe.ts --stages | --tournament=<slug> | --mine | --resolve=<short URL> | --find-short=<short URL> | --weekly   (read-only)
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { StartggClient } from "../src/startgg.js";
-import { resolveEvent, nearestAbbeyWeekly, ADMIN_PAGE_SIZE } from "../src/resolve.js";
+import { resolveEvent, nearestWeekly, ADMIN_PAGE_SIZE } from "../src/resolve.js";
 import type { AdminTournament } from "../src/startgg.js";
 
 const ENDPOINT = "https://api.start.gg/gql/alpha";
@@ -233,11 +233,16 @@ async function showMine(): Promise<void> {
 }
 
 // `node scripts/probe.ts --resolve=<short URL>`: run the relay's own startup
-// resolution (src/resolve.ts) against the real API with the relay's default
-// names, exactly as the Pi will. Read-only.
+// resolution (src/resolve.ts) against the real API with EVENT_NAME,
+// STREAM_NAME and WEEKLY_NAME_PREFIX from .env, exactly as the Pi will. Read-only.
 async function showResolve(shortSlug: string): Promise<void> {
   const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
-  const r = await resolveEvent(client, { tournament: shortSlug, eventName: "Melee Singles", streamName: "SFMelee" });
+  const r = await resolveEvent(client, {
+    tournament: shortSlug,
+    eventName: env.EVENT_NAME ?? fail("missing EVENT_NAME in .env"),
+    streamName: env.STREAM_NAME ?? fail("missing STREAM_NAME in .env"),
+    weeklyNamePrefix: shortSlug.startsWith("tournament/") ? "" : (env.WEEKLY_NAME_PREFIX ?? ""),
+  });
   console.log(JSON.stringify(r, null, 2));
 }
 
@@ -284,10 +289,11 @@ async function findShort(short: string): Promise<void> {
   }
 }
 
-// `node scripts/probe.ts --abbey-weekly`: the relay's fallback rule (nearest
-// "Melee @ Abbey Tavern #N" by start time) run over the real admin list, as
-// if the "abbey" short URL had not been moved. Read-only.
-async function showAbbeyWeekly(): Promise<void> {
+// `node scripts/probe.ts --weekly`: the relay's fallback rule (nearest
+// WEEKLY_NAME_PREFIX<number> by start time) run over the real admin list, as
+// if the short URL had not been moved. Read-only.
+async function showWeekly(): Promise<void> {
+  const prefix = env.WEEKLY_NAME_PREFIX || fail("missing WEEKLY_NAME_PREFIX in .env");
   const client = new StartggClient({ endpoint: ENDPOINT, token: env.STARTGG_TOKEN! });
   const all: AdminTournament[] = [];
   for (let page = 1; ; page++) {
@@ -296,14 +302,14 @@ async function showAbbeyWeekly(): Promise<void> {
     if (page >= totalPages || nodes.length === 0) break;
   }
   const now = Math.floor(Date.now() / 1000);
-  const w = nearestAbbeyWeekly(all, now);
-  console.log(`${all.length} admin tournaments; nearest Abbey weekly to now: ` +
+  const w = nearestWeekly(all, prefix, now);
+  console.log(`${all.length} admin tournaments; nearest "${prefix}<number>" to now: ` +
     (w ? `${w.name} (${w.slug}) starting ${new Date(w.startAt! * 1000).toISOString()}, short URL ${w.shortSlug ?? "-"}` : "none"));
 }
 
 async function main(): Promise<void> {
-  if (process.argv.includes("--abbey-weekly")) {
-    await showAbbeyWeekly();
+  if (process.argv.includes("--weekly")) {
+    await showWeekly();
     return;
   }
   const fArg = process.argv.find((a) => a.startsWith("--find-short="));

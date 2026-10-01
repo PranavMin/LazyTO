@@ -11,6 +11,7 @@ const VALID = {
   tournament: 'tournament/sf-melee-discord-test',
   eventName: 'Melee Singles',
   streamName: 'SFMelee',
+  weeklyNamePrefix: '',
   secret: 'abcd-EFGH_1234xy',
   streamStation: 1,
   tcpPort: 29470,
@@ -108,6 +109,14 @@ test('tournament is a short URL or a full tournament slug, nothing else', () => 
   for (const bad of ['', 'https://start.gg/abbey', 'tournament/x/event/melee-singles', 'start.gg/abbey', 905882]) {
     expectProblems(JSON.stringify({ ...VALID, tournament: bad }), 'tournament must be a start.gg short URL');
   }
+});
+
+test('weeklyNamePrefix: a string, "" for none, and only with a short URL', () => {
+  const withShort = { ...VALID, tournament: 'abbey', weeklyNamePrefix: 'Melee @ Abbey Tavern #' };
+  assert.equal(loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix, 'Melee @ Abbey Tavern #');
+  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'abbey' }))).weeklyNamePrefix, '');
+  expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 3 }), 'weeklyNamePrefix must be a string');
+  expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 'Weekly #' }), 'weeklyNamePrefix only applies to a short URL');
 });
 
 test('secret is 8-16 letters, digits, - or _', () => {
