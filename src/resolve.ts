@@ -71,11 +71,18 @@ export class ResolveError extends Error {
 /** True when `name` is `prefix` (case-insensitive) followed by digits and nothing else. */
 export function isWeeklyName(name: string, prefix: string): boolean {
   if (prefix.length === 0 || name.length <= prefix.length) return false;
-  return name.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase() && /^\d+$/.test(name.slice(prefix.length));
+  return (
+    name.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase() &&
+    /^\d+$/.test(name.slice(prefix.length))
+  );
 }
 
 /** The weekly whose start is nearest to `nowSec`, within the window; a future one wins a tie. */
-export function nearestWeekly(tournaments: AdminTournament[], prefix: string, nowSec: number): AdminTournament | null {
+export function nearestWeekly(
+  tournaments: AdminTournament[],
+  prefix: string,
+  nowSec: number,
+): AdminTournament | null {
   const window = WEEKLY_WINDOW_DAYS * 24 * 60 * 60;
   let best: AdminTournament | null = null;
   let bestRank: [number, number] | null = null;
@@ -126,7 +133,10 @@ export async function findTournamentSlug(
 }
 
 /** Exactly one Melee singles event whose name contains eventName. */
-export function pickEvent(t: TournamentDetail, eventName: string): TournamentDetail['events'][number] {
+export function pickEvent(
+  t: TournamentDetail,
+  eventName: string,
+): TournamentDetail['events'][number] {
   const want = eventName.toLowerCase();
   const matches = t.events.filter(
     (e) =>
@@ -135,7 +145,9 @@ export function pickEvent(t: TournamentDetail, eventName: string): TournamentDet
       e.name.toLowerCase().includes(want),
   );
   if (matches.length === 1) return matches[0]!;
-  const listed = t.events.map((e) => `"${e.name}" (id ${e.id}, type ${e.type}, game ${e.videogame?.id ?? '?'})`).join(', ');
+  const listed = t.events
+    .map((e) => `"${e.name}" (id ${e.id}, type ${e.type}, game ${e.videogame?.id ?? '?'})`)
+    .join(', ');
   throw new ResolveError(
     `${matches.length === 0 ? 'no' : `${matches.length}`} Melee singles events in ${t.slug} have "${eventName}" in the name ` +
       `(need exactly one); events: ${listed || 'none'}`,
@@ -143,7 +155,10 @@ export function pickEvent(t: TournamentDetail, eventName: string): TournamentDet
 }
 
 /** Exactly one stream named streamName. */
-export function pickStream(t: TournamentDetail, streamName: string): TournamentDetail['streams'][number] {
+export function pickStream(
+  t: TournamentDetail,
+  streamName: string,
+): TournamentDetail['streams'][number] {
   const want = streamName.toLowerCase();
   const matches = t.streams.filter((s) => s.streamName.toLowerCase() === want);
   if (matches.length === 1) return matches[0]!;

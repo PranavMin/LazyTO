@@ -87,7 +87,11 @@ export function isBo5Top8q(set: ShapeSet, shape: BracketShape): boolean {
   return false;
 }
 
-export function bestOfFor(format: SetFormat, set: ShapeSet & { totalGames: number }, shape: BracketShape): number {
+export function bestOfFor(
+  format: SetFormat,
+  set: ShapeSet & { totalGames: number },
+  shape: BracketShape,
+): number {
   switch (format) {
     case 'startgg':
       return set.totalGames;

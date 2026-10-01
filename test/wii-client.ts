@@ -48,12 +48,19 @@ export function rawRequest(
     secret = TEST_SECRET as string | null, // null: send no relay_auth at all, like a pre-R16 host
   } = {},
 ): Promise<WireReply> {
-  const auth = secret === null
-    ? new Uint8Array(0)
-    : encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
+  const auth =
+    secret === null
+      ? new Uint8Array(0)
+      : encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
   const req = Buffer.concat([
     auth,
-    encodeRelayHdr({ magic: new Uint8Array([MAGIC_0, MAGIC_1]), version, cmd, station, len: payload.length }),
+    encodeRelayHdr({
+      magic: new Uint8Array([MAGIC_0, MAGIC_1]),
+      version,
+      cmd,
+      station,
+      len: payload.length,
+    }),
     payload,
   ]);
   return new Promise((resolve, reject) => {
@@ -91,7 +98,10 @@ export class WiiClient {
   ) {}
 
   private request(cmd: number, payload?: Uint8Array): Promise<WireReply> {
-    return rawRequest(this.port, this.station, cmd, payload, { host: this.host, secret: this.secret });
+    return rawRequest(this.port, this.station, cmd, payload, {
+      host: this.host,
+      secret: this.secret,
+    });
   }
 
   async listSets(): Promise<{ resp: RelayResp; sets: ListSetsResp['sets'] }> {
@@ -125,12 +135,38 @@ export class WiiClient {
 // Defaults are what an auto-scored game carries: Fox (ext 2) vs Marth (ext 9)
 // on Battlefield (StKind 0x1F). A hand-scored game sends 0xFF, 0xFF, 0
 // (0 is Captain Falcon on the external character scale).
-export function game(winnerSlot: 1 | 2, p1Char = 2, p2Char = 9, stage = 0x1f, stocks: [number, number] = [0xff, 0xff], costumes: [number, number] = [0xff, 0xff]): GameResult {
-  return { winner_slot: winnerSlot, p1_char: p1Char, p2_char: p2Char, stage, p1_stocks: stocks[0], p2_stocks: stocks[1], p1_costume: costumes[0], p2_costume: costumes[1] };
+export function game(
+  winnerSlot: 1 | 2,
+  p1Char = 2,
+  p2Char = 9,
+  stage = 0x1f,
+  stocks: [number, number] = [0xff, 0xff],
+  costumes: [number, number] = [0xff, 0xff],
+): GameResult {
+  return {
+    winner_slot: winnerSlot,
+    p1_char: p1Char,
+    p2_char: p2Char,
+    stage,
+    p1_stocks: stocks[0],
+    p2_stocks: stocks[1],
+    p1_costume: costumes[0],
+    p2_costume: costumes[1],
+  };
 }
 
 function padGames(games: GameResult[]): GameResult[] {
   const out = [...games];
-  while (out.length < 5) out.push({ winner_slot: 0, p1_char: 0, p2_char: 0, stage: 0, p1_stocks: 0, p2_stocks: 0, p1_costume: 0, p2_costume: 0 });
+  while (out.length < 5)
+    out.push({
+      winner_slot: 0,
+      p1_char: 0,
+      p2_char: 0,
+      stage: 0,
+      p1_stocks: 0,
+      p2_stocks: 0,
+      p1_costume: 0,
+      p2_costume: 0,
+    });
   return out;
 }

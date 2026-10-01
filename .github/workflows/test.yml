@@ -21,5 +21,6 @@ jobs:
           python-version: "3.12"
       - run: pip install pyyaml
       - run: npm ci
+      - run: npm run format:check
       - run: npm test
       - run: npm run build

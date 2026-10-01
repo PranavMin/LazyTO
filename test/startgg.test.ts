@@ -1,9 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { StartggClient, StartggError, RateLimitedError } from '../src/startgg.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID, entrant, type FakeStartgg } from './fake-startgg.js';
+import {
+  makeFake,
+  FIXTURE_TOKEN,
+  FIXTURE_EVENT_ID,
+  entrant,
+  type FakeStartgg,
+} from './fake-startgg.js';
 
-function client(fake: FakeStartgg, opts: Partial<ConstructorParameters<typeof StartggClient>[0]> = {}) {
+function client(
+  fake: FakeStartgg,
+  opts: Partial<ConstructorParameters<typeof StartggClient>[0]> = {},
+) {
   return new StartggClient({
     endpoint: fake.url,
     token: FIXTURE_TOKEN,
@@ -28,7 +37,10 @@ test('startgg client', async (t) => {
   });
 
   await t.test('unknown event is rejected without retry', async () => {
-    await assert.rejects(client(fake).getEventSets(999), (e: StartggError) => e.kind === 'rejected');
+    await assert.rejects(
+      client(fake).getEventSets(999),
+      (e: StartggError) => e.kind === 'rejected',
+    );
   });
 
   await t.test('mutations send the token and reach the fake', async () => {
@@ -36,9 +48,7 @@ test('startgg client', async (t) => {
     assert.equal(fake.getSet(SET).state, 2);
     await client(fake).assignStream(SET, 1358079);
     assert.equal(fake.getSet(SET).stream!.id, 1358079);
-    await client(fake).reportGames(SET, [
-      { gameNum: 1, winnerId: entrant(1).id },
-    ]);
+    await client(fake).reportGames(SET, [{ gameNum: 1, winnerId: entrant(1).id }]);
     assert.equal(fake.getSet(SET).games.length, 1);
     assert.equal(fake.getSet(SET).state, 2);
     await client(fake).reportWinner(SET, entrant(1).id, [
@@ -67,7 +77,10 @@ test('startgg client', async (t) => {
   await t.test('three 5xx in a row exhausts the retries', async () => {
     const before = fake.callsFor('markSetInProgress').length;
     fake.failNext('markSetInProgress', '5xx', 3);
-    await assert.rejects(client(fake).markSetInProgress(SET), (e: StartggError) => e.kind === 'upstream_5xx');
+    await assert.rejects(
+      client(fake).markSetInProgress(SET),
+      (e: StartggError) => e.kind === 'upstream_5xx',
+    );
     assert.equal(fake.callsFor('markSetInProgress').length, before + 3); // 1 + exactly 2 retries
   });
 

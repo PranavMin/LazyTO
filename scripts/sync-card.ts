@@ -48,13 +48,17 @@ await runMain('sync-card', () => {
     },
   });
   if (values.help) {
-    console.log('usage: npm run sync-card -- [--station N] [--stream 0|1] [--drive X] [--relay-config file] [--module file] [--repo owner/Nintendont] [--branch name] [--no-eject] [--no-log]');
+    console.log(
+      'usage: npm run sync-card -- [--station N] [--stream 0|1] [--drive X] [--relay-config file] [--module file] [--repo owner/Nintendont] [--branch name] [--no-eject] [--no-log]',
+    );
     return;
   }
   const station = values.station === undefined ? -1 : Number.parseInt(values.station, 10);
   const stream = values.stream === undefined ? -1 : Number.parseInt(values.stream, 10);
-  if (values.station !== undefined && (!Number.isInteger(station) || station < 0)) fail(`--station must be a station number, not '${values.station}'`);
-  if (values.stream !== undefined && stream !== 0 && stream !== 1) fail(`--stream must be 0 or 1, not '${values.stream}'`);
+  if (values.station !== undefined && (!Number.isInteger(station) || station < 0))
+    fail(`--station must be a station number, not '${values.station}'`);
+  if (values.stream !== undefined && stream !== 0 && stream !== 1)
+    fail(`--stream must be 0 or 1, not '${values.stream}'`);
   syncCard(
     {
       station,

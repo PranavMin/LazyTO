@@ -11,7 +11,9 @@ export function md5File(path: string): string {
 export function walkFiles(root: string): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p);
       else if (e.isFile()) out.push(p);

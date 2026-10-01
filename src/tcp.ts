@@ -101,7 +101,9 @@ export class RelayTcpServer {
   }
 
   async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) => this.server.close((e) => (e ? reject(e) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      this.server.close((e) => (e ? reject(e) : resolve())),
+    );
   }
 
   // ---- framing ----
@@ -141,9 +143,15 @@ export class RelayTcpServer {
       if (received < payloadOff + hdr.len) return;
 
       handled = true;
-      const secretOk = authed && timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
+      const secretOk =
+        authed && timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
       const pending: Promise<Reply> = secretOk
-        ? this.handle(hdr.cmd, hdr.version, hdr.station, buf.subarray(payloadOff, payloadOff + hdr.len))
+        ? this.handle(
+            hdr.cmd,
+            hdr.version,
+            hdr.station,
+            buf.subarray(payloadOff, payloadOff + hdr.len),
+          )
         : Promise.resolve(this.refuse(hdr.cmd, hdr.station, authed, socket.remoteAddress ?? '?'));
       void pending
         .then((reply) => {
@@ -172,14 +180,25 @@ export class RelayTcpServer {
   private refuse(cmd: number, station: number, sentSecret: boolean, from: string): Reply {
     const reason = sentSecret ? 'wrong relay secret' : 'no relay secret sent';
     const prev = this.refusals?.count ?? 0;
-    this.refusals = { count: prev + 1, lastAt: Date.now(), lastFrom: from, lastStation: station, lastReason: reason };
+    this.refusals = {
+      count: prev + 1,
+      lastAt: Date.now(),
+      lastFrom: from,
+      lastStation: station,
+      lastReason: reason,
+    };
     this.deps.audit.record({ type: 'refused', reason, from, station, cmd: RelayCmd[cmd] ?? cmd });
     return { status: RelayStatus.ST_BAD_SECRET, msg: reason };
   }
 
   // ---- dispatch ----
 
-  private async handle(cmd: number, version: number, station: number, payload: Uint8Array): Promise<Reply> {
+  private async handle(
+    cmd: number,
+    version: number,
+    station: number,
+    payload: Uint8Array,
+  ): Promise<Reply> {
     const { audit, state } = this.deps;
     audit.record({ type: 'request', station, cmd: RelayCmd[cmd] ?? cmd, len: payload.length });
 
@@ -237,7 +256,12 @@ export class RelayTcpServer {
   // ---- upstream helper ----
 
   /** Run one upstream call; on failure audit it, flag the station row, and map to a Reply. */
-  private async upstream(station: number, call: string, detail: Record<string, unknown>, fn: () => Promise<void>): Promise<Reply | null> {
+  private async upstream(
+    station: number,
+    call: string,
+    detail: Record<string, unknown>,
+    fn: () => Promise<void>,
+  ): Promise<Reply | null> {
     const { audit, state } = this.deps;
     try {
       await fn();
@@ -284,7 +308,11 @@ export class RelayTcpServer {
       entries.push(toEntry(s, 0));
     }
 
-    return { status: RelayStatus.ST_OK, msg: `${entries.length} sets`, payload: encodeListSetsResp({ sets: entries }) };
+    return {
+      status: RelayStatus.ST_OK,
+      msg: `${entries.length} sets`,
+      payload: encodeListSetsResp({ sets: entries }),
+    };
   }
 
   // ---- CMD_START_SET ----
@@ -318,8 +346,11 @@ export class RelayTcpServer {
       return { status: RelayStatus.ST_NOT_STREAM, msg: 'not the stream station' };
     }
 
-    const markFailure = await this.upstream(station, 'markSetInProgress', { setId: req.set_id }, () =>
-      startgg.markSetInProgress(req.set_id),
+    const markFailure = await this.upstream(
+      station,
+      'markSetInProgress',
+      { setId: req.set_id },
+      () => startgg.markSetInProgress(req.set_id),
     );
     if (markFailure) return markFailure;
 
@@ -328,8 +359,11 @@ export class RelayTcpServer {
     this.recordClaim(station, set);
 
     if (req.stream === 1) {
-      const assignFailure = await this.upstream(station, 'assignStream', { setId: req.set_id, streamId }, () =>
-        startgg.assignStream(req.set_id, streamId),
+      const assignFailure = await this.upstream(
+        station,
+        'assignStream',
+        { setId: req.set_id, streamId },
+        () => startgg.assignStream(req.set_id, streamId),
       );
       if (assignFailure) {
         return { status: RelayStatus.ST_STARTGG_ERROR, msg: 'stream assign failed - ask TO' };
@@ -345,7 +379,16 @@ export class RelayTcpServer {
       p1Id: set.p1.id,
       p2Id: set.p2.id,
       bestOf: set.bestOf,
-      games: set.games.map((g) => ({ winner_slot: g.winnerSlot, p1_char: 0xff, p2_char: 0xff, stage: 0, p1_stocks: 0xff, p2_stocks: 0xff, p1_costume: 0xff, p2_costume: 0xff })),
+      games: set.games.map((g) => ({
+        winner_slot: g.winnerSlot,
+        p1_char: 0xff,
+        p2_char: 0xff,
+        stage: 0,
+        p1_stocks: 0xff,
+        p2_stocks: 0xff,
+        p1_costume: 0xff,
+        p2_costume: 0xff,
+      })),
     };
     this.deps.state.claim(station, claim);
     this.deps.audit.record({
@@ -361,7 +404,10 @@ export class RelayTcpServer {
 
   // ---- CMD_REPORT_SCORE ----
 
-  private async reportScore(station: number, req: { set_id: number; game_count: number; games: GameResult[] }): Promise<Reply> {
+  private async reportScore(
+    station: number,
+    req: { set_id: number; game_count: number; games: GameResult[] },
+  ): Promise<Reply> {
     const { state, startgg, audit } = this.deps;
 
     const claim = state.get(station);
@@ -372,8 +418,11 @@ export class RelayTcpServer {
     const games = validGames(req, claim);
     if (typeof games === 'string') return { status: RelayStatus.ST_INTERNAL, msg: games };
 
-    const failure = await this.upstream(station, 'reportBracketSet', { setId: req.set_id, games: games.list.length }, () =>
-      startgg.reportGames(req.set_id, games.data),
+    const failure = await this.upstream(
+      station,
+      'reportBracketSet',
+      { setId: req.set_id, games: games.list.length },
+      () => startgg.reportGames(req.set_id, games.data),
     );
     if (failure) return failure;
 
@@ -384,7 +433,10 @@ export class RelayTcpServer {
 
   // ---- CMD_END_SET ----
 
-  private async endSet(station: number, req: { set_id: number; game_count: number; games: GameResult[] }): Promise<Reply> {
+  private async endSet(
+    station: number,
+    req: { set_id: number; game_count: number; games: GameResult[] },
+  ): Promise<Reply> {
     const { state, startgg, audit } = this.deps;
 
     const claim = state.get(station);
@@ -400,7 +452,10 @@ export class RelayTcpServer {
     const needed = Math.floor(claim.bestOf / 2) + 1;
     const winnerId = wins1 >= needed ? claim.p1Id : wins2 >= needed ? claim.p2Id : null;
     if (winnerId === null) {
-      return { status: RelayStatus.ST_INTERNAL, msg: `no winner at ${wins1}-${wins2} bo${claim.bestOf}` };
+      return {
+        status: RelayStatus.ST_INTERNAL,
+        msg: `no winner at ${wins1}-${wins2} bo${claim.bestOf}`,
+      };
     }
 
     const failure = await this.upstream(
@@ -430,7 +485,9 @@ export class RelayTcpServer {
       return { status: RelayStatus.ST_INTERNAL, msg: 'set has games - ask TO' };
     }
 
-    const failure = await this.upstream(station, 'resetSet', { setId: req.set_id }, () => startgg.resetSet(req.set_id));
+    const failure = await this.upstream(station, 'resetSet', { setId: req.set_id }, () =>
+      startgg.resetSet(req.set_id),
+    );
     if (failure) return failure;
 
     state.release(station);

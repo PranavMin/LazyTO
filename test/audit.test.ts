@@ -49,8 +49,15 @@ test('replayClaims tolerates a torn final line but not a corrupt middle line', (
   const torn = join(dir, 'torn.jsonl');
   writeFileSync(
     torn,
-    JSON.stringify({ type: 'claim', station: 3, setId: 1, p1Id: 10, p2Id: 20, bestOf: 3, games: [] }) +
-      '\n{"type":"resp',
+    JSON.stringify({
+      type: 'claim',
+      station: 3,
+      setId: 1,
+      p1Id: 10,
+      p2Id: 20,
+      bestOf: 3,
+      games: [],
+    }) + '\n{"type":"resp',
   );
   assert.equal(replayClaims(torn).get(3)!.setId, 1);
 
@@ -63,7 +70,11 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
   const fake = makeFake();
   await fake.start();
   t.after(() => fake.close());
-  const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
+  const startgg = new StartggClient({
+    endpoint: fake.url,
+    token: FIXTURE_TOKEN,
+    retryDelaysMs: [0, 0],
+  });
   const path = auditPath(dir, FIXTURE_EVENT_ID);
 
   const SET_A = 107949994; // station 3: in progress at 2-0 when the relay dies
@@ -75,7 +86,15 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     await cache.refresh();
     const state = new StationState();
     const audit = new AuditLog(path);
-    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
+    const server = new RelayTcpServer({
+      cache,
+      state,
+      startgg,
+      audit,
+      streamStation: 1,
+      streamId: 1358079,
+      secret: TEST_SECRET,
+    });
     await server.listen(0, '127.0.0.1');
     const port = server.address().port;
 
@@ -105,7 +124,15 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     for (const [station, c] of claims) if (cache.get(c.setId)) state.claim(station, c);
 
     const audit = new AuditLog(path);
-    const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
+    const server = new RelayTcpServer({
+      cache,
+      state,
+      startgg,
+      audit,
+      streamStation: 1,
+      streamId: 1358079,
+      secret: TEST_SECRET,
+    });
     await server.listen(0, '127.0.0.1');
     const port = server.address().port;
     const wii3 = new WiiClient(port, 3);
@@ -127,12 +154,24 @@ test('a replayed claim whose set is gone from the cache is dropped by the boot f
   const fake = makeFake();
   await fake.start();
   t.after(() => fake.close());
-  const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
+  const startgg = new StartggClient({
+    endpoint: fake.url,
+    token: FIXTURE_TOKEN,
+    retryDelaysMs: [0, 0],
+  });
 
   const path = join(dir, 'stale.jsonl');
   appendFileSync(
     path,
-    JSON.stringify({ type: 'claim', station: 5, setId: 999999, p1Id: 1, p2Id: 2, bestOf: 3, games: [] }) + '\n',
+    JSON.stringify({
+      type: 'claim',
+      station: 5,
+      setId: 999999,
+      p1Id: 1,
+      p2Id: 2,
+      bestOf: 3,
+      games: [],
+    }) + '\n',
   );
 
   const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');

@@ -73,7 +73,14 @@ const ERROR_NAMES: Record<number, string> = {
 export function crashText(c: CrashReport, status: StationStatus | null): string {
   let kind = ERROR_NAMES[c.error] ?? `error ${c.error}`;
   if (c.error === 6) {
-    const why = c.srr1 & 0x80000 ? 'illegal instruction' : c.srr1 & 0x40000 ? 'privileged instruction' : c.srr1 & 0x20000 ? 'trap' : 'program check';
+    const why =
+      c.srr1 & 0x80000
+        ? 'illegal instruction'
+        : c.srr1 & 0x40000
+          ? 'privileged instruction'
+          : c.srr1 & 0x20000
+            ? 'trap'
+            : 'program check';
     kind = `${kind} (${why})`;
   }
   return `${kind} at ${hexAddr(c.srr0, status)}, lr ${hexAddr(c.lr, status)}`;
@@ -82,7 +89,12 @@ export function crashText(c: CrashReport, status: StationStatus | null): string 
 /** 0x817E88D8, plus "= module+0x88D8" when the address is inside the loaded module. */
 export function hexAddr(a: number, status: StationStatus | null): string {
   const hex = `0x${a.toString(16).toUpperCase().padStart(8, '0')}`;
-  if (status && status.module_len && a >= status.module_load && a < status.module_load + status.module_len) {
+  if (
+    status &&
+    status.module_len &&
+    a >= status.module_load &&
+    a < status.module_load + status.module_len
+  ) {
     return `${hex} = module+0x${(a - status.module_load).toString(16).toUpperCase()}`;
   }
   return hex;
@@ -216,7 +228,11 @@ export class StationTelemetry {
         if (err) console.error(`beacon request from ${from}: reply failed: ${err.message}`);
       });
     }
-    this.beaconRequests = { count: (this.beaconRequests?.count ?? 0) + 1, lastAt: now, lastFrom: from };
+    this.beaconRequests = {
+      count: (this.beaconRequests?.count ?? 0) + 1,
+      lastAt: now,
+      lastFrom: from,
+    };
     return true;
   }
 

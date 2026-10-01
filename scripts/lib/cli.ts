@@ -51,7 +51,11 @@ export interface RunResult {
 }
 
 /** A command runner: scripts take one so tests can fake gh, ssh, scp, tar. */
-export type Runner = (cmd: string, args: string[], opts?: { cwd?: string; inherit?: boolean; env?: NodeJS.ProcessEnv }) => RunResult;
+export type Runner = (
+  cmd: string,
+  args: string[],
+  opts?: { cwd?: string; inherit?: boolean; env?: NodeJS.ProcessEnv },
+) => RunResult;
 
 export const runCommand: Runner = (cmd, args, opts = {}) => {
   const so: SpawnSyncOptions = {
@@ -66,7 +70,12 @@ export const runCommand: Runner = (cmd, args, opts = {}) => {
   // Everything else (gh, tar, ssh, scp, powershell, diskutil, lsblk) is an
   // executable and runs directly, so arguments pass through untouched.
   const viaShell = process.platform === 'win32' && /^(npm|npx)$/.test(cmd);
-  const r = viaShell ? spawnSync([cmd, ...args].map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' '), { ...so, shell: true }) : spawnSync(cmd, args, so);
+  const r = viaShell
+    ? spawnSync([cmd, ...args].map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' '), {
+        ...so,
+        shell: true,
+      })
+    : spawnSync(cmd, args, so);
   if (r.error) {
     const code = (r.error as NodeJS.ErrnoException).code;
     fail(code === 'ENOENT' ? `${cmd} not found on PATH` : `${cmd}: ${r.error.message}`);

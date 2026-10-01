@@ -21,7 +21,8 @@ test('stages: every start.gg id 1..29 is reached exactly once', () => {
     seen.add(id);
   }
   assert.equal(seen.size, MELEE_STAGE_COUNT);
-  for (let id = 1; id <= MELEE_STAGE_COUNT; id++) assert.ok(seen.has(id), `start.gg id ${id} unmapped`);
+  for (let id = 1; id <= MELEE_STAGE_COUNT; id++)
+    assert.ok(seen.has(id), `start.gg id ${id} unmapped`);
 });
 
 test('stages: unknown (0, hand-scored) and unused ids report as stage-less', () => {

@@ -19,7 +19,10 @@ export function checkDevSwitches(meleeSrc: string): void {
     if (!existsSync(path)) fail(`could not find ${sw.file} under ${meleeSrc}`);
     const m = new RegExp(`^#define ${sw.name} (\\d+)`, 'm').exec(readFileSync(path, 'utf8'));
     if (!m) fail(`could not find #define ${sw.name} in ${sw.file}`);
-    if (m[1] !== '0') fail(`${sw.name} is ${m[1]} in ${sw.file}: set it to 0 and rebuild the module before shipping a card`);
+    if (m[1] !== '0')
+      fail(
+        `${sw.name} is ${m[1]} in ${sw.file}: set it to 0 and rebuild the module before shipping a card`,
+      );
   }
 }
 
@@ -29,5 +32,7 @@ export function sourcesNewerThan(meleeSrc: string, moduleMtime: number): string[
     .filter((n) => n.endsWith('.c'))
     .map((n) => join(meleeSrc, 'lb', n));
   files.push(join(meleeSrc, 'mn', 'mntourney.c'));
-  return files.filter((p) => existsSync(p) && mtimeMs(p) > moduleMtime).map((p) => p.split(/[\\/]/).pop() as string);
+  return files
+    .filter((p) => existsSync(p) && mtimeMs(p) > moduleMtime)
+    .map((p) => p.split(/[\\/]/).pop() as string);
 }

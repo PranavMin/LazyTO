@@ -147,7 +147,10 @@ class TokenBucket {
   }
 
   private refill(now: number): void {
-    this.tokens = Math.min(this.capacity, this.tokens + ((now - this.lastRefill) / 60_000) * this.refillPerMinute);
+    this.tokens = Math.min(
+      this.capacity,
+      this.tokens + ((now - this.lastRefill) / 60_000) * this.refillPerMinute,
+    );
     this.lastRefill = now;
   }
 
@@ -205,12 +208,16 @@ export class StartggClient {
   }
 
   /** One page of the token owner's admin tournaments (1-based page). */
-  async getAdminTournaments(page: number, perPage: number): Promise<{ totalPages: number; nodes: AdminTournament[] }> {
+  async getAdminTournaments(
+    page: number,
+    perPage: number,
+  ): Promise<{ totalPages: number; nodes: AdminTournament[] }> {
     const data = await this.gql(ADMIN_TOURNAMENTS_QUERY, { page, perPage });
     const user = data.currentUser as {
       tournaments: { pageInfo: { totalPages: number }; nodes: AdminTournament[] } | null;
     } | null;
-    if (!user?.tournaments) throw new StartggError('rejected', 'start.gg returned no user for this token');
+    if (!user?.tournaments)
+      throw new StartggError('rejected', 'start.gg returned no user for this token');
     return { totalPages: user.tournaments.pageInfo.totalPages, nodes: user.tournaments.nodes };
   }
 
@@ -250,7 +257,10 @@ export class StartggClient {
     await this.gql(RESET_SET, { setId });
   }
 
-  private async gql(query: string, variables: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async gql(
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     await this.bucket.take(this.maxWaitMs);
     for (let attempt = 0; ; attempt++) {
       this.callTimes.push(Date.now());
@@ -273,7 +283,10 @@ export class StartggClient {
           await new Promise((r) => setTimeout(r, this.retryDelaysMs[attempt]));
           continue;
         }
-        throw new StartggError('upstream_5xx', `start.gg HTTP ${res.status} after ${attempt + 1} attempts`);
+        throw new StartggError(
+          'upstream_5xx',
+          `start.gg HTTP ${res.status} after ${attempt + 1} attempts`,
+        );
       }
 
       const text = await res.text();

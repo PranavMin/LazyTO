@@ -16,7 +16,13 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fail, green, runCommand, runMain } from './lib/cli.js';
-import { describeLoaderBuild, LOADER_BRANCH, loaderBootDol, newestLoaderBuild, nintendontRepo } from './lib/loader.js';
+import {
+  describeLoaderBuild,
+  LOADER_BRANCH,
+  loaderBootDol,
+  newestLoaderBuild,
+  nintendontRepo,
+} from './lib/loader.js';
 import { sendWiiload } from './lib/wiiload.js';
 
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -32,7 +38,9 @@ await runMain('wiiload', async () => {
     },
   });
   if (values.help) {
-    console.log('usage: npm run wiiload -- --wii <ip> [--file boot.dol] [--repo owner/Nintendont] [--branch name]');
+    console.log(
+      'usage: npm run wiiload -- --wii <ip> [--file boot.dol] [--repo owner/Nintendont] [--branch name]',
+    );
     return;
   }
   let wii = values.wii;
@@ -43,16 +51,25 @@ await runMain('wiiload', async () => {
   }
   let file = values.file;
   if (!file) {
-    const build = newestLoaderBuild({ repo: values.repo || nintendontRepo(repoRoot), branch: values.branch, cacheDir: resolve(repoRoot, 'deploy', '.cache'), run: runCommand });
+    const build = newestLoaderBuild({
+      repo: values.repo || nintendontRepo(repoRoot),
+      branch: values.branch,
+      cacheDir: resolve(repoRoot, 'deploy', '.cache'),
+      run: runCommand,
+    });
     file = loaderBootDol(build);
     console.log(describeLoaderBuild(build));
   }
   if (!existsSync(file)) fail(`file not found: ${file}`);
-  console.log(`sending ${basename(file)} (${statSync(file).size.toLocaleString()} bytes) to the Wii at ${wii} ...`);
+  console.log(
+    `sending ${basename(file)} (${statSync(file).size.toLocaleString()} bytes) to the Wii at ${wii} ...`,
+  );
   try {
     await sendWiiload(wii, basename(file), readFileSync(file));
   } catch (e) {
-    fail(`${e instanceof Error ? e.message : String(e)}. Is the Wii on the Homebrew Channel, on the same network, and is that its IP?`);
+    fail(
+      `${e instanceof Error ? e.message : String(e)}. Is the Wii on the Homebrew Channel, on the same network, and is that its IP?`,
+    );
   }
   console.log(green('sent: the Wii is booting it now'));
 });

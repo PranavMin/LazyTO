@@ -70,7 +70,15 @@ export interface RecordedCall {
 
 type FailMode = '5xx' | 'gqlError';
 
-const OPS = ['eventSets', 'markSetInProgress', 'assignStream', 'reportBracketSet', 'resetSet', 'adminTournaments', 'tournament'] as const;
+const OPS = [
+  'eventSets',
+  'markSetInProgress',
+  'assignStream',
+  'reportBracketSet',
+  'resetSet',
+  'adminTournaments',
+  'tournament',
+] as const;
 type Op = (typeof OPS)[number];
 
 function gqlErrorBody(message: string): string {
@@ -211,9 +219,7 @@ export class FakeStartgg {
   private findSet(variables: Record<string, unknown>): FakeSet | null {
     // start.gg's ID scalar accepts numbers and numeric strings alike.
     const raw = variables.setId;
-    return (
-      this.sets.find((s) => s.id === raw || String(s.id) === String(raw)) ?? null
-    );
+    return this.sets.find((s) => s.id === raw || String(s.id) === String(raw)) ?? null;
   }
 
   private setNode(set: FakeSet) {
@@ -251,23 +257,33 @@ export class FakeStartgg {
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
     if (set.state === 3) return { status: 200, body: gqlErrorBody('Set is already complete') };
     set.state = 2;
-    return { status: 200, body: JSON.stringify({ data: { markSetInProgress: { id: set.id, state: set.state } } }) };
+    return {
+      status: 200,
+      body: JSON.stringify({ data: { markSetInProgress: { id: set.id, state: set.state } } }),
+    };
   }
 
   private assignStream(variables: Record<string, unknown>): { status: number; body: string } {
     const set = this.findSet(variables);
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
-    set.stream = { id: Number(variables.streamId), streamName: 'LazyTOStream', streamSource: 'TWITCH' };
+    set.stream = {
+      id: Number(variables.streamId),
+      streamName: 'LazyTOStream',
+      streamSource: 'TWITCH',
+    };
     return {
       status: 200,
-      body: JSON.stringify({ data: { assignStream: { id: set.id, state: set.state, stream: set.stream } } }),
+      body: JSON.stringify({
+        data: { assignStream: { id: set.id, state: set.state, stream: set.stream } },
+      }),
     };
   }
 
   private reportBracketSet(variables: Record<string, unknown>): { status: number; body: string } {
     const set = this.findSet(variables);
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
-    if (set.state === 3) return { status: 200, body: gqlErrorBody('Set has already been completed') };
+    if (set.state === 3)
+      return { status: 200, body: gqlErrorBody('Set has already been completed') };
 
     const entrantIds = set.slots.map((e) => e?.id).filter((x): x is number => x != null);
     const gameData = (variables.gameData ?? []) as {
@@ -283,13 +299,19 @@ export class FakeStartgg {
         return { status: 200, body: gqlErrorBody('gameData entry missing valid gameNum') };
       }
       if (!entrantIds.includes(Number(g.winnerId))) {
-        return { status: 200, body: gqlErrorBody(`winnerId ${g.winnerId} is not an entrant in this set`) };
+        return {
+          status: 200,
+          body: gqlErrorBody(`winnerId ${g.winnerId} is not an entrant in this set`),
+        };
       }
       // Selections must name entrants of this set and a positive character id
       // (the real API rejects both otherwise).
       for (const s of g.selections ?? []) {
         if (!entrantIds.includes(Number(s.entrantId))) {
-          return { status: 200, body: gqlErrorBody(`selection entrantId ${s.entrantId} is not an entrant in this set`) };
+          return {
+            status: 200,
+            body: gqlErrorBody(`selection entrantId ${s.entrantId} is not an entrant in this set`),
+          };
         }
         if (!Number.isInteger(s.characterId) || (s.characterId as number) < 1) {
           return { status: 200, body: gqlErrorBody('selection missing valid characterId') };
@@ -314,13 +336,21 @@ export class FakeStartgg {
       ...(g.entrant1Score !== undefined ? { entrant1Score: Number(g.entrant1Score) } : {}),
       ...(g.entrant2Score !== undefined ? { entrant2Score: Number(g.entrant2Score) } : {}),
       ...(g.selections?.length
-        ? { selections: g.selections.map((s) => ({ entrantId: Number(s.entrantId), characterId: Number(s.characterId) })) }
+        ? {
+            selections: g.selections.map((s) => ({
+              entrantId: Number(s.entrantId),
+              characterId: Number(s.characterId),
+            })),
+          }
         : {}),
     }));
 
     if (variables.winnerId != null) {
       if (!entrantIds.includes(Number(variables.winnerId))) {
-        return { status: 200, body: gqlErrorBody(`winnerId ${variables.winnerId} is not an entrant in this set`) };
+        return {
+          status: 200,
+          body: gqlErrorBody(`winnerId ${variables.winnerId} is not an entrant in this set`),
+        };
       }
       set.state = 3;
     }
@@ -340,14 +370,22 @@ export class FakeStartgg {
       .map((t) => ({ slug: t.slug, shortSlug: t.shortSlug, name: t.name, startAt: t.startAt }));
     return {
       status: 200,
-      body: JSON.stringify({ data: { currentUser: { tournaments: { pageInfo: { totalPages }, nodes } } } }),
+      body: JSON.stringify({
+        data: { currentUser: { tournaments: { pageInfo: { totalPages }, nodes } } },
+      }),
     };
   }
 
   private tournament(variables: Record<string, unknown>): { status: number; body: string } {
     // Full slugs only: the relay never asks this query to resolve a short URL.
     const t = this.tournaments.find((x) => x.slug === variables.slug) ?? null;
-    const body = t && { id: t.id, name: t.name, slug: t.slug, events: t.events, streams: t.streams };
+    const body = t && {
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      events: t.events,
+      streams: t.streams,
+    };
     return { status: 200, body: JSON.stringify({ data: { tournament: body } }) };
   }
 
@@ -358,7 +396,10 @@ export class FakeStartgg {
     set.games = [];
     // set.stream stays: the real resetSet does not clear a stream assignment
     // (verified live 2026-09-20, architecture.md "start.gg calls").
-    return { status: 200, body: JSON.stringify({ data: { resetSet: { id: set.id, state: set.state } } }) };
+    return {
+      status: 200,
+      body: JSON.stringify({ data: { resetSet: { id: set.id, state: set.state } } }),
+    };
   }
 }
 
@@ -374,8 +415,22 @@ export const FIXTURE_PHASE_ORDER = 2; // the Bracket phase's phaseOrder on the r
 export const FIXTURE_TOKEN = 'test-token';
 
 const TAGS = [
-  'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel',
-  'India', 'Juliett', 'Kilo', 'Lima', 'Mike', 'November', 'Oscar', 'Papa',
+  'Alpha',
+  'Bravo',
+  'Charlie',
+  'Delta',
+  'Echo',
+  'Foxtrot',
+  'Golf',
+  'Hotel',
+  'India',
+  'Juliett',
+  'Kilo',
+  'Lima',
+  'Mike',
+  'November',
+  'Oscar',
+  'Papa',
 ];
 
 export function entrant(n: number): FakeEntrant {
@@ -467,7 +522,12 @@ export function defaultTournaments(): FakeTournament[] {
       id: 905882,
       name: 'LazyTO Test Tournament',
       events: [
-        { id: FIXTURE_EVENT_ID, name: 'Melee Singles! (7:30 Start)', type: 1, videogame: { id: 1 } },
+        {
+          id: FIXTURE_EVENT_ID,
+          name: 'Melee Singles! (7:30 Start)',
+          type: 1,
+          videogame: { id: 1 },
+        },
         { id: 1613012, name: 'Melee Ladder (9:30pm)', type: 1, videogame: { id: 1 } },
         { id: 1613011, name: 'Melee Waitlist', type: 1, videogame: { id: 1 } },
       ],
@@ -508,7 +568,7 @@ export function loadFixture(count: number): FakeSet[] {
       round: Math.floor(i / 64) + 1,
       fullRoundText: `Winners Round ${Math.floor(i / 64) + 1}`,
       totalGames: 3,
-      slots: [entrant((i * 2) % 16 + 1), entrant((i * 2 + 1) % 16 + 1)],
+      slots: [entrant(((i * 2) % 16) + 1), entrant(((i * 2 + 1) % 16) + 1)],
       games: [],
       stream: null,
     });

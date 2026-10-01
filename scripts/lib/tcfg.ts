@@ -13,7 +13,11 @@ export function parseTournamentCfg(text: string): Record<string, string> {
   return out;
 }
 
-export function formatTournamentCfg(c: { station: number; stream: number; secret: string }): string {
+export function formatTournamentCfg(c: {
+  station: number;
+  stream: number;
+  secret: string;
+}): string {
   return `station=${c.station}\nstream=${c.stream}\nsecret=${c.secret}\n`;
 }
 
@@ -22,10 +26,17 @@ export function formatTournamentCfg(c: { station: number; stream: number; secret
  * card already has; a card with no station anywhere is an error (the first
  * sync of a card must say which station it is).
  */
-export function resolveStationStream(old: Record<string, string>, station: number, stream: number): { station: number; stream: number } {
+export function resolveStationStream(
+  old: Record<string, string>,
+  station: number,
+  stream: number,
+): { station: number; stream: number } {
   let s = station;
   if (s < 0) {
-    if (old.station === undefined) fail('this card has no tournament.cfg yet: pass --station N (and --stream 1 for the stream setup)');
+    if (old.station === undefined)
+      fail(
+        'this card has no tournament.cfg yet: pass --station N (and --stream 1 for the stream setup)',
+      );
     s = Number.parseInt(old.station, 10);
   }
   let st = stream;
@@ -34,7 +45,10 @@ export function resolveStationStream(old: Record<string, string>, station: numbe
 }
 
 /** True when the card's file says exactly this station/stream/secret (the post-write check). */
-export function tournamentCfgMatches(text: string, c: { station: number; stream: number; secret: string }): boolean {
+export function tournamentCfgMatches(
+  text: string,
+  c: { station: number; stream: number; secret: string },
+): boolean {
   return (
     new RegExp(`^station=${c.station}$`, 'm').test(text) &&
     new RegExp(`^stream=${c.stream}$`, 'm').test(text) &&

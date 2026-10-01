@@ -20,7 +20,9 @@ export const WINDOWS_VOLUMES_PS =
 export function parseWindowsVolumes(json: string): Volume[] {
   const t = json.trim();
   if (!t) return [];
-  const v = JSON.parse(t) as { DriveLetter: string; FileSystemLabel: string } | Array<{ DriveLetter: string; FileSystemLabel: string }>;
+  const v = JSON.parse(t) as
+    | { DriveLetter: string; FileSystemLabel: string }
+    | Array<{ DriveLetter: string; FileSystemLabel: string }>;
   const arr = Array.isArray(v) ? v : [v];
   return arr.map((x) => ({ root: `${x.DriveLetter}:\\`, label: x.FileSystemLabel ?? '' }));
 }
@@ -55,7 +57,12 @@ export function parseLsblk(json: string): Volume[] {
 }
 
 // --- macOS: `diskutil info <mount>` per /Volumes entry ---
-export function parseDiskutilInfo(text: string): { fat32: boolean; removable: boolean; device?: string; label: string } {
+export function parseDiskutilInfo(text: string): {
+  fat32: boolean;
+  removable: boolean;
+  device?: string;
+  label: string;
+} {
   const kv: Record<string, string> = {};
   for (const line of text.split(/\r?\n/)) {
     const m = /^\s*([^:]+?):\s+(.*)$/.exec(line);
@@ -63,7 +70,8 @@ export function parseDiskutilInfo(text: string): { fat32: boolean; removable: bo
   }
   const fs = (kv['File System Personality'] ?? kv['Type (Bundle)'] ?? '').toLowerCase();
   const fat32 = fs.includes('fat32') || fs === 'msdos';
-  const removable = /removable|yes/i.test(kv['Removable Media'] ?? '') || /yes/i.test(kv['Ejectable'] ?? '');
+  const removable =
+    /removable|yes/i.test(kv['Removable Media'] ?? '') || /yes/i.test(kv['Ejectable'] ?? '');
   const device = kv['Device Node'];
   return { fat32, removable, device, label: kv['Volume Name'] ?? '' };
 }
@@ -78,7 +86,10 @@ function listVolumes(run: Runner): Volume[] {
     const ls = run('ls', ['-1', '/Volumes']);
     if (ls.status !== 0) return [];
     const out: Volume[] = [];
-    for (const name of ls.stdout.split('\n').map((s) => s.trim()).filter(Boolean)) {
+    for (const name of ls.stdout
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)) {
       const mount = `/Volumes/${name}`;
       const info = run('diskutil', ['info', mount]);
       if (info.status !== 0) continue;
@@ -102,8 +113,12 @@ export function findCard(drive: string, run: Runner): Volume {
     return { root, label: '' };
   }
   const vols = listVolumes(run);
-  if (vols.length === 0) fail('no removable FAT32 card found. Is the card in the reader (and the reader plugged in)?');
-  if (vols.length > 1) fail(`more than one removable FAT32 drive (${vols.map((v) => v.root).join(', ')}); pass --drive X`);
+  if (vols.length === 0)
+    fail('no removable FAT32 card found. Is the card in the reader (and the reader plugged in)?');
+  if (vols.length > 1)
+    fail(
+      `more than one removable FAT32 drive (${vols.map((v) => v.root).join(', ')}); pass --drive X`,
+    );
   return vols[0];
 }
 
@@ -111,7 +126,11 @@ export function findCard(drive: string, run: Runner): Volume {
 export function ejectCard(vol: Volume, run: Runner): boolean {
   if (process.platform === 'win32') {
     const letter = vol.root.slice(0, 2);
-    run('powershell', ['-NoProfile', '-Command', `$s = New-Object -ComObject Shell.Application; $i = $s.Namespace(17).ParseName('${letter}'); if ($i) { $i.InvokeVerb('Eject'); Start-Sleep -Seconds 2 }`]);
+    run('powershell', [
+      '-NoProfile',
+      '-Command',
+      `$s = New-Object -ComObject Shell.Application; $i = $s.Namespace(17).ParseName('${letter}'); if ($i) { $i.InvokeVerb('Eject'); Start-Sleep -Seconds 2 }`,
+    ]);
     return !existsSync(vol.root);
   }
   if (process.platform === 'darwin') {

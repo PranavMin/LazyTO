@@ -23,20 +23,33 @@ export function wiiloadFrame(fileName: string, data: Uint8Array): Uint8Array {
 }
 
 /** Decode a frame (for tests and diagnostics): throws on a bad magic/version. */
-export function parseWiiloadFrame(frame: Uint8Array): { fileName: string; compressedLength: number; length: number; payload: Uint8Array } {
+export function parseWiiloadFrame(frame: Uint8Array): {
+  fileName: string;
+  compressedLength: number;
+  length: number;
+  payload: Uint8Array;
+} {
   const b = Buffer.from(frame);
   if (b.toString('latin1', 0, 4) !== 'HAXX') throw new Error('not a wiiload frame');
-  if (b[4] !== WIILOAD_VERSION[0] || b[5] !== WIILOAD_VERSION[1]) throw new Error(`wiiload version ${b[4]}.${b[5]}`);
+  if (b[4] !== WIILOAD_VERSION[0] || b[5] !== WIILOAD_VERSION[1])
+    throw new Error(`wiiload version ${b[4]}.${b[5]}`);
   const argsLen = b.readUInt16BE(6);
   const compressedLength = b.readUInt32BE(8);
   const length = b.readUInt32BE(12);
   const payload = b.subarray(16, 16 + compressedLength);
-  const args = b.subarray(16 + compressedLength, 16 + compressedLength + argsLen).toString('latin1');
+  const args = b
+    .subarray(16 + compressedLength, 16 + compressedLength + argsLen)
+    .toString('latin1');
   return { fileName: args.split('\0')[0], compressedLength, length, payload };
 }
 
 /** Send a file to the Wii; resolves when the whole frame is written and the socket closed. */
-export function sendWiiload(host: string, fileName: string, data: Uint8Array, opts: { port?: number; timeoutMs?: number } = {}): Promise<void> {
+export function sendWiiload(
+  host: string,
+  fileName: string,
+  data: Uint8Array,
+  opts: { port?: number; timeoutMs?: number } = {},
+): Promise<void> {
   const frame = wiiloadFrame(fileName, data);
   return new Promise((resolve, reject) => {
     const sock = createConnection({ host, port: opts.port ?? WIILOAD_PORT });

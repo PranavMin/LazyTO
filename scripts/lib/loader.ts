@@ -15,7 +15,8 @@ export const LOADER_BRANCH = 'LazyTO';
 export function nintendontRepo(repoRoot: string): string {
   const gm = readFileSync(join(repoRoot, '.gitmodules'), 'utf8');
   const m = /url = https:\/\/github\.com\/([^/\s]+\/Nintendont)(\.git)?/.exec(gm);
-  if (!m) fail('cannot find the Nintendont submodule URL in .gitmodules; pass --repo owner/Nintendont');
+  if (!m)
+    fail('cannot find the Nintendont submodule URL in .gitmodules; pass --repo owner/Nintendont');
   return m[1];
 }
 
@@ -27,8 +28,28 @@ export interface LoaderBuild {
 }
 
 /** gh is the command runner (tests pass a fake). Needs gh logged in. */
-export function newestLoaderBuild(opts: { repo: string; branch: string; cacheDir: string; run: Runner }): LoaderBuild {
-  const list = opts.run('gh', ['run', 'list', '-R', opts.repo, '--workflow', 'build.yml', '--branch', opts.branch, '--status', 'success', '-L', '1', '--json', 'databaseId,headSha,createdAt']);
+export function newestLoaderBuild(opts: {
+  repo: string;
+  branch: string;
+  cacheDir: string;
+  run: Runner;
+}): LoaderBuild {
+  const list = opts.run('gh', [
+    'run',
+    'list',
+    '-R',
+    opts.repo,
+    '--workflow',
+    'build.yml',
+    '--branch',
+    opts.branch,
+    '--status',
+    'success',
+    '-L',
+    '1',
+    '--json',
+    'databaseId,headSha,createdAt',
+  ]);
   if (list.status !== 0) fail(`gh run list failed: ${(list.stderr || list.stdout).trim()}`);
   let runs: Array<{ databaseId: number; headSha: string; createdAt: string }>;
   try {
@@ -36,7 +57,8 @@ export function newestLoaderBuild(opts: { repo: string; branch: string; cacheDir
   } catch {
     fail(`gh run list returned no JSON: ${list.stdout.trim()}`);
   }
-  if (!Array.isArray(runs) || runs.length === 0) fail(`no successful CI build of ${opts.repo} ${opts.branch} yet`);
+  if (!Array.isArray(runs) || runs.length === 0)
+    fail(`no successful CI build of ${opts.repo} ${opts.branch} yet`);
   const run = runs[0];
   const sha = run.headSha.slice(0, 7);
   const dir = join(opts.cacheDir, `loader-${sha}`);
@@ -44,8 +66,19 @@ export function newestLoaderBuild(opts: { repo: string; branch: string; cacheDir
   if (!existsSync(done)) {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
-    const dl = opts.run('gh', ['run', 'download', String(run.databaseId), '-R', opts.repo, '-D', dir, '-p', 'release-*']);
-    if (dl.status !== 0) fail(`gh run download ${run.databaseId} failed: ${(dl.stderr || dl.stdout).trim()}`);
+    const dl = opts.run('gh', [
+      'run',
+      'download',
+      String(run.databaseId),
+      '-R',
+      opts.repo,
+      '-D',
+      dir,
+      '-p',
+      'release-*',
+    ]);
+    if (dl.status !== 0)
+      fail(`gh run download ${run.databaseId} failed: ${(dl.stderr || dl.stdout).trim()}`);
     writeFileSync(done, `${run.databaseId}\n`);
   }
   return { runId: run.databaseId, sha, createdAt: run.createdAt, dir };
@@ -59,7 +92,10 @@ export function loaderAppDir(build: LoaderBuild): string {
 }
 
 export function loaderBootDol(build: LoaderBuild): string {
-  const f = findFile(build.dir, (rel) => rel.endsWith('/boot.dol') && rel.includes(`${LOADER_APP_NAME}/`));
+  const f = findFile(
+    build.dir,
+    (rel) => rel.endsWith('/boot.dol') && rel.includes(`${LOADER_APP_NAME}/`),
+  );
   if (!f) fail(`no ${LOADER_APP_NAME} boot.dol in the CI artifact`);
   return f;
 }

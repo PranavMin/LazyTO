@@ -9,7 +9,9 @@ function shapeOf(sets: readonly Named[]) {
 }
 function bo5Names(sets: readonly Named[]) {
   const shape = shapeOf(sets);
-  return sets.filter(([round, phaseOrder]) => isBo5Top8q({ round, phaseOrder }, shape)).map(([, , name]) => name);
+  return sets
+    .filter(([round, phaseOrder]) => isBo5Top8q({ round, phaseOrder }, shape))
+    .map(([, , name]) => name);
 }
 
 // The real 16-entrant test event as one phase (scripts/probe.ts --rounds=1613010,
@@ -108,7 +110,10 @@ test('top8q, pools into a top 16 phase: the qualifiers are inside the final phas
   // Final phase is a 16-bracket (Grand Final 5): its own WQF/LR2 onward is Bo5,
   // the pools phase is all Bo3 whatever its last rounds are.
   const pools: ShapeSet[] = [1, 2, 3, -1, -2].map((round) => ({ round, phaseOrder: 1 }));
-  const top16: ShapeSet[] = [1, 2, 3, 4, 5, -3, -4, -5, -6, -7, -8].map((round) => ({ round, phaseOrder: 2 }));
+  const top16: ShapeSet[] = [1, 2, 3, 4, 5, -3, -4, -5, -6, -7, -8].map((round) => ({
+    round,
+    phaseOrder: 2,
+  }));
   const shape = bracketShape([...pools, ...top16]);
   assert.ok(pools.every((s) => !isBo5Top8q(s, shape)));
   assert.deepEqual(
@@ -123,7 +128,10 @@ test('top8q, three phases: only the phase before the top 8 has qualifiers', () =
   const top8: ShapeSet[] = [1, 2, 3, -3, -4, -5, -6].map((round) => ({ round, phaseOrder: 3 }));
   const shape = bracketShape([...pools, ...bracket, ...top8]);
   assert.ok(pools.every((s) => !isBo5Top8q(s, shape)));
-  assert.deepEqual(bracket.filter((s) => isBo5Top8q(s, shape)).map((s) => s.round), [2, -4]);
+  assert.deepEqual(
+    bracket.filter((s) => isBo5Top8q(s, shape)).map((s) => s.round),
+    [2, -4],
+  );
   assert.ok(top8.every((s) => isBo5Top8q(s, shape)));
 });
 

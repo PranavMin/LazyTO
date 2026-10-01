@@ -100,7 +100,20 @@ export function loadConfig(path: string): Config {
     if (!(key in obj)) problems.push(`missing field "${key}"`);
   }
 
-  const { startggEndpoint, token, tournament, eventName, streamName, weeklyNamePrefix, secret, streamStation, setFormat, tcpPort, httpPort, auditDir } = obj;
+  const {
+    startggEndpoint,
+    token,
+    tournament,
+    eventName,
+    streamName,
+    weeklyNamePrefix,
+    secret,
+    streamStation,
+    setFormat,
+    tcpPort,
+    httpPort,
+    auditDir,
+  } = obj;
 
   if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
     problems.push('startggEndpoint must be an http(s) URL');
@@ -108,14 +121,23 @@ export function loadConfig(path: string): Config {
   if ('token' in obj && (typeof token !== 'string' || token.length === 0)) {
     problems.push('token must be a non-empty string');
   }
-  if ('tournament' in obj && (typeof tournament !== 'string' || !/^(tournament\/)?[A-Za-z0-9-]+$/.test(tournament))) {
-    problems.push('tournament must be a start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")');
+  if (
+    'tournament' in obj &&
+    (typeof tournament !== 'string' || !/^(tournament\/)?[A-Za-z0-9-]+$/.test(tournament))
+  ) {
+    problems.push(
+      'tournament must be a start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")',
+    );
   }
   if ('weeklyNamePrefix' in obj && typeof weeklyNamePrefix !== 'string') {
     problems.push('weeklyNamePrefix must be a string ("" for no weekly fallback)');
   }
-  if (typeof weeklyNamePrefix === 'string' && weeklyNamePrefix.length > 0 &&
-      typeof tournament === 'string' && tournament.startsWith('tournament/')) {
+  if (
+    typeof weeklyNamePrefix === 'string' &&
+    weeklyNamePrefix.length > 0 &&
+    typeof tournament === 'string' &&
+    tournament.startsWith('tournament/')
+  ) {
     problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
   }
   for (const [name, v] of [

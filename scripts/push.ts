@@ -51,12 +51,15 @@ await runMain('push', () => {
     },
   });
   if (values.help) {
-    console.log('usage: npm run push -- [--test] [--dry-run] [--pi-host relay.local] [--user pi] [--tcp-port 29470] [--http-port 29473] [--no-auto-update]');
+    console.log(
+      'usage: npm run push -- [--test] [--dry-run] [--pi-host relay.local] [--user pi] [--tcp-port 29470] [--http-port 29473] [--no-auto-update]',
+    );
     return;
   }
   const port = (name: 'tcp-port' | 'http-port'): number => {
     const n = Number.parseInt(values[name], 10);
-    if (!Number.isInteger(n) || n < 1 || n > 65535) fail(`--${name} must be a port number, not '${values[name]}'`);
+    if (!Number.isInteger(n) || n < 1 || n > 65535)
+      fail(`--${name} must be a port number, not '${values[name]}'`);
     return n;
   };
   const envPath = resolve(repoRoot, '.env');

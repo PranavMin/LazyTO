@@ -87,7 +87,9 @@ export class SetCache {
     const warnings: string[] = [];
     let previewCount = 0;
 
-    const shape = bracketShape(upstream.map((s) => ({ round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder })));
+    const shape = bracketShape(
+      upstream.map((s) => ({ round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder })),
+    );
 
     for (const s of upstream) {
       if (typeof s.id === 'string') {
@@ -110,7 +112,10 @@ export class SetCache {
       for (const g of s.games ?? []) {
         if (g.winnerId === e1.id) games.push({ orderNum: g.orderNum, winnerSlot: 1 });
         else if (g.winnerId === e2.id) games.push({ orderNum: g.orderNum, winnerSlot: 2 });
-        else warnings.push(`set ${s.id}: game ${g.orderNum} winner ${g.winnerId} is neither entrant, skipped`);
+        else
+          warnings.push(
+            `set ${s.id}: game ${g.orderNum} winner ${g.winnerId} is neither entrant, skipped`,
+          );
       }
       games.sort((a, b) => a.orderNum - b.orderNum);
 
@@ -120,7 +125,11 @@ export class SetCache {
         round: s.round,
         roundShort: abbreviateRound(s.fullRoundText),
         roundName: wireRoundName(s.fullRoundText),
-        bestOf: bestOfFor(this.setFormat, { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames }, shape),
+        bestOf: bestOfFor(
+          this.setFormat,
+          { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames },
+          shape,
+        ),
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },
         games,
@@ -169,10 +178,7 @@ export class SetCache {
   pending(): CachedSet[] {
     return [...this.sets.values()]
       .filter((s) => s.state === 1)
-      .sort(
-        (a, b) =>
-          Math.abs(a.round) - Math.abs(b.round) || b.round - a.round || a.id - b.id,
-      );
+      .sort((a, b) => Math.abs(a.round) - Math.abs(b.round) || b.round - a.round || a.id - b.id);
   }
 
   status(): { count: number; refreshedAt: number; error: string | null; warnings: string[] } {

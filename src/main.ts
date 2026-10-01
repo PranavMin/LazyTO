@@ -70,7 +70,10 @@ async function main(): Promise<void> {
     beaconPayload: beacon.beaconPayload,
     onLine: (station, line) => {
       try {
-        appendFileSync(join(config.auditDir, `wii-station-${station}.log`), `${new Date().toISOString()} ${line}\n`);
+        appendFileSync(
+          join(config.auditDir, `wii-station-${station}.log`),
+          `${new Date().toISOString()} ${line}\n`,
+        );
       } catch (e) {
         console.error(`wii log write failed: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -94,7 +97,9 @@ async function main(): Promise<void> {
     `relay up: event ${ev.eventId}, ${cache.status().count} sets cached, ` +
       `tcp :${config.tcpPort}, status http://localhost:${config.httpPort}`,
   );
-  console.log(`beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`);
+  console.log(
+    `beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`,
+  );
   console.log(`telemetry: udp :${telemetry.address().port} (Wii kernel logs and module status)`);
 
   const shutdown = async (signal: string) => {

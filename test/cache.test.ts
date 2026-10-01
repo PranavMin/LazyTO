@@ -2,7 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SetCache, abbreviateRound, wireRoundName } from '../src/cache.js';
 import { StartggClient } from '../src/startgg.js';
-import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, FIXTURE_PHASE_ORDER, entrant } from './fake-startgg.js';
+import {
+  makeFake,
+  defaultFixture,
+  FIXTURE_TOKEN,
+  FIXTURE_EVENT_ID,
+  FIXTURE_PHASE_ORDER,
+  entrant,
+} from './fake-startgg.js';
 
 function makeClient(url: string) {
   return new StartggClient({ endpoint: url, token: FIXTURE_TOKEN, retryDelaysMs: [0, 0] });
@@ -49,10 +56,36 @@ test('set cache', async (t) => {
     const top8 = FIXTURE_PHASE_ORDER + 1;
     const sets = defaultFixture().slice(0, 4); // the four WQF sets
     sets.push({ ...sets[0]!, id: 107949900, round: -1, fullRoundText: 'Losers Round 1' });
-    sets.push({ ...sets[0]!, id: 107949904, round: -2, fullRoundText: 'Losers Round 2', slots: [null, null] });
-    sets.push({ ...sets[0]!, id: 107949901, round: 1, fullRoundText: 'Winners Semi-Final', phaseOrder: top8 });
-    sets.push({ ...sets[0]!, id: 107949902, round: 3, fullRoundText: 'Grand Final', phaseOrder: top8, slots: [null, null] });
-    sets.push({ ...sets[0]!, id: 107949903, round: -6, fullRoundText: 'Losers Final', phaseOrder: top8, slots: [null, null] });
+    sets.push({
+      ...sets[0]!,
+      id: 107949904,
+      round: -2,
+      fullRoundText: 'Losers Round 2',
+      slots: [null, null],
+    });
+    sets.push({
+      ...sets[0]!,
+      id: 107949901,
+      round: 1,
+      fullRoundText: 'Winners Semi-Final',
+      phaseOrder: top8,
+    });
+    sets.push({
+      ...sets[0]!,
+      id: 107949902,
+      round: 3,
+      fullRoundText: 'Grand Final',
+      phaseOrder: top8,
+      slots: [null, null],
+    });
+    sets.push({
+      ...sets[0]!,
+      id: 107949903,
+      round: -6,
+      fullRoundText: 'Losers Final',
+      phaseOrder: top8,
+      slots: [null, null],
+    });
     const f2 = makeFake(sets);
     await f2.start();
     try {
@@ -66,28 +99,31 @@ test('set cache', async (t) => {
     }
   });
 
-  await t.test('refresh keeps numeric both-entrant sets and drops preview ids with a warning', async () => {
-    const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
-    await cache.refresh();
+  await t.test(
+    'refresh keeps numeric both-entrant sets and drops preview ids with a warning',
+    async () => {
+      const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
+      await cache.refresh();
 
-    // Fixture: 4 numeric sets with both entrants, 5 with TBD slots, 2 preview.
-    const pending = cache.pending();
-    assert.deepEqual(
-      pending.map((s) => s.id),
-      [107949994, 107949995, 107949996, 107949997],
-    );
-    assert.equal(pending[0]!.roundShort, 'WQF');
-    assert.equal(pending[0]!.bestOf, 5);
-    assert.equal(pending[0]!.p1.tag, 'Alpha');
+      // Fixture: 4 numeric sets with both entrants, 5 with TBD slots, 2 preview.
+      const pending = cache.pending();
+      assert.deepEqual(
+        pending.map((s) => s.id),
+        [107949994, 107949995, 107949996, 107949997],
+      );
+      assert.equal(pending[0]!.roundShort, 'WQF');
+      assert.equal(pending[0]!.bestOf, 5);
+      assert.equal(pending[0]!.p1.tag, 'Alpha');
 
-    const status = cache.status();
-    assert.equal(status.count, 4);
-    assert.equal(status.error, null);
-    assert.ok(status.refreshedAt > 0);
-    assert.equal(status.warnings.length, 1);
-    assert.match(status.warnings[0]!, /2 preview-id set\(s\) dropped/);
-    assert.match(status.warnings[0]!, /R8/);
-  });
+      const status = cache.status();
+      assert.equal(status.count, 4);
+      assert.equal(status.error, null);
+      assert.ok(status.refreshedAt > 0);
+      assert.equal(status.warnings.length, 1);
+      assert.match(status.warnings[0]!, /2 preview-id set\(s\) dropped/);
+      assert.match(status.warnings[0]!, /R8/);
+    },
+  );
 
   await t.test('pending sorts earliest rounds first, winners before losers', async () => {
     const sets = defaultFixture().map((s) => ({ ...s }));

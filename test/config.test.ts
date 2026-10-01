@@ -97,10 +97,22 @@ test('unknown field is rejected', () => {
 });
 
 test('startggEndpoint must be an http(s) URL', () => {
-  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: '' }), 'startggEndpoint must be an http(s) URL');
-  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
-  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 'ftp://api.start.gg/gql/alpha' }), 'startggEndpoint must be an http(s) URL');
-  expectProblems(JSON.stringify({ ...VALID, startggEndpoint: 7 }), 'startggEndpoint must be an http(s) URL');
+  expectProblems(
+    JSON.stringify({ ...VALID, startggEndpoint: '' }),
+    'startggEndpoint must be an http(s) URL',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, startggEndpoint: 'api.start.gg/gql/alpha' }),
+    'startggEndpoint must be an http(s) URL',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, startggEndpoint: 'ftp://api.start.gg/gql/alpha' }),
+    'startggEndpoint must be an http(s) URL',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, startggEndpoint: 7 }),
+    'startggEndpoint must be an http(s) URL',
+  );
 });
 
 test('empty token', () => {
@@ -108,49 +120,111 @@ test('empty token', () => {
 });
 
 test('tournament is a short URL or a full tournament slug, nothing else', () => {
-  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).tournament, 'lazyto-weekly');
-  for (const bad of ['', 'https://start.gg/lazyto-weekly', 'tournament/x/event/melee-singles', 'start.gg/lazyto-weekly', 905882]) {
-    expectProblems(JSON.stringify({ ...VALID, tournament: bad }), 'tournament must be a start.gg short URL');
+  assert.equal(
+    loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).tournament,
+    'lazyto-weekly',
+  );
+  for (const bad of [
+    '',
+    'https://start.gg/lazyto-weekly',
+    'tournament/x/event/melee-singles',
+    'start.gg/lazyto-weekly',
+    905882,
+  ]) {
+    expectProblems(
+      JSON.stringify({ ...VALID, tournament: bad }),
+      'tournament must be a start.gg short URL',
+    );
   }
 });
 
 test('weeklyNamePrefix: a string, "" for none, and only with a short URL', () => {
   const withShort = { ...VALID, tournament: 'lazyto-weekly', weeklyNamePrefix: 'LazyTO Weekly #' };
-  assert.equal(loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix, 'LazyTO Weekly #');
-  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).weeklyNamePrefix, '');
-  expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 3 }), 'weeklyNamePrefix must be a string');
-  expectProblems(JSON.stringify({ ...VALID, weeklyNamePrefix: 'Weekly #' }), 'weeklyNamePrefix only applies to a short URL');
+  assert.equal(
+    loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix,
+    'LazyTO Weekly #',
+  );
+  assert.equal(
+    loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' })))
+      .weeklyNamePrefix,
+    '',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, weeklyNamePrefix: 3 }),
+    'weeklyNamePrefix must be a string',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, weeklyNamePrefix: 'Weekly #' }),
+    'weeklyNamePrefix only applies to a short URL',
+  );
 });
 
 test('secret is 8-16 letters, digits, - or _', () => {
-  assert.equal(loadConfig(writeConfig(JSON.stringify({ ...VALID, secret: 'abcdefgh' }))).secret, 'abcdefgh');
-  for (const bad of ['short', 'x'.repeat(17), 'has space here', 'semi;colon', 'equals=sign', 1234567890]) {
+  assert.equal(
+    loadConfig(writeConfig(JSON.stringify({ ...VALID, secret: 'abcdefgh' }))).secret,
+    'abcdefgh',
+  );
+  for (const bad of [
+    'short',
+    'x'.repeat(17),
+    'has space here',
+    'semi;colon',
+    'equals=sign',
+    1234567890,
+  ]) {
     expectProblems(JSON.stringify({ ...VALID, secret: bad }), 'secret must be 8-16 letters');
   }
 });
 
 test('eventName and streamName must be non-empty', () => {
-  expectProblems(JSON.stringify({ ...VALID, eventName: '  ' }), 'eventName must be a non-empty string');
-  expectProblems(JSON.stringify({ ...VALID, streamName: 1358079 }), 'streamName must be a non-empty string');
+  expectProblems(
+    JSON.stringify({ ...VALID, eventName: '  ' }),
+    'eventName must be a non-empty string',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, streamName: 1358079 }),
+    'streamName must be a non-empty string',
+  );
 });
 
 test('setFormat must be a known format', () => {
-  expectProblems(JSON.stringify({ ...VALID, setFormat: 'bo5' }), 'setFormat must be one of "startgg", "top8q"');
-  expectProblems(JSON.stringify({ ...VALID, setFormat: 5 }), 'setFormat must be one of "startgg", "top8q"');
+  expectProblems(
+    JSON.stringify({ ...VALID, setFormat: 'bo5' }),
+    'setFormat must be one of "startgg", "top8q"',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, setFormat: 5 }),
+    'setFormat must be one of "startgg", "top8q"',
+  );
 });
 
 test('streamStation out of u16 range', () => {
-  expectProblems(JSON.stringify({ ...VALID, streamStation: 65536 }), 'streamStation must be an integer in 1..65535');
-  expectProblems(JSON.stringify({ ...VALID, streamStation: 0 }), 'streamStation must be an integer in 1..65535');
+  expectProblems(
+    JSON.stringify({ ...VALID, streamStation: 65536 }),
+    'streamStation must be an integer in 1..65535',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, streamStation: 0 }),
+    'streamStation must be an integer in 1..65535',
+  );
 });
 
 test('port out of range', () => {
-  expectProblems(JSON.stringify({ ...VALID, tcpPort: 0 }), 'tcpPort must be an integer in 1..65535');
-  expectProblems(JSON.stringify({ ...VALID, httpPort: 70000 }), 'httpPort must be an integer in 1..65535');
+  expectProblems(
+    JSON.stringify({ ...VALID, tcpPort: 0 }),
+    'tcpPort must be an integer in 1..65535',
+  );
+  expectProblems(
+    JSON.stringify({ ...VALID, httpPort: 70000 }),
+    'httpPort must be an integer in 1..65535',
+  );
 });
 
 test('tcpPort and httpPort must differ', () => {
-  expectProblems(JSON.stringify({ ...VALID, httpPort: VALID.tcpPort }), 'tcpPort and httpPort must differ');
+  expectProblems(
+    JSON.stringify({ ...VALID, httpPort: VALID.tcpPort }),
+    'tcpPort and httpPort must differ',
+  );
 });
 
 test('empty auditDir', () => {
@@ -163,7 +237,13 @@ test('empty auditDir', () => {
 // of here.
 test('scripts/push.ts writes exactly the validated fields', () => {
   const written = relayConfigFromEnv(
-    { STARTGG_TOKEN: 't', RELAY_SECRET: 'abcdefgh', TOURNAMENT: 'x', EVENT_NAME: 'e', STREAM_NAME: 's' },
+    {
+      STARTGG_TOKEN: 't',
+      RELAY_SECRET: 'abcdefgh',
+      TOURNAMENT: 'x',
+      EVENT_NAME: 'e',
+      STREAM_NAME: 's',
+    },
     { test: false, tcpPort: 1, httpPort: 2 },
   );
   assert.deepEqual(Object.keys(written).sort(), Object.keys(VALID).sort());

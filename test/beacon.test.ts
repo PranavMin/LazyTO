@@ -17,7 +17,14 @@ import {
 } from '../generated/wire.js';
 
 function iface(address: string, netmask: string, internal = false): NetworkInterfaceInfo {
-  return { address, netmask, family: 'IPv4', mac: '00:00:00:00:00:00', internal, cidr: null } as NetworkInterfaceInfo;
+  return {
+    address,
+    netmask,
+    family: 'IPv4',
+    mac: '00:00:00:00:00:00',
+    internal,
+    cidr: null,
+  } as NetworkInterfaceInfo;
 }
 
 test('directed broadcast per IPv4 interface; loopback and IPv6 skipped; duplicates merged', () => {
@@ -25,7 +32,15 @@ test('directed broadcast per IPv4 interface; loopback and IPv6 skipped; duplicat
     lo: [iface('127.0.0.1', '255.0.0.0', true)],
     wlan0: [
       iface('192.168.1.37', '255.255.255.0'),
-      { address: 'fe80::1', netmask: 'ffff:ffff:ffff:ffff::', family: 'IPv6', mac: '', internal: false, cidr: null, scopeid: 0 } as NetworkInterfaceInfo,
+      {
+        address: 'fe80::1',
+        netmask: 'ffff:ffff:ffff:ffff::',
+        family: 'IPv6',
+        mac: '',
+        internal: false,
+        cidr: null,
+        scopeid: 0,
+      } as NetworkInterfaceInfo,
     ],
     eth0: [iface('10.42.0.1', '255.255.0.0')],
     eth0b: [iface('10.42.7.9', '255.255.0.0')],
@@ -45,7 +60,13 @@ test('a station receives the beacon and learns the relay from the source address
     station.once('message', (msg, rinfo) => resolve({ msg, from: rinfo.address })),
   );
 
-  const beacon = new RelayBeacon({ tcpPort: 29470, eventId: 1613010, targets: () => ['127.0.0.1'], port, intervalMs: 50 });
+  const beacon = new RelayBeacon({
+    tcpPort: 29470,
+    eventId: 1613010,
+    targets: () => ['127.0.0.1'],
+    port,
+    intervalMs: 50,
+  });
   await beacon.start();
   try {
     const { msg, from } = await received;

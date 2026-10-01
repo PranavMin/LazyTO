@@ -5,7 +5,13 @@ import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fail, type Runner } from './cli.js';
-import { describeRelayConfig, relayConfigFromEnv, remoteInstallCommand, stageBundle, type PushOptions } from './pushconfig.js';
+import {
+  describeRelayConfig,
+  relayConfigFromEnv,
+  remoteInstallCommand,
+  stageBundle,
+  type PushOptions,
+} from './pushconfig.js';
 
 export interface PushRelayOptions extends PushOptions {
   piHost: string;
@@ -21,7 +27,12 @@ export interface PushRelayDeps {
   tmp?: string; // where the bundle is staged; default the OS temp dir
 }
 
-export function pushRelay(repoRoot: string, env: Record<string, string>, o: PushRelayOptions, d: PushRelayDeps): { tgz: string; stage: string } {
+export function pushRelay(
+  repoRoot: string,
+  env: Record<string, string>,
+  o: PushRelayOptions,
+  d: PushRelayDeps,
+): { tgz: string; stage: string } {
   const config = relayConfigFromEnv(env, o);
 
   // --- build ---
@@ -59,8 +70,13 @@ export function pushRelay(repoRoot: string, env: Record<string, string>, o: Push
   // The bundle carries the token; don't leave it lying in the temp dir.
   rmSync(stage, { recursive: true, force: true });
   rmSync(tgz, { force: true });
-  if (o.noAutoUpdate) d.out('auto-update OFF on the Pi (this build stays); push again without --no-auto-update to turn it back on');
-  d.out(`done. status page: http://${o.piHost}:${o.httpPort}   smoke test: npx tsx scripts/smoke.ts ${o.piHost}`);
+  if (o.noAutoUpdate)
+    d.out(
+      'auto-update OFF on the Pi (this build stays); push again without --no-auto-update to turn it back on',
+    );
+  d.out(
+    `done. status page: http://${o.piHost}:${o.httpPort}   smoke test: npx tsx scripts/smoke.ts ${o.piHost}`,
+  );
   return { tgz, stage };
 }
 

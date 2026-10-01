@@ -21,7 +21,13 @@ import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
 import type { RefusedStatus } from './tcp.js';
-import { crashText, hexAddr, moduleStateText, type StationTelemetryRow, type TelemetryRefused } from './telemetry.js';
+import {
+  crashText,
+  hexAddr,
+  moduleStateText,
+  type StationTelemetryRow,
+  type TelemetryRefused,
+} from './telemetry.js';
 import { ModuleState } from '../generated/wire.js';
 
 export interface StatusDeps {
@@ -36,7 +42,12 @@ export interface StatusDeps {
   /** Requests refused for their secret (decisions.md R16): a mis-copied SD card, or someone else on the Wi-Fi. */
   tcp: { refused(): RefusedStatus | null };
   /** Each Wii's own boot report: module load status and kernel log (telemetry.ts). */
-  telemetry: { stations(): StationTelemetryRow[]; get(station: number): StationTelemetryRow | undefined; refused(): TelemetryRefused | null; beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null };
+  telemetry: {
+    stations(): StationTelemetryRow[];
+    get(station: number): StationTelemetryRow | undefined;
+    refused(): TelemetryRefused | null;
+    beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null;
+  };
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -48,7 +59,11 @@ export const LOG_TAIL_LINES = 6;
 export const STALE_CACHE_MS = 60_000;
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function age(at: number): string {
@@ -71,7 +86,11 @@ export class StatusServer {
       if (req.method === 'GET' && url.pathname === '/log') {
         const row = this.deps.telemetry.get(Number(url.searchParams.get('station')));
         res.writeHead(row ? 200 : 404, { 'content-type': 'text/plain; charset=utf-8' });
-        res.end(row ? `station ${row.station} (${row.from}), last heard ${age(row.lastSeenAt)} ago\n\n${row.lines.join('\n')}\n` : 'no telemetry from that station\n');
+        res.end(
+          row
+            ? `station ${row.station} (${row.from}), last heard ${age(row.lastSeenAt)} ago\n\n${row.lines.join('\n')}\n`
+            : 'no telemetry from that station\n',
+        );
         return;
       }
       if (req.method === 'GET' && url.pathname === '/') {
@@ -99,7 +118,9 @@ export class StatusServer {
   }
 
   async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) => this.server.close((e) => (e ? reject(e) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      this.server.close((e) => (e ? reject(e) : resolve())),
+    );
   }
 
   render(): string {
@@ -162,13 +183,16 @@ export class StatusServer {
     const beaconLine = bs.lastError
       ? `<p class="warn">✗ discovery beacon: ${escapeHtml(bs.lastError)} — Wiis cannot find the relay</p>`
       : `<p class="muted">Discovery beacon to ${bs.targets.map(escapeHtml).join(', ') || '—'}, last sent ${bs.lastSentAt ? `${age(bs.lastSentAt)} ago` : 'never'}.</p>`;
-    const errorLine = cs.error ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>` : '';
+    const errorLine = cs.error
+      ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>`
+      : '';
 
     const wiiRows = telemetry.stations().map((t) => {
       const silent = Date.now() - t.lastSeenAt > SILENT_STATION_MS;
       const heard = `${age(t.lastSeenAt)} ago${silent ? ' <span class="warn">(silent)</span>' : ''}`;
       const mod = t.status
-        ? t.status.module_state === ModuleState.MOD_LOADED || t.status.module_state === ModuleState.MOD_PENDING
+        ? t.status.module_state === ModuleState.MOD_LOADED ||
+          t.status.module_state === ModuleState.MOD_PENDING
           ? escapeHtml(moduleStateText(t.status))
           : `<span class="warn">✗ ${escapeHtml(moduleStateText(t.status))}</span>`
         : '<span class="muted">no status yet</span>';
@@ -181,7 +205,12 @@ export class StatusServer {
       const crash = t.crash
         ? `<br><span class="warn">✗ crashed ${t.crashAt ? `${age(t.crashAt)} ago` : ''}: ${escapeHtml(crashText(t.crash, t.status))}</span>` +
           `<br><span class="muted">words at the fault: ${t.crash.fetched.map((w) => w.toString(16).padStart(8, '0')).join(' ')}; ` +
-          `stack: ${[...t.crash.stack].filter(Boolean).map((a) => escapeHtml(hexAddr(a, t.status))).join(' &lt; ') || '—'}</span>`
+          `stack: ${
+            [...t.crash.stack]
+              .filter(Boolean)
+              .map((a) => escapeHtml(hexAddr(a, t.status)))
+              .join(' &lt; ') || '—'
+          }</span>`
         : '';
       return (
         `<tr><td>${t.station}</td><td>${heard}<br><span class="muted">${escapeHtml(t.from)}</span></td>` +
@@ -190,7 +219,9 @@ export class StatusServer {
       );
     });
     if (wiiRows.length === 0) {
-      wiiRows.push('<tr><td colspan="4" class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</td></tr>');
+      wiiRows.push(
+        '<tr><td colspan="4" class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</td></tr>',
+      );
     }
     const br = telemetry.beaconRequested?.() ?? null;
     const beaconRequestLine = br

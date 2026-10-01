@@ -16,7 +16,14 @@
 // Prints the upstream call rate every 30 s and a summary (total calls, peak
 // calls in any 60 s window -- the N2 number) on SIGINT/SIGTERM.
 
-import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, FIXTURE_TOURNAMENT, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
+import {
+  FakeStartgg,
+  FIXTURE_TOKEN,
+  FIXTURE_EVENT_ID,
+  FIXTURE_TOURNAMENT,
+  loadFixture,
+  peakPerMinute,
+} from '../test/fake-startgg.js';
 
 const portArg = process.argv.find((a) => a.startsWith('--port='));
 const PORT = Number(portArg?.slice('--port='.length));

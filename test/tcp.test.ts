@@ -14,7 +14,14 @@ import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
 import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
 import { StartggClient } from '../src/startgg.js';
-import { makeFake, defaultFixture, FIXTURE_TOKEN, FIXTURE_EVENT_ID, entrant, type FakeSet } from './fake-startgg.js';
+import {
+  makeFake,
+  defaultFixture,
+  FIXTURE_TOKEN,
+  FIXTURE_EVENT_ID,
+  entrant,
+  type FakeSet,
+} from './fake-startgg.js';
 import { WiiClient, rawRequest, game, TEST_SECRET } from './wii-client.js';
 
 const STREAM_STATION = 1;
@@ -28,7 +35,12 @@ class ArrayAudit implements AuditSink {
   }
 }
 
-async function setup(opts: { sets?: FakeSet[]; limits?: { capacity: number; refillPerMinute: number; maxWaitMs: number } } = {}) {
+async function setup(
+  opts: {
+    sets?: FakeSet[];
+    limits?: { capacity: number; refillPerMinute: number; maxWaitMs: number };
+  } = {},
+) {
   const fake = makeFake(opts.sets);
   await fake.start();
   const startgg = new StartggClient({
@@ -41,7 +53,15 @@ async function setup(opts: { sets?: FakeSet[]; limits?: { capacity: number; refi
   await cache.refresh();
   const state = new StationState();
   const audit = new ArrayAudit();
-  const server = new RelayTcpServer({ cache, state, startgg, audit, streamStation: STREAM_STATION, streamId: STREAM_ID, secret: TEST_SECRET });
+  const server = new RelayTcpServer({
+    cache,
+    state,
+    startgg,
+    audit,
+    streamStation: STREAM_STATION,
+    streamId: STREAM_ID,
+    secret: TEST_SECRET,
+  });
   await server.listen(0, '127.0.0.1');
   const port = server.address().port;
   return {
@@ -65,7 +85,9 @@ test('framing and versioning', async (t) => {
   t.after(env.close);
 
   await t.test('bad protocol version gets ST_BAD_VERSION', async () => {
-    const r = await rawRequest(env.port, 3, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), { version: 2 });
+    const r = await rawRequest(env.port, 3, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
+      version: 2,
+    });
     assert.equal(r.resp.status, RelayStatus.ST_BAD_VERSION);
     assert.equal(r.hdr.cmd, RelayCmd.CMD_LIST_SETS);
   });
@@ -105,7 +127,10 @@ test('full set lifecycle on a non-stream station', async (t) => {
   await t.test('LIST_SETS shows the four selectable sets, earliest round first', async () => {
     const { resp, sets } = await wii.listSets();
     assert.equal(resp.status, RelayStatus.ST_OK);
-    assert.deepEqual(sets.map((s) => s.set_id), [107949994, 107949995, 107949996, 107949997]);
+    assert.deepEqual(
+      sets.map((s) => s.set_id),
+      [107949994, 107949995, 107949996, 107949997],
+    );
     const first = sets[0]!;
     assert.equal(first.round, 'WINNERS QUARTER-FINAL');
     assert.equal(first.p1_tag, 'Alpha');
@@ -121,65 +146,80 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(env.state.get(3)!.setId, SET);
   });
 
-  await t.test('the started set disappears from another station and is taken (section 8 row 3)', async () => {
-    const other = env.wii(4);
-    const { sets } = await other.listSets();
-    assert.ok(!sets.some((s) => s.set_id === SET));
-    const r = await other.startSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
-    assert.equal(r.resp.msg, 'started on station 3');
-  });
+  await t.test(
+    'the started set disappears from another station and is taken (section 8 row 3)',
+    async () => {
+      const other = env.wii(4);
+      const { sets } = await other.listSets();
+      assert.ok(!sets.some((s) => s.set_id === SET));
+      const r = await other.startSet(SET);
+      assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
+      assert.equal(r.resp.msg, 'started on station 3');
+    },
+  );
 
-  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (decisions.md R13)', async () => {
-    // Game 1: Alpha (slot 1) wins as Fox (ext 2) vs Marth (ext 9) on
-    // Battlefield (StKind 0x1F) -- what an auto-scored game carries.
-    const r = await wii.reportScore(SET, [game(1, 2, 9, 0x1f)]);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(r.resp.msg, '1-0');
-    const games = env.fake.getSet(SET).games;
-    assert.equal(games.length, 1);
-    assert.equal(games[0]!.winnerId, entrant(1).id);
+  await t.test(
+    'REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (decisions.md R13)',
+    async () => {
+      // Game 1: Alpha (slot 1) wins as Fox (ext 2) vs Marth (ext 9) on
+      // Battlefield (StKind 0x1F) -- what an auto-scored game carries.
+      const r = await wii.reportScore(SET, [game(1, 2, 9, 0x1f)]);
+      assert.equal(r.resp.status, RelayStatus.ST_OK);
+      assert.equal(r.resp.msg, '1-0');
+      const games = env.fake.getSet(SET).games;
+      assert.equal(games.length, 1);
+      assert.equal(games[0]!.winnerId, entrant(1).id);
 
-    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
-    assert.deepEqual(lastCall.variables.gameData, [
-      {
-        gameNum: 1,
-        winnerId: entrant(1).id,
-        stageId: 19, // Battlefield
-        selections: [
-          { entrantId: entrant(1).id, characterId: 6 }, // Fox
-          { entrantId: entrant(2).id, characterId: 14 }, // Marth
-        ],
-      },
-    ]);
+      const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+      assert.deepEqual(lastCall.variables.gameData, [
+        {
+          gameNum: 1,
+          winnerId: entrant(1).id,
+          stageId: 19, // Battlefield
+          selections: [
+            { entrantId: entrant(1).id, characterId: 6 }, // Fox
+            { entrantId: entrant(2).id, characterId: 14 }, // Marth
+          ],
+        },
+      ]);
 
-    const r2 = await wii.reportScore(SET, [game(1, 2, 9), game(2, 2, 9), game(1, 2, 9)]);
-    assert.equal(r2.resp.msg, '2-1');
-    assert.equal(env.fake.getSet(SET).games.length, 3);
+      const r2 = await wii.reportScore(SET, [game(1, 2, 9), game(2, 2, 9), game(1, 2, 9)]);
+      assert.equal(r2.resp.msg, '2-1');
+      assert.equal(env.fake.getSet(SET).games.length, 3);
 
-    // Stocks and costume (auto-scored games) become the per-game scores,
-    // Replay Reporter for Slippi style: (costume + 1) * 100 + stocks.
-    const r3 = await wii.reportScore(SET, [game(1, 2, 9, 0x1f, [3, 0], [1, 0])]);
-    assert.equal(r3.resp.msg, '1-0');
-    const scored = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as { entrant1Score?: number; entrant2Score?: number }[];
-    assert.equal(scored[0]!.entrant1Score, 203, 'second costume, 3 stocks');
-    assert.equal(scored[0]!.entrant2Score, 100, 'default costume, 0 stocks');
-    // Unknown costume: stocks only. Unknown stocks (hand-scored): no score at all.
-    const r4 = await wii.reportScore(SET, [game(2, 2, 9, 0x1f, [0, 4], [0xff, 0xff]), game(1)]);
-    assert.equal(r4.resp.msg, '1-1');
-    const mixed = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as { entrant1Score?: number; entrant2Score?: number }[];
-    assert.deepEqual([mixed[0]!.entrant1Score, mixed[0]!.entrant2Score], [0, 4]);
-    assert.equal(mixed[1]!.entrant1Score, undefined);
-    assert.equal(mixed[1]!.entrant2Score, undefined);
-  });
+      // Stocks and costume (auto-scored games) become the per-game scores,
+      // Replay Reporter for Slippi style: (costume + 1) * 100 + stocks.
+      const r3 = await wii.reportScore(SET, [game(1, 2, 9, 0x1f, [3, 0], [1, 0])]);
+      assert.equal(r3.resp.msg, '1-0');
+      const scored = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as {
+        entrant1Score?: number;
+        entrant2Score?: number;
+      }[];
+      assert.equal(scored[0]!.entrant1Score, 203, 'second costume, 3 stocks');
+      assert.equal(scored[0]!.entrant2Score, 100, 'default costume, 0 stocks');
+      // Unknown costume: stocks only. Unknown stocks (hand-scored): no score at all.
+      const r4 = await wii.reportScore(SET, [game(2, 2, 9, 0x1f, [0, 4], [0xff, 0xff]), game(1)]);
+      assert.equal(r4.resp.msg, '1-1');
+      const mixed = env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData as {
+        entrant1Score?: number;
+        entrant2Score?: number;
+      }[];
+      assert.deepEqual([mixed[0]!.entrant1Score, mixed[0]!.entrant2Score], [0, 4]);
+      assert.equal(mixed[1]!.entrant1Score, undefined);
+      assert.equal(mixed[1]!.entrant2Score, undefined);
+    },
+  );
 
-  await t.test('a hand-scored game (0xFF characters, stage 0) reports the winner only', async () => {
-    // 0 is Captain Falcon on the external scale, so "unknown" is 0xFF.
-    const r = await wii.reportScore(SET, [game(2, 0xff, 0xff, 0)]);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
-    assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(2).id }]);
-  });
+  await t.test(
+    'a hand-scored game (0xFF characters, stage 0) reports the winner only',
+    async () => {
+      // 0 is Captain Falcon on the external scale, so "unknown" is 0xFF.
+      const r = await wii.reportScore(SET, [game(2, 0xff, 0xff, 0)]);
+      assert.equal(r.resp.status, RelayStatus.ST_OK);
+      const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+      assert.deepEqual(lastCall.variables.gameData, [{ gameNum: 1, winnerId: entrant(2).id }]);
+    },
+  );
 
   await t.test('END_SET with an undecided score is refused locally', async () => {
     const r = await wii.endSet(SET, [game(1), game(2)]);
@@ -255,19 +295,22 @@ test('upstream 5xx handling (section 8 row 5)', async (t) => {
     assert.equal(env.fake.callsFor('reportBracketSet').length, before + 3);
   });
 
-  await t.test('three 5xx exhaust the retries, flag the row, and a later retry is safe', async () => {
-    env.fake.failNext('reportBracketSet', '5xx', 3);
-    const r = await wii.reportScore(SET, [game(1), game(1)]);
-    assert.equal(r.resp.status, RelayStatus.ST_STARTGG_ERROR);
-    assert.equal(r.resp.msg, 'start.gg error - retry');
-    assert.equal(env.state.flags().length, 1);
-    assert.equal(env.fake.getSet(SET).games.length, 1, 'failed report changed nothing upstream');
+  await t.test(
+    'three 5xx exhaust the retries, flag the row, and a later retry is safe',
+    async () => {
+      env.fake.failNext('reportBracketSet', '5xx', 3);
+      const r = await wii.reportScore(SET, [game(1), game(1)]);
+      assert.equal(r.resp.status, RelayStatus.ST_STARTGG_ERROR);
+      assert.equal(r.resp.msg, 'start.gg error - retry');
+      assert.equal(env.state.flags().length, 1);
+      assert.equal(env.fake.getSet(SET).games.length, 1, 'failed report changed nothing upstream');
 
-    // The player presses the button again: full overwrite makes it safe.
-    const retry = await wii.reportScore(SET, [game(1), game(1)]);
-    assert.equal(retry.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(SET).games.length, 2);
-  });
+      // The player presses the button again: full overwrite makes it safe.
+      const retry = await wii.reportScore(SET, [game(1), game(1)]);
+      assert.equal(retry.resp.status, RelayStatus.ST_OK);
+      assert.equal(env.fake.getSet(SET).games.length, 2);
+    },
+  );
 });
 
 test('upstream 4xx: set completed by the TO (section 8 row 6, R6)', async (t) => {
@@ -357,20 +400,27 @@ test('claim guards', async (t) => {
     assert.equal(r.resp.msg, 'in progress on start.gg');
   });
 
-  await t.test('an out-of-range character or stage value never blocks the report (decisions.md R13)', async () => {
-    // ext 77 has no start.gg character mapping and 0x15 (Akaneia) no stage
-    // mapping: both are dropped, the mapped Marth selection and the winner
-    // still go through.
-    const r = await wii.reportScore(SET, [game(1, 77, 9, 0x15)]);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(r.resp.msg, '1-0');
-    const games = env.fake.getSet(SET).games;
-    assert.equal(games.at(-1)!.winnerId, entrant(1).id);
-    const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
-    assert.deepEqual(lastCall.variables.gameData, [
-      { gameNum: 1, winnerId: entrant(1).id, selections: [{ entrantId: entrant(2).id, characterId: 14 }] },
-    ]);
-  });
+  await t.test(
+    'an out-of-range character or stage value never blocks the report (decisions.md R13)',
+    async () => {
+      // ext 77 has no start.gg character mapping and 0x15 (Akaneia) no stage
+      // mapping: both are dropped, the mapped Marth selection and the winner
+      // still go through.
+      const r = await wii.reportScore(SET, [game(1, 77, 9, 0x15)]);
+      assert.equal(r.resp.status, RelayStatus.ST_OK);
+      assert.equal(r.resp.msg, '1-0');
+      const games = env.fake.getSet(SET).games;
+      assert.equal(games.at(-1)!.winnerId, entrant(1).id);
+      const lastCall = env.fake.callsFor('reportBracketSet').at(-1)!;
+      assert.deepEqual(lastCall.variables.gameData, [
+        {
+          gameNum: 1,
+          winnerId: entrant(1).id,
+          selections: [{ entrantId: entrant(2).id, characterId: 14 }],
+        },
+      ]);
+    },
+  );
 });
 
 test('abandon (section 5.6)', async (t) => {
@@ -443,15 +493,25 @@ test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream 
   const env = await setup();
   try {
     const before = env.fake.calls.length;
-    const r = await rawRequest(env.port, 3, RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: SET, stream: 0 }), {
-      secret: 'not-the-secret',
-    });
+    const r = await rawRequest(
+      env.port,
+      3,
+      RelayCmd.CMD_START_SET,
+      encodeStartSetReq({ set_id: SET, stream: 0 }),
+      {
+        secret: 'not-the-secret',
+      },
+    );
     assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
     assert.equal(r.resp.msg, 'wrong relay secret');
     assert.equal(r.hdr.cmd, RelayCmd.CMD_START_SET, 'the reply echoes the command');
     assert.equal(env.fake.calls.length, before, 'no start.gg call');
     assert.equal(env.state.get(3), undefined, 'no claim');
-    assert.equal(env.state.lastAction(3), undefined, 'an unauthenticated station number makes no status row');
+    assert.equal(
+      env.state.lastAction(3),
+      undefined,
+      'an unauthenticated station number makes no status row',
+    );
     const rf = env.server.refused();
     assert.equal(rf?.count, 1);
     assert.equal(rf?.lastStation, 3);
@@ -464,7 +524,9 @@ test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream 
 test('a host that sends no relay_auth at all is told so, within its own framing', async () => {
   const env = await setup();
   try {
-    const r = await rawRequest(env.port, 5, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), { secret: null });
+    const r = await rawRequest(env.port, 5, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
+      secret: null,
+    });
     assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
     assert.equal(r.resp.msg, 'no relay secret sent');
     assert.equal(r.hdr.station, 5);

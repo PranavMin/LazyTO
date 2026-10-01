@@ -30,7 +30,13 @@ import { AuditLog, auditPath } from '../src/audit.js';
 import { RelayTcpServer } from '../src/tcp.js';
 import { StatusServer } from '../src/status.js';
 import { StationTelemetry } from '../src/telemetry.js';
-import { FakeStartgg, FIXTURE_TOKEN, FIXTURE_EVENT_ID, loadFixture, peakPerMinute } from '../test/fake-startgg.js';
+import {
+  FakeStartgg,
+  FIXTURE_TOKEN,
+  FIXTURE_EVENT_ID,
+  loadFixture,
+  peakPerMinute,
+} from '../test/fake-startgg.js';
 import { WiiClient, TEST_SECRET } from '../test/wii-client.js';
 
 const STATIONS = 12;
@@ -79,7 +85,10 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
     tally.requests++;
     tally.requestTimes.push(Date.now());
   };
-  const expect = async (label: string, p: Promise<{ resp: { status: number; msg: string } }>): Promise<boolean> => {
+  const expect = async (
+    label: string,
+    p: Promise<{ resp: { status: number; msg: string } }>,
+  ): Promise<boolean> => {
     count();
     try {
       const r = await p;
@@ -88,7 +97,9 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
         tally.contention++;
         return false;
       }
-      tally.errors.push(`station ${wii.station}: ${label} -> ${RelayStatus[r.resp.status]} "${r.resp.msg}"`);
+      tally.errors.push(
+        `station ${wii.station}: ${label} -> ${RelayStatus[r.resp.status]} "${r.resp.msg}"`,
+      );
       return false;
     } catch (e) {
       tally.errors.push(`station ${wii.station}: ${label} threw ${String(e)}`);
@@ -121,9 +132,36 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
     // A 2-1 set: winners of games 1 and 2 split, game 3 decides.
     const decider = (Math.random() < 0.5 ? 1 : 2) as 1 | 2;
     const games = [
-      { winner_slot: decider, p1_char: randChar(), p2_char: randChar(), stage: 0x1f, p1_stocks: 0xff, p2_stocks: 0xff, p1_costume: 0xff, p2_costume: 0xff },
-      { winner_slot: (3 - decider) as 1 | 2, p1_char: randChar(), p2_char: randChar(), stage: 0x1f, p1_stocks: 0xff, p2_stocks: 0xff, p1_costume: 0xff, p2_costume: 0xff },
-      { winner_slot: decider, p1_char: randChar(), p2_char: randChar(), stage: 0x1f, p1_stocks: 0xff, p2_stocks: 0xff, p1_costume: 0xff, p2_costume: 0xff },
+      {
+        winner_slot: decider,
+        p1_char: randChar(),
+        p2_char: randChar(),
+        stage: 0x1f,
+        p1_stocks: 0xff,
+        p2_stocks: 0xff,
+        p1_costume: 0xff,
+        p2_costume: 0xff,
+      },
+      {
+        winner_slot: (3 - decider) as 1 | 2,
+        p1_char: randChar(),
+        p2_char: randChar(),
+        stage: 0x1f,
+        p1_stocks: 0xff,
+        p2_stocks: 0xff,
+        p1_costume: 0xff,
+        p2_costume: 0xff,
+      },
+      {
+        winner_slot: decider,
+        p1_char: randChar(),
+        p2_char: randChar(),
+        stage: 0x1f,
+        p1_stocks: 0xff,
+        p2_stocks: 0xff,
+        p1_costume: 0xff,
+        p2_costume: 0xff,
+      },
     ];
 
     let dead = false;
@@ -160,9 +198,26 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
   });
   await cache.refresh();
   const state = new StationState();
-  const tcp = new RelayTcpServer({ cache, state, startgg, audit, streamStation: 1, streamId: 1358079, secret: TEST_SECRET });
+  const tcp = new RelayTcpServer({
+    cache,
+    state,
+    startgg,
+    audit,
+    streamStation: 1,
+    streamId: 1358079,
+    secret: TEST_SECRET,
+  });
   await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({ state, cache, startgg, streamStation: 1, eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`, beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) }, tcp, telemetry: new StationTelemetry({ secret: TEST_SECRET }) });
+  const status = new StatusServer({
+    state,
+    cache,
+    startgg,
+    streamStation: 1,
+    eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`,
+    beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) },
+    tcp,
+    telemetry: new StationTelemetry({ secret: TEST_SECRET }),
+  });
   await status.listen(0, '127.0.0.1');
   cache.start();
 
@@ -185,7 +240,13 @@ async function inProcessStack(tally: Tally): Promise<Stack> {
 }
 
 async function main(): Promise<void> {
-  const tally: Tally = { setsCompleted: 0, requests: 0, requestTimes: [], contention: 0, errors: [] };
+  const tally: Tally = {
+    setsCompleted: 0,
+    requests: 0,
+    requestTimes: [],
+    contention: 0,
+    errors: [],
+  };
   const stack: Stack = external
     ? {
         ...external,
@@ -196,8 +257,10 @@ async function main(): Promise<void> {
     : await inProcessStack(tally);
 
   const deadline = Date.now() + DURATION_S * 1000;
-  console.log(`sim-wii: ${STATIONS} stations for ${DURATION_S} s against ${stack.host}:${stack.port}` +
-    (external ? ' (external relay)' : ''));
+  console.log(
+    `sim-wii: ${STATIONS} stations for ${DURATION_S} s against ${stack.host}:${stack.port}` +
+      (external ? ' (external relay)' : ''),
+  );
 
   const progress = setInterval(() => {
     const upstream = stack.upstreamCalls();
@@ -224,7 +287,9 @@ async function main(): Promise<void> {
   console.log('\n=== sim-wii results ===');
   console.log(`duration:            ${DURATION_S} s`);
   console.log(`sets completed:      ${tally.setsCompleted}`);
-  console.log(`wii requests:        ${tally.requests} total, peak ${peakPerMinute(tally.requestTimes)}/min`);
+  console.log(
+    `wii requests:        ${tally.requests} total, peak ${peakPerMinute(tally.requestTimes)}/min`,
+  );
   console.log(`benign contention:   ${tally.contention} (ST_SET_TAKEN races)`);
   console.log(
     upstreamTimes === null

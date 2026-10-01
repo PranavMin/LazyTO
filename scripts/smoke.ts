@@ -25,14 +25,18 @@ const httpPort = Number(process.argv[4] ?? 29473);
 const STATION = 999;
 
 async function main(): Promise<void> {
-  const reply = await rawRequest(tcpPort, STATION, RelayCmd.CMD_LIST_SETS, undefined, { host, secret: relaySecret() });
+  const reply = await rawRequest(tcpPort, STATION, RelayCmd.CMD_LIST_SETS, undefined, {
+    host,
+    secret: relaySecret(),
+  });
   const status = RelayStatus[reply.resp.status] ?? String(reply.resp.status);
   if (reply.resp.status !== RelayStatus.ST_OK) {
     throw new Error(`LIST_SETS -> ${status} "${reply.resp.msg}"`);
   }
   const { sets } = decodeListSetsResp(reply.payload);
   console.log(`tcp ${host}:${tcpPort}  LIST_SETS -> ${status}, ${sets.length} pending sets`);
-  for (const s of sets.slice(0, 5)) console.log(`  ${s.round.padEnd(6)} ${s.p1_tag} vs ${s.p2_tag}`);
+  for (const s of sets.slice(0, 5))
+    console.log(`  ${s.round.padEnd(6)} ${s.p1_tag} vs ${s.p2_tag}`);
   if (sets.length > 5) console.log(`  ... ${sets.length - 5} more`);
 
   const res = await fetch(`http://${host}:${httpPort}/`);
