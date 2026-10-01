@@ -60,6 +60,9 @@ jobs:
         shell: pwsh
         run: |
           python configure.py --non-matching
+          # ninja makes an output's directory before running its command; we run the
+          # commands ourselves, so make it here (download_tool.py writes sjiswrap.exe into it).
+          New-Item -ItemType Directory -Force build/tools | Out-Null
           python -m ninja -t commands build/compilers build/binutils build/tools/sjiswrap.exe | ForEach-Object {
             cmd /c $_
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
