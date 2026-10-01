@@ -21,7 +21,7 @@ import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
 import type { RefusedStatus } from './tcp.js';
-import { moduleStateText, type StationTelemetryRow, type TelemetryRefused } from './telemetry.js';
+import { crashText, hexAddr, moduleStateText, type StationTelemetryRow, type TelemetryRefused } from './telemetry.js';
 import { ModuleState } from '../generated/wire.js';
 
 export interface StatusDeps {
@@ -178,9 +178,14 @@ export class StatusServer {
         t.status?.log_dropped ? `${t.status.log_dropped} log bytes dropped on the Wii` : '',
       ].filter(Boolean);
       const tail = t.lines.slice(-LOG_TAIL_LINES).map(escapeHtml).join('\n');
+      const crash = t.crash
+        ? `<br><span class="warn">✗ crashed ${t.crashAt ? `${age(t.crashAt)} ago` : ''}: ${escapeHtml(crashText(t.crash, t.status))}</span>` +
+          `<br><span class="muted">words at the fault: ${t.crash.fetched.map((w) => w.toString(16).padStart(8, '0')).join(' ')}; ` +
+          `stack: ${[...t.crash.stack].filter(Boolean).map((a) => escapeHtml(hexAddr(a, t.status))).join(' &lt; ') || '—'}</span>`
+        : '';
       return (
         `<tr><td>${t.station}</td><td>${heard}<br><span class="muted">${escapeHtml(t.from)}</span></td>` +
-        `<td>${mod}${extra.length ? `<br><span class="muted">${escapeHtml(extra.join(', '))}</span>` : ''}</td>` +
+        `<td>${mod}${extra.length ? `<br><span class="muted">${escapeHtml(extra.join(', '))}</span>` : ''}${crash}</td>` +
         `<td><pre>${tail || '<span class="muted">no log yet</span>'}</pre><a href="/log?station=${t.station}">full log</a></td></tr>`
       );
     });

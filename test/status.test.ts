@@ -8,7 +8,7 @@ import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
 import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
 import { WiiClient, game, TEST_SECRET } from './wii-client.js';
 import { StationTelemetry } from '../src/telemetry.js';
-import { telemetryDatagram, statusPayload } from './telemetry.test.js';
+import { telemetryDatagram, statusPayload, crashPayload } from './telemetry.test.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
 
 const nullAudit: AuditSink = { record() {} };
@@ -46,10 +46,14 @@ test('status page', async (t) => {
     assert.equal(log.status, 200);
     assert.match(await log.text(), /^station 4 \(192\.168\.1\.80\)[\s\S]*Patch:Game ID = 47414c45\nTMOD:arena top/);
     assert.equal((await fetch(`${statusUrl}/log?station=9`)).status, 404);
-    telemetry.receive(telemetryDatagram(TelemetryKind.TM_STATUS, 4, 2, statusPayload({ module_state: ModuleState.MOD_LOADED, module_len: 80288, module_patches: 28 })), '192.168.1.80');
+    telemetry.receive(telemetryDatagram(TelemetryKind.TM_STATUS, 4, 2, statusPayload({ module_state: ModuleState.MOD_LOADED, module_len: 80288, module_patches: 28, module_load: 0x817e0000 })), '192.168.1.80');
     html = await (await fetch(statusUrl)).text();
     assert.match(html, /loaded \(80288 bytes, 28 patches\)/);
     assert.doesNotMatch(html, /NOT LOADED/);
+    telemetry.receive(telemetryDatagram(TelemetryKind.TM_CRASH, 4, 3, crashPayload({ srr0: 0x817e88d8, srr1: 0x00083032, lr: 0x801bf94c })), '192.168.1.80');
+    html = await (await fetch(statusUrl)).text();
+    assert.match(html, /✗ crashed .*program \(illegal instruction\) at 0x817E88D8 = module\+0x88D8/);
+    assert.match(html, /words at the fault: 00000000 00000000 00000000 00000000/);
   });
 
   await t.test('before any Wii connects: event id, empty table, cache line', async () => {

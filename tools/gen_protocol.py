@@ -287,7 +287,8 @@ def emit_c(p: Protocol) -> str:
     name_w = max(len(n) for n in p.constants)
     for name, (value, doc) in p.constants.items():
         comment = f"  /* {doc} */" if doc else ""
-        w(f"#define {name:<{name_w}} {value}{comment}")
+        cval = f"0x{value:X}" if value > 0x7FFFFFFF else str(value)
+        w(f"#define {name:<{name_w}} {cval}{comment}")
 
     for ename, (doc, values) in p.enums.items():
         w("")
@@ -440,11 +441,13 @@ def _is_count_field(st: Struct, f: Field) -> bool:
 
 def _ts_field_type(f: Field) -> str:
     if f.is_struct:
-        return f"{pascal(f.type)}[]"
+        return f"{pascal(f.type)}[]" if (f.is_variable or f.array_len is not None) else pascal(f.type)
     if f.type == "char":
         return "string"
     if f.array_len is not None:
-        return "Uint8Array"
+        # Byte arrays stay Uint8Array (magic fields, tests pass them as such);
+        # arrays of wider integers are plain number[] in natural units.
+        return "Uint8Array" if PRIMITIVES[f.type][0] == 1 else "number[]"
     return "number"
 
 
@@ -490,6 +493,8 @@ def _ts_encode(w, st: Struct, p: Protocol) -> None:
             w(f"    bytes.set(encode{pascal(f.type)}(v.{f.name}[i]), "
               f"{f.offset} + i * {elem.name.upper()}_SIZE);")
             w("  }")
+        elif f.is_struct and f.array_len is None:
+            w(f"  bytes.set(encode{pascal(f.type)}(v.{f.name}), {f.offset});")
         elif f.is_struct:
             elem = p.structs[f.type]
             w(f"  if (v.{f.name}.length > {f.array_const or f.array_len}) {{")
@@ -502,8 +507,17 @@ def _ts_encode(w, st: Struct, p: Protocol) -> None:
             w("  }")
         elif f.type == "char":
             w(f"  putAscii(bytes, {f.offset}, {f.array_const or f.array_len}, v.{f.name});")
-        elif f.array_len is not None:  # u8 byte array
+        elif f.array_len is not None and PRIMITIVES[f.type][0] == 1:  # u8 byte array
             w(f"  bytes.set(v.{f.name}.subarray(0, {f.array_const or f.array_len}), {f.offset});")
+        elif f.array_len is not None:  # wide integer array, big-endian per element
+            size = PRIMITIVES[f.type][0]
+            w(f"  if (v.{f.name}.length > {f.array_const or f.array_len}) {{")
+            w(f"    throw new RangeError(`{st.name}.{f.name}: ${{v.{f.name}.length}} entries, "
+              f"max ` + {f.array_const or f.array_len});")
+            w("  }")
+            w(f"  for (let i = 0; i < v.{f.name}.length; i++) {{")
+            w(f"    {ts_set(f.type, f'{f.offset} + i * {size}', f'v.{f.name}[i]!')};")
+            w("  }")
         else:
             w(f"  {ts_set(f.type, str(f.offset), f'v.{f.name}')};")
     w("  return bytes;")
@@ -525,7 +539,9 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
             continue
         if f.is_variable:
             continue
-        if f.is_struct:
+        if f.is_struct and f.array_len is None:
+            lines.append(f"    {f.name}: decode{pascal(f.type)}(buf, off + {f.offset}),")
+        elif f.is_struct:
             elem = p.structs[f.type]
             lines.append(f"    {f.name}: Array.from({{ length: {f.array_const or f.array_len} }}, "
                          f"(_, i) => decode{pascal(f.type)}(buf, off + {f.offset} + "
@@ -533,9 +549,13 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
         elif f.type == "char":
             lines.append(f"    {f.name}: getAscii(buf, off + {f.offset}, "
                          f"{f.array_const or f.array_len}),")
-        elif f.array_len is not None:
+        elif f.array_len is not None and PRIMITIVES[f.type][0] == 1:
             lines.append(f"    {f.name}: buf.slice(off + {f.offset}, off + {f.offset} + "
                          f"{f.array_const or f.array_len}),")
+        elif f.array_len is not None:
+            size = PRIMITIVES[f.type][0]
+            lines.append(f"    {f.name}: Array.from({{ length: {f.array_const or f.array_len} }}, "
+                         f"(_, i) => {ts_get(f.type, f'off + {f.offset} + i * {size}')}),")
         else:
             lines.append(f"    {f.name}: {ts_get(f.type, f'off + {f.offset}')},")
     if vf is not None:

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSocket } from 'node:dgram';
-import { MAX_LINES, MAX_STATIONS, StationTelemetry, moduleStateText } from '../src/telemetry.js';
+import { MAX_LINES, MAX_STATIONS, StationTelemetry, crashText, moduleStateText } from '../src/telemetry.js';
 import {
   AUTH_MAGIC_0,
   AUTH_MAGIC_1,
@@ -15,9 +15,11 @@ import {
   SECRET_LEN,
   TELEMETRY_MAGIC_1,
   TelemetryKind,
+  encodeCrashReport,
   encodeRelayAuth,
   encodeStationStatus,
   encodeTelemetryHdr,
+  type CrashReport,
   type StationStatus,
 } from '../generated/wire.js';
 import { TEST_SECRET } from './wii-client.js';
@@ -31,6 +33,24 @@ export function statusPayload(s: Partial<StationStatus>): Uint8Array {
     arena_hi: 0,
     log_dropped: 0,
     ...s,
+  });
+}
+
+export function crashPayload(c: Partial<CrashReport>): Uint8Array {
+  return encodeCrashReport({
+    error: 6,
+    count: 1,
+    srr0: 0,
+    srr1: 0,
+    dsisr: 0,
+    dar: 0,
+    lr: 0,
+    sp: 0,
+    r3: 0,
+    r4: 0,
+    fetched: [0, 0, 0, 0],
+    stack: [0, 0, 0, 0, 0, 0, 0, 0],
+    ...c,
   });
 }
 
@@ -128,6 +148,18 @@ test('status datagrams set the module state; texts name the reason', () => {
   assert.match(moduleStateText({ ...s, module_state: ModuleState.MOD_NOT_FOUND }), /no tournament\.bin/);
   assert.match(moduleStateText({ ...s, module_state: ModuleState.MOD_GUARD }), /not stock Melee 1\.02/);
   assert.match(moduleStateText({ ...s, module_state: ModuleState.MOD_ARENA, arena_hi: 0 }), /arena top 0x0/);
+});
+
+test('a crash report is kept, named, and resolved against the module range', () => {
+  const t = new StationTelemetry({ secret: TEST_SECRET });
+  t.receive(telemetryDatagram(TelemetryKind.TM_STATUS, 1, 0, statusPayload({ module_state: ModuleState.MOD_LOADED, module_len: 80036, module_load: 0x817e0000, module_patches: 28 })), 'w');
+  const stack = [0x801a40b4, 0x801a44c4, 0x801601ac, 0, 0, 0, 0, 0];
+  t.receive(telemetryDatagram(TelemetryKind.TM_CRASH, 1, 1, crashPayload({ srr0: 0x817e88d8, srr1: 0x00083032, lr: 0x801bf94c, sp: 0x804eeb40, fetched: [0, 0, 0, 0], stack })), 'w');
+  const row = t.get(1);
+  assert.ok(row?.crash);
+  assert.equal(crashText(row.crash, row.status), 'program (illegal instruction) at 0x817E88D8 = module+0x88D8, lr 0x801BF94C');
+  assert.equal(row.lines.at(-1), '--- crash: program (illegal instruction) at 0x817E88D8 = module+0x88D8, lr 0x801BF94C ---');
+  assert.deepEqual([...row.crash.stack].slice(0, 3), [0x801a40b4, 0x801a44c4, 0x801601ac]);
 });
 
 test('seq: gaps count as lost, duplicates ignored, going backwards is a reboot', () => {

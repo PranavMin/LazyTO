@@ -23,13 +23,16 @@ import {
   RELAY_AUTH_SIZE,
   SECRET_LEN,
   STATION_STATUS_SIZE,
+  CRASH_REPORT_SIZE,
   TELEMETRY_HDR_SIZE,
   TELEMETRY_MAGIC_1,
   TELEMETRY_PORT,
   TELEMETRY_TEXT_MAX,
   TelemetryKind,
+  decodeCrashReport,
   decodeStationStatus,
   decodeTelemetryHdr,
+  type CrashReport,
   type StationStatus,
 } from '../generated/wire.js';
 
@@ -48,7 +51,37 @@ export interface StationTelemetryRow {
   uptimeMs: number;
   status: StationStatus | null;
   statusAt: number | null;
+  /** The game's last unhandled exception, as the module recorded it. */
+  crash: CrashReport | null;
+  crashAt: number | null;
   lines: string[];
+}
+
+const ERROR_NAMES: Record<number, string> = {
+  2: 'DSI (bad data address)',
+  3: 'ISI (bad instruction address)',
+  5: 'alignment',
+  6: 'program',
+  7: 'floating point',
+};
+
+/** One line for a crash: "program (illegal instruction) at 0x817E88D8 = module+0x88D8". */
+export function crashText(c: CrashReport, status: StationStatus | null): string {
+  let kind = ERROR_NAMES[c.error] ?? `error ${c.error}`;
+  if (c.error === 6) {
+    const why = c.srr1 & 0x80000 ? 'illegal instruction' : c.srr1 & 0x40000 ? 'privileged instruction' : c.srr1 & 0x20000 ? 'trap' : 'program check';
+    kind = `${kind} (${why})`;
+  }
+  return `${kind} at ${hexAddr(c.srr0, status)}, lr ${hexAddr(c.lr, status)}`;
+}
+
+/** 0x817E88D8, plus "= module+0x88D8" when the address is inside the loaded module. */
+export function hexAddr(a: number, status: StationStatus | null): string {
+  const hex = `0x${a.toString(16).toUpperCase().padStart(8, '0')}`;
+  if (status && status.module_len && a >= status.module_load && a < status.module_load + status.module_len) {
+    return `${hex} = module+0x${(a - status.module_load).toString(16).toUpperCase()}`;
+  }
+  return hex;
 }
 
 export interface TelemetryRefused {
@@ -179,6 +212,8 @@ export class StationTelemetry {
         uptimeMs: 0,
         status: null,
         statusAt: null,
+        crash: null,
+        crashAt: null,
         lines: [],
         seq: -1,
         partial: '',
@@ -207,6 +242,10 @@ export class StationTelemetry {
     if (hdr.kind === TelemetryKind.TM_STATUS && payload.length >= STATION_STATUS_SIZE) {
       row.status = decodeStationStatus(payload);
       row.statusAt = now;
+    } else if (hdr.kind === TelemetryKind.TM_CRASH && payload.length >= CRASH_REPORT_SIZE) {
+      row.crash = decodeCrashReport(payload);
+      row.crashAt = now;
+      this.pushLine(row, `--- crash: ${crashText(row.crash, row.status)} ---`);
     } else if (hdr.kind === TelemetryKind.TM_LOG && payload.length <= TELEMETRY_TEXT_MAX) {
       const text = row.partial + Buffer.from(payload).toString('latin1');
       const parts = text.split('\n');

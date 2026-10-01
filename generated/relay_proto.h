@@ -51,6 +51,9 @@ typedef unsigned long uint32_t;
 #define TELEMETRY_MAGIC_1   76  /* 'L', second byte of telemetry_hdr ('M','L') */
 #define TELEMETRY_TEXT_MAX  480  /* most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame */
 #define TELEMETRY_STATUS_MS 5000  /* a station sends a TM_STATUS datagram at least this often once it knows the relay */
+#define CRASH_MAILBOX_PPC   0xD3003480  /* PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin. */
+#define CRASH_MAGIC         1297367890  /* 'MTCR', first word of crash_mailbox */
+#define CRASH_STACK_DEPTH   8  /* LR saves walked up the crashed stack in crash_report */
 
 /* request/response command, echoed back in the response header */
 enum relay_cmd {
@@ -92,6 +95,7 @@ enum exi_poll_state {
 enum telemetry_kind {
     TM_LOG    = 1,  /* len bytes of kernel log text, ASCII, lines ending in \n (a line may be split across datagrams) */
     TM_STATUS = 2,  /* one station_status */
+    TM_CRASH  = 3,  /* one crash_report: the game took an unhandled exception */
 };
 
 /* what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
@@ -224,6 +228,60 @@ RELAY_STATIC_ASSERT(offsetof(struct station_status, module_len) == 4, station_st
 RELAY_STATIC_ASSERT(offsetof(struct station_status, module_load) == 8, station_status_module_load);
 RELAY_STATIC_ASSERT(offsetof(struct station_status, arena_hi) == 12, station_status_arena_hi);
 RELAY_STATIC_ASSERT(offsetof(struct station_status, log_dropped) == 16, station_status_log_dropped);
+
+/* What the game's module records in its OS error handler (lbcrash.c, installed
+ * with OSSetErrorHandler ahead of Melee's own crash screen, which still
+ * appears): the exception, the faulting address and the instruction words the
+ * PPC READS there through its data cache, the registers that matter and a
+ * short walk of the stack's LR saves. The Nintendont kernel forwards it as
+ * TM_CRASH; the relay shows it and the addresses are resolved offline against
+ * the module map and the vanilla symbol map (melee tools/resolve_crash.py).
+ */
+struct crash_report {
+    uint8_t  error;  /* OSError number: 2 DSI, 3 ISI, 5 alignment, 6 program (illegal instruction), 7 floating point */
+    uint8_t  _pad;
+    uint16_t count;  /* crashes recorded since boot (normally 1) */
+    uint32_t srr0;  /* faulting address */
+    uint32_t srr1;  /* MSR at the fault; for a program exception bit 0x80000 = illegal, 0x40000 = privileged, 0x20000 = trap */
+    uint32_t dsisr;
+    uint32_t dar;  /* data address for DSI / alignment */
+    uint32_t lr;
+    uint32_t sp;  /* r1 */
+    uint32_t r3;
+    uint32_t r4;
+    uint32_t fetched[4];  /* the four words at srr0 as the PPC reads them (0 when srr0 is not a readable MEM1 address): compared with the module file they tell stale cache from overwritten memory */
+    uint32_t stack[CRASH_STACK_DEPTH];  /* LR saves from the stack frames above sp, 0-filled */
+};  /* 84 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct crash_report) == 84, crash_report_size);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, error) == 0, crash_report_error);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, _pad) == 1, crash_report__pad);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, count) == 2, crash_report_count);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, srr0) == 4, crash_report_srr0);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, srr1) == 8, crash_report_srr1);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, dsisr) == 12, crash_report_dsisr);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, dar) == 16, crash_report_dar);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, lr) == 20, crash_report_lr);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, sp) == 24, crash_report_sp);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, r3) == 28, crash_report_r3);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, r4) == 32, crash_report_r4);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, fetched) == 36, crash_report_fetched);
+RELAY_STATIC_ASSERT(offsetof(struct crash_report, stack) == 52, crash_report_stack);
+
+/* Not on the wire: the shared-memory slot at CRASH_MAILBOX_PPC. The module
+ * writes report then seq (seq last, so a reader that sees a new seq sees a
+ * complete report); the kernel polls seq.
+ */
+struct crash_mailbox {
+    uint32_t            magic;  /* CRASH_MAGIC */
+    uint32_t            seq;  /* 0 = nothing recorded; incremented per crash */
+    struct crash_report report;
+};  /* 92 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct crash_mailbox) == 92, crash_mailbox_size);
+RELAY_STATIC_ASSERT(offsetof(struct crash_mailbox, magic) == 0, crash_mailbox_magic);
+RELAY_STATIC_ASSERT(offsetof(struct crash_mailbox, seq) == 4, crash_mailbox_seq);
+RELAY_STATIC_ASSERT(offsetof(struct crash_mailbox, report) == 8, crash_mailbox_report);
 
 /* Every message (request and response) begins with this header. */
 struct relay_hdr {

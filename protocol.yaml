@@ -65,6 +65,15 @@ constants:
   TELEMETRY_STATUS_MS:
     value: 5000
     doc: "a station sends a TM_STATUS datagram at least this often once it knows the relay"
+  CRASH_MAILBOX_PPC:
+    value: 0xD3003480
+    doc: "PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin."
+  CRASH_MAGIC:
+    value: 0x4D544352
+    doc: "'MTCR', first word of crash_mailbox"
+  CRASH_STACK_DEPTH:
+    value: 8
+    doc: "LR saves walked up the crashed stack in crash_report"
 
 enums:
   relay_cmd:
@@ -113,6 +122,7 @@ enums:
     values:
       TM_LOG:    {value: 1, doc: "len bytes of kernel log text, ASCII, lines ending in \\n (a line may be split across datagrams)"}
       TM_STATUS: {value: 2, doc: "one station_status"}
+      TM_CRASH:  {value: 3, doc: "one crash_report: the game took an unhandled exception"}
 
   module_state:
     doc: "what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule)"
@@ -213,6 +223,43 @@ structs:
       - {name: module_load,    type: u32, doc: "module load address (MOD_LOADED)"}
       - {name: arena_hi,       type: u32, doc: "the boot-info arena top (0x80000034) the host saw at load time; 0 = unset, the game then uses its built-in default"}
       - {name: log_dropped,    type: u32, doc: "log bytes discarded because the host's buffer was full"}
+
+  crash_report:
+    doc: >-
+      What the game's module records in its OS error handler (lbcrash.c,
+      installed with OSSetErrorHandler ahead of Melee's own crash screen,
+      which still appears): the exception, the faulting address and the
+      instruction words the PPC READS there through its data cache, the
+      registers that matter and a short walk of the stack's LR saves. The
+      Nintendont kernel forwards it as TM_CRASH; the relay shows it and the
+      addresses are resolved offline against the module map and the
+      vanilla symbol map (melee tools/resolve_crash.py).
+    size: 84
+    fields:
+      - {name: error,     type: u8,  doc: "OSError number: 2 DSI, 3 ISI, 5 alignment, 6 program (illegal instruction), 7 floating point"}
+      - {name: _pad,      type: u8}
+      - {name: count,     type: u16, doc: "crashes recorded since boot (normally 1)"}
+      - {name: srr0,      type: u32, doc: "faulting address"}
+      - {name: srr1,      type: u32, doc: "MSR at the fault; for a program exception bit 0x80000 = illegal, 0x40000 = privileged, 0x20000 = trap"}
+      - {name: dsisr,     type: u32}
+      - {name: dar,       type: u32, doc: "data address for DSI / alignment"}
+      - {name: lr,        type: u32}
+      - {name: sp,        type: u32, doc: "r1"}
+      - {name: r3,        type: u32}
+      - {name: r4,        type: u32}
+      - {name: fetched,   type: u32, array: 4, doc: "the four words at srr0 as the PPC reads them (0 when srr0 is not a readable MEM1 address): compared with the module file they tell stale cache from overwritten memory"}
+      - {name: stack,     type: u32, array: CRASH_STACK_DEPTH, doc: "LR saves from the stack frames above sp, 0-filled"}
+
+  crash_mailbox:
+    doc: >-
+      Not on the wire: the shared-memory slot at CRASH_MAILBOX_PPC. The
+      module writes report then seq (seq last, so a reader that sees a new
+      seq sees a complete report); the kernel polls seq.
+    size: 92
+    fields:
+      - {name: magic,  type: u32, doc: "CRASH_MAGIC"}
+      - {name: seq,    type: u32, doc: "0 = nothing recorded; incremented per crash"}
+      - {name: report, type: crash_report}
 
   relay_hdr:
     doc: "Every message (request and response) begins with this header."

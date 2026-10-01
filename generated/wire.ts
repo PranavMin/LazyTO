@@ -24,6 +24,9 @@ export const TELEMETRY_PORT = 7779; // UDP port on the relay that stations send 
 export const TELEMETRY_MAGIC_1 = 76; // 'L', second byte of telemetry_hdr ('M','L')
 export const TELEMETRY_TEXT_MAX = 480; // most log text bytes in one TM_LOG datagram; keeps relay_auth + telemetry_hdr + text well under one Ethernet frame
 export const TELEMETRY_STATUS_MS = 5000; // a station sends a TM_STATUS datagram at least this often once it knows the relay
+export const CRASH_MAILBOX_PPC = 3540006016; // PPC uncached MEM2 address of the crash_mailbox the game's module writes from its OS error handler; the Nintendont kernel reads it at 0x13003480 (same bytes) and sends a TM_CRASH when seq changes. Between HID_STATUS (0x13003440..0x1300344C) and slippi_settings (0x13003500). Not used by Dolphin.
+export const CRASH_MAGIC = 1297367890; // 'MTCR', first word of crash_mailbox
+export const CRASH_STACK_DEPTH = 8; // LR saves walked up the crashed stack in crash_report
 
 /** request/response command, echoed back in the response header */
 export enum RelayCmd {
@@ -65,6 +68,7 @@ export enum ExiPollState {
 export enum TelemetryKind {
   TM_LOG = 1, // len bytes of kernel log text, ASCII, lines ending in \n (a line may be split across datagrams)
   TM_STATUS = 2, // one station_status
+  TM_CRASH = 3, // one crash_report: the game took an unhandled exception
 }
 
 /** what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
@@ -276,6 +280,103 @@ export function decodeStationStatus(buf: Uint8Array, off = 0): StationStatus {
     module_load: dv.getUint32(off + 8, false),
     arena_hi: dv.getUint32(off + 12, false),
     log_dropped: dv.getUint32(off + 16, false),
+  };
+}
+
+
+// ---- crash_report (84 bytes) ----
+
+/** What the game's module records in its OS error handler (lbcrash.c, installed with OSSetErrorHandler ahead of Melee's own crash screen, which still appears): the exception, the faulting address and the instruction words the PPC READS there through its data cache, the registers that matter and a short walk of the stack's LR saves. The Nintendont kernel forwards it as TM_CRASH; the relay shows it and the addresses are resolved offline against the module map and the vanilla symbol map (melee tools/resolve_crash.py). */
+export interface CrashReport {
+  error: number; // OSError number: 2 DSI, 3 ISI, 5 alignment, 6 program (illegal instruction), 7 floating point
+  count: number; // crashes recorded since boot (normally 1)
+  srr0: number; // faulting address
+  srr1: number; // MSR at the fault; for a program exception bit 0x80000 = illegal, 0x40000 = privileged, 0x20000 = trap
+  dsisr: number;
+  dar: number; // data address for DSI / alignment
+  lr: number;
+  sp: number; // r1
+  r3: number;
+  r4: number;
+  fetched: number[]; // the four words at srr0 as the PPC reads them (0 when srr0 is not a readable MEM1 address): compared with the module file they tell stale cache from overwritten memory
+  stack: number[]; // LR saves from the stack frames above sp, 0-filled
+}
+export const CRASH_REPORT_SIZE = 84;
+
+export function encodeCrashReport(v: CrashReport): Uint8Array {
+  const bytes = new Uint8Array(CRASH_REPORT_SIZE);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint8(0, v.error);
+  dv.setUint16(2, v.count, false);
+  dv.setUint32(4, v.srr0, false);
+  dv.setUint32(8, v.srr1, false);
+  dv.setUint32(12, v.dsisr, false);
+  dv.setUint32(16, v.dar, false);
+  dv.setUint32(20, v.lr, false);
+  dv.setUint32(24, v.sp, false);
+  dv.setUint32(28, v.r3, false);
+  dv.setUint32(32, v.r4, false);
+  if (v.fetched.length > 4) {
+    throw new RangeError(`crash_report.fetched: ${v.fetched.length} entries, max ` + 4);
+  }
+  for (let i = 0; i < v.fetched.length; i++) {
+    dv.setUint32(36 + i * 4, v.fetched[i]!, false);
+  }
+  if (v.stack.length > CRASH_STACK_DEPTH) {
+    throw new RangeError(`crash_report.stack: ${v.stack.length} entries, max ` + CRASH_STACK_DEPTH);
+  }
+  for (let i = 0; i < v.stack.length; i++) {
+    dv.setUint32(52 + i * 4, v.stack[i]!, false);
+  }
+  return bytes;
+}
+
+export function decodeCrashReport(buf: Uint8Array, off = 0): CrashReport {
+  checkLen(buf, off, CRASH_REPORT_SIZE, 'crash_report');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    error: dv.getUint8(off + 0),
+    count: dv.getUint16(off + 2, false),
+    srr0: dv.getUint32(off + 4, false),
+    srr1: dv.getUint32(off + 8, false),
+    dsisr: dv.getUint32(off + 12, false),
+    dar: dv.getUint32(off + 16, false),
+    lr: dv.getUint32(off + 20, false),
+    sp: dv.getUint32(off + 24, false),
+    r3: dv.getUint32(off + 28, false),
+    r4: dv.getUint32(off + 32, false),
+    fetched: Array.from({ length: 4 }, (_, i) => dv.getUint32(off + 36 + i * 4, false)),
+    stack: Array.from({ length: CRASH_STACK_DEPTH }, (_, i) => dv.getUint32(off + 52 + i * 4, false)),
+  };
+}
+
+
+// ---- crash_mailbox (92 bytes) ----
+
+/** Not on the wire: the shared-memory slot at CRASH_MAILBOX_PPC. The module writes report then seq (seq last, so a reader that sees a new seq sees a complete report); the kernel polls seq. */
+export interface CrashMailbox {
+  magic: number; // CRASH_MAGIC
+  seq: number; // 0 = nothing recorded; incremented per crash
+  report: CrashReport;
+}
+export const CRASH_MAILBOX_SIZE = 92;
+
+export function encodeCrashMailbox(v: CrashMailbox): Uint8Array {
+  const bytes = new Uint8Array(CRASH_MAILBOX_SIZE);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint32(0, v.magic, false);
+  dv.setUint32(4, v.seq, false);
+  bytes.set(encodeCrashReport(v.report), 8);
+  return bytes;
+}
+
+export function decodeCrashMailbox(buf: Uint8Array, off = 0): CrashMailbox {
+  checkLen(buf, off, CRASH_MAILBOX_SIZE, 'crash_mailbox');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    magic: dv.getUint32(off + 0, false),
+    seq: dv.getUint32(off + 4, false),
+    report: decodeCrashReport(buf, off + 8),
   };
 }
 
