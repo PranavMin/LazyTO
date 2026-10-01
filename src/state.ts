@@ -1,4 +1,4 @@
-// state.ts -- the relay's in-memory station state (design.md section 6.3):
+// state.ts -- the relay's in-memory station state (architecture.md Relay):
 // which station holds which set, plus the per-station last action and the
 // sticky error flags the status page shows until the TO acks them.
 // Rebuilt after a relay restart by replaying the audit log (audit.ts).

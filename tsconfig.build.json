@@ -1,5 +1,5 @@
 {
-  // Production build (design.md section 10): `npm run build` -> dist/.
+  // Production build (architecture.md): `npm run build` -> dist/.
   // Extends the type-check config; rootDir is the repo root because
   // generated/wire.ts sits beside src/ and is compiled in place, never
   // copied. So src/main.ts lands at dist/src/main.js, and the root main.ts

@@ -1,5 +1,5 @@
 // resolve.ts -- turn the config's names into tonight's ids, once, at startup
-// (design.md section 6.3). The config names the tournament by its start.gg
+// (architecture.md Relay). The config names the tournament by its start.gg
 // short URL (e.g. "abbey"), which the TO moves to the new tournament every week,
 // and names the event and stream; their ids change every week, so the relay
 // looks them up instead of being re-pushed with new ids.

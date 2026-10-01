@@ -1,4 +1,4 @@
-// tcp.ts -- the Wii-facing TCP server (design.md sections 5-8). One request
+// tcp.ts -- the Wii-facing TCP server (architecture.md (Wire protocol, Error handling)). One request
 // per connection: read relay_hdr + payload, dispatch by cmd, write
 // relay_hdr + relay_resp (+ payload), close. All business logic for the
 // five commands lives here; upstream I/O goes through startgg.ts, the set
@@ -48,7 +48,7 @@ export interface RelayDeps {
   audit: AuditSink;
   streamStation: number;
   streamId: number;
-  /** Shared secret every request's relay_auth must carry (design R16). */
+  /** Shared secret every request's relay_auth must carry (decisions.md R16). */
   secret: string;
 }
 
@@ -106,7 +106,7 @@ export class RelayTcpServer {
 
   // ---- framing ----
 
-  // A request is relay_auth (the host's shared secret, design R16), then the
+  // A request is relay_auth (the host's shared secret, decisions.md R16), then the
   // game's relay_hdr + payload. A host that sends no relay_auth starts with
   // relay_hdr's 'M','T' instead of 'M','K': it is answered ST_BAD_SECRET
   // within its own framing, so the kiosk can say what is wrong.
@@ -272,7 +272,7 @@ export class RelayTcpServer {
         entries.push(toEntry(own, 1));
       } else {
         // The set left the cache (completed or reset upstream, e.g. by the
-        // TO -- design.md R6): the claim is stale, drop it.
+        // TO -- decisions.md R6): the claim is stale, drop it.
         state.release(station);
         audit.record({ type: 'release', station, setId: claim.setId, reason: 'set left cache' });
       }
@@ -458,7 +458,7 @@ function toEntry(s: CachedSet, state: 0 | 1): SetEntry {
  * Validate the wire game list against the claim and translate it for
  * start.gg: winner slots -> entrant ids, plus characters (chars.ts) and the
  * stage (stages.ts) when the Wii knew them -- the auto-score path fills them
- * from the match standings; a hand-scored game sends zeros (design.md R13).
+ * from the match standings; a hand-scored game sends zeros (decisions.md R13).
  * Returns an error msg string on bad data.
  */
 function validGames(
@@ -475,7 +475,7 @@ function validGames(
       gameNum: i + 1,
       winnerId: g.winner_slot === 1 ? claim.p1Id : claim.p2Id,
     };
-    // Characters and stage (design.md R13): sent when the Wii knew them
+    // Characters and stage (decisions.md R13): sent when the Wii knew them
     // (auto-scored games), omitted when it did not (0 / ChKind_None from a
     // hand-scored game) or when the value has no start.gg mapping. An
     // unmapped value never blocks the report -- the winner is what matters.

@@ -1,217 +1,261 @@
-# Raspberry Pi setup for the relay
+# Setting up the relay
 
-How to take a Raspberry Pi 5 with nothing on it to a running relay, from a Windows 11 PC, with no monitor or keyboard ever plugged into the Pi. Everything after the SD card is one script (`deploy/push.ps1`); that script is also how you update the relay later. Switching tournaments needs no push at all: the relay finds tonight's tournament, event and stream by name when it starts.
+This guide takes a Raspberry Pi with nothing on it to a running relay, from a Windows PC. You
+never plug a monitor or keyboard into the Pi. After the SD card is flashed, one script,
+`deploy/push.ps1`, installs the relay. The same script updates it later.
 
-Assumption: the Pi runs Raspberry Pi OS Lite (64-bit) and is on Wi-Fi. Windows on the Pi itself is not an option the relay supports (design.md §10: Linux + systemd).
+You set your event up once. The relay looks your tournament, event and stream up by name each
+time it starts, so a new week needs no push.
 
 ## What you need
 
-- Raspberry Pi 5 and its official 27 W USB-C power supply (a phone charger boots it but limits USB power and can brown out).
-- microSD card, 16 GB or more (A2-class is nicer, anything works), and a way to plug it into the PC.
-- The name and password of the Wi-Fi this PC is on. The Pi joins it for setup. The venue's Wi-Fi is added later (step 5). An Ethernet cable also works and needs nothing extra.
-- This repo with a filled `.env` (`STARTGG_TOKEN`), Node 22+ and npm, which you already have.
+- A Raspberry Pi 5 with its official power supply, or another Pi running Raspberry Pi OS. The
+  installer supports 64-bit and 32-bit systems.
+- A microSD card of 16 GB or more, and a way to plug it into the PC.
+- The name and password of a Wi-Fi network the PC is on. The Pi joins it for setup. You add the
+  venue's Wi-Fi later. An Ethernet cable also works.
+- On the PC: Windows 10 or 11, Git, Node.js 22 or newer, and a clone of this repo.
+- A start.gg API token from an admin of your tournament: start.gg, Developer Settings, Personal
+  Access Tokens.
 
-## 0. If the card already has something on it
+## 1. Make an SSH key on the PC
 
-Flashing erases the card. To keep the old system, image it first; Imager cannot read cards, so [deploy/backup-sd.ps1](../deploy/backup-sd.ps1) does it (raw sector read, gzipped on the fly, nothing on the card is touched):
+Windows includes `ssh`, `scp`, `ssh-keygen` and `tar`. In PowerShell, skip this step if
+`%USERPROFILE%\.ssh\id_ed25519.pub` already exists:
 
-```bash
-.\deploy\backup-sd.ps1 -List
-```
-
-shows the removable disks; then
-
-```bash
-.\deploy\backup-sd.ps1
-```
-
-(or `-DiskNumber N -Out <path>.img.gz`) relaunches itself as Administrator, asks you to confirm the disk, and writes `P:\Projects\pi-backups\pi-sd-<date>.img.gz`. It ends with a `done:` line giving the bytes read and the compressed size. To use that system again later: Imager → Operating System → Use custom → the `.img.gz` → a card of the same size or larger → Write.
-
-Two things learned the first time (2026-09-24, 128 GB card, USB 2.0 reader: 2 hours, 1.7 GB compressed):
-
-- Do not click inside the elevated window. A click puts the console in select mode (the title starts with "Select") and freezes the script at its next progress update. Press Esc in that window to resume.
-- The reader is the bottleneck; the whole card is read no matter how full it is. A USB 3 reader takes about a quarter of the time. If the old system has ssh enabled, booting it in the Pi and pulling the image over the network is faster still, about 25 minutes for 128 GB over Ethernet: `ssh pi@<host>.local "sudo dd if=/dev/mmcblk0 bs=4M status=none | gzip -1" > <path>.img.gz` from your own terminal (it asks for the Pi's password).
-
-## 1. One-time, on the PC: an SSH key
-
-Windows 11 ships `ssh`, `scp`, `ssh-keygen` and `tar`. In PowerShell:
-
-```bash
+```powershell
 ssh-keygen -t ed25519 -N '""' -f $env:USERPROFILE\.ssh\id_ed25519
 ```
 
-Skip this if `%USERPROFILE%\.ssh\id_ed25519.pub` already exists. Then copy the public key to the clipboard; you paste it into Imager in the next step:
+Then copy the public key to the clipboard. You paste it into Imager in the next step:
 
-```bash
+```powershell
 Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard
 ```
 
-## 2. Flash the card with Raspberry Pi Imager
+## 2. Flash the card
 
-Install Imager from https://www.raspberrypi.com/software/ (or `winget install RaspberryPiFoundation.RaspberryPiImager`). Insert the card and in Imager choose:
+Install Raspberry Pi Imager from https://www.raspberrypi.com/software/ or with
+`winget install RaspberryPiFoundation.RaspberryPiImager`. Insert the card and choose:
 
 | Screen | Choice |
-|--------|--------|
-| Raspberry Pi Device | Raspberry Pi 5 |
-| Operating System | Raspberry Pi OS (other) → **Raspberry Pi OS Lite (64-bit)** |
+|---|---|
+| Device | your Pi model |
+| Operating System | Raspberry Pi OS (other), then **Raspberry Pi OS Lite (64-bit)** |
 | Storage | the microSD card |
 
-Click Next. Imager 2.x then walks through customisation pages (in Imager 1.x the same fields sit behind an **Edit Settings** button under two tabs, General and Services). Fill in:
+Imager then asks about customisation. Fill in:
 
-| Page | Field | Value |
-|------|-------|-------|
-| Hostname | Hostname | `relay` (the guide and scripts assume `relay.local`) |
-| Localisation | Timezone / keyboard | yours |
-| User | Username / password | `pi` and a password of your choice (only needed if you ever plug in a keyboard) |
-| Wi-Fi | Network, password, country | **on**: the Wi-Fi this PC is on, its password, and your country (US). Without it a Pi with no cable never comes online. |
-| Remote Access | Enable SSH | on, **Use public key authentication**, paste the key from your clipboard (`Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard` puts it there again) |
-| Raspberry Pi Connect | | leave **off**; everything here runs over ssh on your own network |
+| Setting | Value |
+|---|---|
+| Hostname | `relay`. The guides and scripts use `relay.local`. |
+| Timezone and keyboard | yours |
+| Username and password | `pi` and a password of your choice |
+| Wi-Fi | the PC's Wi-Fi network, its password, and your country |
+| SSH | on, with **public key authentication**, and paste the key from your clipboard |
+| Raspberry Pi Connect | off |
 
-Confirm, Yes to erase the card, wait for "Write successful". The storage entry for a card in a USB reader shows up under the reader's name (for example "Mass Storage Device USB Device"), not the card's.
+Confirm, accept erasing the card, and wait for "Write successful". A card in a USB reader may
+appear under the reader's name.
 
 ## 3. First boot
 
-Card in the Pi, power in. Give it about 90 seconds (the first boot resizes the filesystem and reboots once, then joins the Wi-Fi). Then from PowerShell:
+Put the card in the Pi and power it on. Wait about 90 seconds while it resizes its filesystem
+and joins the Wi-Fi. Then, in PowerShell:
 
-```bash
+```powershell
 ssh pi@relay.local hostname
 ```
 
-Answer `yes` to the host-key prompt once. It should print `relay` with no password prompt. If `relay.local` does not resolve, see Troubleshooting.
+Answer `yes` to the host key prompt once. It prints `relay` with no password prompt. If
+`relay.local` does not resolve, see Troubleshooting below.
 
-## 4. Install the relay
+## 4. Describe your event
 
-From the repo root in PowerShell:
+In the repo folder, copy `.env.example` to `.env` and fill it in. `.env` is never committed.
 
-```bash
-.\deploy\push.ps1
+| Key | What it is |
+|---|---|
+| `STARTGG_TOKEN` | your start.gg API token |
+| `RELAY_SECRET` | a shared secret of 8 to 16 letters, digits, `-` or `_`. Every Wii's SD card carries the same value. Treat it like a password. |
+| `TOURNAMENT` | your tournament's start.gg short URL, the part after `start.gg/`. For one fixed tournament you can instead give its full slug, `tournament/<slug>`. |
+| `EVENT_NAME` | text that appears in your Melee singles event's name, for example `Melee Singles`. It must match exactly one singles event. |
+| `STREAM_NAME` | your stream's name exactly as in the tournament's stream settings |
+| `STREAM_STATION` | optional. The station number of the Wii on stream. Default 1. |
+| `WEEKLY_NAME_PREFIX` | optional, for a numbered weekly. See below. |
+| `TEST_TOURNAMENT` | optional. A test tournament's full slug, used by `push.ps1 -Test`. |
+
+**A weekly that moves its short URL.** Many weeklies keep one short URL and move it to the new
+tournament each week. The relay finds the tournament the short URL is on when it starts, so it
+follows the move with no push. If you also set `WEEKLY_NAME_PREFIX` to the weekly's name without
+its number, for example `My Bar Weekly #`, the relay has a backup. When the short URL is not
+moved yet, it takes the tournament named `My Bar Weekly #<number>` that starts nearest to now,
+within 30 days.
+
+**A test tournament first.** Create an unpublished tournament on start.gg with a Melee singles
+event, some placeholder entrants and your stream. Put its full slug in `TEST_TOURNAMENT`. An
+unpublished tournament is never listed by start.gg, so it always needs the full slug.
+
+## 5. Install the relay
+
+From the repo folder in PowerShell:
+
+```powershell
+.\deploy\push.ps1 -Test
 ```
 
-This compiles the relay (`npm run build`), writes a `config.json` (the token from `.env`; the tournament, event name and stream name from the script's parameters; stream station 1, ports 29470/29473, the production start.gg endpoint, audit dir `/var/lib/lazyto`; every field is described in the README's Config table), bundles it with `dist/`, `deploy/` and `package.json`, copies it to the Pi and runs `deploy/install.sh` there with sudo. The installer downloads the pinned Node 22 (sha256-checked), turns off Wi-Fi power saving, creates the unprivileged `relay` user, installs the systemd unit, starts it and waits for the relay's `relay up:` line. It ends with either `OK` and the status page URL or `FAILED` plus the last log lines.
+`-Test` points the relay at `TEST_TOURNAMENT`, so no Wii can touch a real bracket while you
+test. Leave it off to use `TOURNAMENT`. If PowerShell says running scripts is disabled, run it
+once as `powershell -ExecutionPolicy Bypass -File .\deploy\push.ps1 -Test`.
 
-The relay has two modes, chosen at push time:
+The script builds the relay, writes its config from `.env`, copies it to the Pi, and runs the
+installer there. The installer:
 
-| Push | Tournament | For |
-|------|------------|-----|
-| `.\deploy\push.ps1` | start.gg/abbey, whichever week it is | production, the default |
-| `.\deploy\push.ps1 -Test` | the unpublished SF Melee Discord Test | testing with fake entrants |
+- downloads a pinned Node.js 22 and checks it,
+- turns off Wi-Fi power saving, which adds lag,
+- creates an unprivileged `relay` user,
+- installs and starts the `lazyto-relay` service.
 
-While you are still testing, push with `-Test`, so a Wii can't touch a real bracket. The relay's first log lines show what it found and how:
+It ends with `OK` and the status page address, or `FAILED` and the last log lines. The relay's
+first log lines say what it found:
 
 ```
-resolved "tournament/sf-melee-discord-test" by full slug: SF Melee Discord Test (...), event "Melee Singles! (7:30 Start)" 1613010, stream "SFMelee" 1358079
-relay up: event 1613010, N sets cached, ...
+resolved "tournament/<slug>" by full slug: <name> (...), event "<event>" <id>, stream "<stream>" <id>
+relay up: event <id>, N sets cached, ...
 ```
 
-Then prove it from this PC without a Wii (it lists sets over the real wire protocol and fetches the status page):
+Check it from the PC without a Wii. This lists sets over the real Wii protocol and fetches the
+status page:
 
-```bash
+```powershell
 npx tsx scripts/smoke.ts relay.local
 ```
 
-and open http://relay.local:29473 in a browser. Its header names the tournament and event.
+Then open http://relay.local:29473 in a browser. The header names your tournament and event.
 
-If PowerShell refuses to run the script ("running scripts is disabled"), run it once as:
+When testing is done, push once without `-Test` to go live:
 
-```bash
-powershell -ExecutionPolicy Bypass -File .\deploy\push.ps1
-```
-
-## 5. The venue network
-
-**The venue's Wi-Fi.** Add it once, from home; the Pi keeps both networks and joins whichever is in range when it boots:
-
-```bash
-ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Venue Network Name"
-```
-
-It asks for the password (press Enter for an open network) and lists the saved networks.
-
-**Check once at the venue that a Wii can reach the Pi at all.** Guest Wi-Fi often has client isolation, which blocks device-to-device traffic: a Wii would then never reach the relay, whatever its address. With the Pi and this PC both on the venue Wi-Fi, `npx tsx scripts/smoke.ts relay.local` passing means the network allows it.
-
-**The Pi's address does not matter.** The Wiis find the relay themselves (design.md R15): the relay broadcasts a small discovery beacon every 2 s on UDP port 29471 to every network it is on, and each Wii (and Dolphin) uses the address the latest beacon came from. The status page footer shows where the beacon is going ("Discovery beacon to 192.168.1.255, last sent 1s ago"). So there is no static IP to set up, and each SD card's `tournament.cfg` has the station number, the stream flag and the relay's secret:
-
-```
-station=3
-stream=1
-secret=<your RELAY_SECRET>
-```
-
-**The secret.** The relay only acts on requests that carry its shared secret, so nobody else on the venue Wi-Fi can report scores (design.md R16). It is the `RELAY_SECRET` line in this repo's `.env`; the push script sends it to the Pi, and the same value goes on every SD card as `secret=` and into Dolphin as `SlippiRelaySecret` under `[Core]` in `User/Config/Dolphin.ini` for testing. Treat it like a password. A card without it shows "no secret in tournament.cfg"; a card with the wrong one shows "wrong relay secret", and the status page counts it.
-
-A Wii that has not heard a beacon yet shows its relay as 0.0.0.0 and answers "no relay found yet"; it picks the relay up within 2 s of both being on the same network. Old cards with `relay_ip=`/`relay_port=` lines still work: those lines are ignored.
-
-## 6. Per tournament
-
-1. Power the Pi on at the venue (or `sudo systemctl restart lazyto-relay`). The relay looks the tournament up again at every start, so there is nothing to push. Open the status page and check the header names tonight's tournament and event and the footer shows a set count.
-2. On start.gg, start every pool and phase (design.md §10); unstarted ones have preview-id sets the relay drops, and the status page warns until it is done.
-3. Check each Wii's `tournament.cfg` station number against its physical label; exactly one has `stream=1`, and that station number is the relay's `streamStation` (1 unless you pass `-StreamStation`).
-4. Boot one Wii and confirm the set list loads, or run the smoke test again.
-
-**Going live on Abbey** is one push without `-Test`:
-
-```bash
+```powershell
 .\deploy\push.ps1
 ```
 
-From then on the relay follows start.gg/abbey with no push per week. At every start it finds the tournament the `abbey` short URL is on, and picks its Melee singles event whose name contains "Melee Singles" and the stream named "SFMelee". If the short URL has not been moved to tonight's tournament yet, it takes the "Melee @ Abbey Tavern #N" whose start time is nearest to now instead (the log says `by nearest Abbey weekly`). That backup only picks the right week on or near the night, which is when the Pi boots. Verified against the real API on 2026-09-25: `abbey` resolved to Melee @ Abbey Tavern #160. It depends on the token belonging to an admin of the Abbey tournaments.
+## 6. The venue network
 
-## Sharing the matchcaller Pi instead
+**Add the venue's Wi-Fi.** Do this once, from home. The Pi keeps every saved network and joins
+whichever is in range:
 
-The venue already has a Pi on a monitor running matchcaller (a Pi Zero 2 W that shows start.gg/abbey's sets). The relay can live on it instead of a second Pi: it has no screen, listens on its own ports (29470 TCP, 29473 web), and installs into its own folders, a `relay` system user and one service, without touching matchcaller or its user. What sharing costs: the Zero 2 W's Wi-Fi is 2.4 GHz only (fine for Wiis), its 512 MB of RAM is enough for both (the relay uses well under 100 MB), and if both use the same start.gg token their calls add up against start.gg's limit of 80 a minute, so give the relay its own token.
-
-You need three things from that Pi, found once with a keyboard on it or by asking its owner: its hostname, the user it runs matchcaller as (matchcaller's scripts use `abbey`), and that user's password. Then, from this PC:
-
-1. Put your ssh key on it (asks for that user's password once):
-
-   ```bash
-   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh abbey@<hostname>.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
-   ```
-
-2. Check it is a supported system; it prints `aarch64` (64-bit) or `armv7l` (32-bit), and the installer handles both:
-
-   ```bash
-   ssh abbey@<hostname>.local uname -m
-   ```
-
-3. Install, pointing the push at it (it may ask for the user's sudo password):
-
-   ```bash
-   .\deploy\push.ps1 -Test -PiHost <hostname>.local -User abbey
-   ```
-
-Everything else in this guide then applies with `<hostname>.local` in place of `relay.local`. To take the relay off that Pi again, leaving matchcaller as it was:
-
-```bash
-ssh -t abbey@<hostname>.local sudo bash /opt/lazyto/deploy/uninstall.sh
+```powershell
+ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Venue Network Name"
 ```
+
+It asks for the password. Press Enter for an open network.
+
+**The Pi's address does not matter.** The relay announces itself every 2 seconds on UDP port
+29471, and each Wii uses the address the announcement came from. Some routers drop these
+broadcasts. A Wii that hears nothing asks the relay directly on UDP port 29472 and gets an
+answer back. There is no fixed IP address to set up.
+
+**Devices must be able to reach each other.** Guest networks often isolate clients, and then no
+Wii can reach the relay. With the PC and the Pi both on the venue Wi-Fi,
+`npx tsx scripts/smoke.ts relay.local` passing means the network allows it. Check this once
+before your first night.
+
+**Ports, if a firewall sits between the Wiis and the Pi:**
+
+| Port | Use |
+|---|---|
+| TCP 29470 | Wii requests |
+| UDP 29471 | the relay's announcement to the Wiis |
+| UDP 29472 | Wii logs and announcement requests |
+| TCP 29473 | the status page |
+
+## Relay settings reference
+
+`push.ps1` writes the relay's config to `/etc/lazyto/config.json` on the Pi. Don't edit it
+there: change `.env` and push again. Every field is required and checked at startup. Any problem
+stops the relay with a list of everything wrong.
+
+| Field | Meaning | Set from |
+|---|---|---|
+| `startggEndpoint` | start.gg's API address | always the production address |
+| `token` | start.gg API token | `STARTGG_TOKEN` |
+| `tournament` | short URL, or `tournament/<slug>` | `TOURNAMENT`, or `TEST_TOURNAMENT` with `-Test` |
+| `eventName` | picks the one Melee singles event whose name contains it | `EVENT_NAME` |
+| `streamName` | picks the stream with exactly this name | `STREAM_NAME` |
+| `weeklyNamePrefix` | the weekly backup described above. Empty turns it off. | `WEEKLY_NAME_PREFIX` |
+| `secret` | the shared secret every Wii must send | `RELAY_SECRET` |
+| `streamStation` | station number of the stream Wii | `STREAM_STATION`, default 1 |
+| `tcpPort` | port for Wii requests. The Wiis learn it from the announcement. | 29470 |
+| `httpPort` | status page port | 29473 |
+| `auditDir` | folder for the per-event log of every action | `/var/lib/lazyto` |
+
+## On the Pi
+
+| What | Where |
+|---|---|
+| Relay code | `/opt/lazyto` |
+| Node.js | `/opt/node` |
+| Config | `/etc/lazyto/config.json`, readable only by root and the relay |
+| Action log | `/var/lib/lazyto/<eventId>.jsonl`, and `wii-station-N.log` for each Wii's log |
+| Service | `lazyto-relay`, runs as the `relay` user, starts on boot |
 
 ## Day-to-day commands
 
 | What | Command |
-|------|---------|
-| Is it running, last lines | `ssh pi@relay.local systemctl status lazyto-relay` |
+|---|---|
+| Is it running | `ssh pi@relay.local systemctl status lazyto-relay` |
 | Live log | `ssh pi@relay.local journalctl -u lazyto-relay -f` |
-| Restart (also re-finds tonight's tournament) | `ssh pi@relay.local sudo systemctl restart lazyto-relay` |
-| Audit log of the current event | `ssh pi@relay.local sudo cat /var/lib/lazyto/<eventId>.jsonl` |
-| Update the relay after a code change | `.\deploy\push.ps1` (add `-Test` while testing) |
+| Restart, which also finds this week's tournament again | `ssh pi@relay.local sudo systemctl restart lazyto-relay` |
+| Update the relay | `.\deploy\push.ps1` |
 | Add a Wi-Fi network | `ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/add-wifi.sh "Name"` |
-| Shut down cleanly | `ssh pi@relay.local sudo poweroff` (pulling power is also fine; claims replay from the audit log on boot) |
+| Shut down | `ssh pi@relay.local sudo poweroff`. Pulling the power is also safe. |
+| Remove the relay | `ssh -t pi@relay.local sudo bash /opt/lazyto/deploy/uninstall.sh` |
 
-The relay starts on boot and restarts on failure. A wrong token, no Wi-Fi yet, no findable Abbey tournament, or an event name that matches no event or several makes it exit immediately. systemd tries again after 10 s, stretching to every 2 min, and never gives up, so it recovers on its own once the problem clears while keeping its start.gg calls well under the rate limit. Meanwhile `systemctl status` shows `activating (auto-restart)` and the journal shows the exact problem. After fixing something, `sudo systemctl restart lazyto-relay` starts it at once.
+The relay restarts by itself on failure. A wrong token, no Wi-Fi yet, or an event it can't find
+stops it at startup with a clear message in the log. It then retries every 10 seconds, slowing to
+every 2 minutes, so it recovers once the problem clears. After fixing something, restart it to
+try at once.
+
+## Sharing a Pi with other software
+
+The relay can run on a Pi that already does something else, such as a bracket display. It has
+no screen, uses its own ports, and installs only its own folders, one `relay` user and one
+service. It needs well under 100 MB of memory. If both programs use start.gg, give the relay its
+own token, because start.gg limits each token to 80 calls a minute.
+
+Put your SSH key on that Pi, then push with its name and user:
+
+```powershell
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <user>@<hostname>.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+```powershell
+.\deploy\push.ps1 -Test -PiHost <hostname>.local -User <user>
+```
+
+The uninstall command above removes only what the relay installed.
 
 ## Troubleshooting
 
-- **`relay.local` does not resolve.** Some routers block mDNS. Find the Pi's address in the router's client list (hostname `relay`) or, on the PC, `arp -a` after a `ping relay.local`, then use the address: `.\deploy\push.ps1 -PiHost 192.168.1.10`.
-- **The Pi never shows up after first boot.** It did not join the Wi-Fi: a mistyped network name or password in Imager, or a 5 GHz-only network name it could not see. Re-flash with the right values, or plug in an Ethernet cable once and add the network with `add-wifi.sh`.
-- **`Permission denied (publickey)`.** The key pasted into Imager is not the one `ssh` is offering. Check `type $env:USERPROFILE\.ssh\id_ed25519.pub` matches what you pasted; if the card was flashed without a key, re-flash (fastest) or plug in a keyboard and add it to `~/.ssh/authorized_keys`.
-- **FAILED with `no tournament with short URL "abbey"`.** The short URL is not on any tournament your token administers right now: it has not been moved to tonight's tournament yet, or the token belongs to someone who is not an admin. Move it on start.gg, then restart the relay.
-- **FAILED with `N Melee singles events ... have "Melee Singles" in the name`** (or `no ...`). Tonight's tournament has zero or several singles events with that in the name; the message lists them. Rename one on start.gg, or push a more specific `-EventName`.
-- **FAILED with `no streams named "SFMelee"`.** The stream was not added to tonight's tournament; add it under the tournament's stream settings, then restart.
-- **FAILED with "cannot read ..." or "must be ..." lines.** The generated config failed validation; fix the parameter you passed and push again.
-- **FAILED with a fetch or TLS error.** The Pi has no internet, or its clock is wrong right after first boot. Check `ssh pi@relay.local curl -sI https://api.start.gg` and `timedatectl`; then `sudo systemctl restart lazyto-relay`.
-- **Status page shows 0 sets.** No pool or phase is started on start.gg yet. The relay refreshes every 20 s; no restart needed after starting pools.
-- **A Wii shows "no secret in tournament.cfg" or "wrong relay secret".** Its SD card's `secret=` line is missing, mistyped, or from an old `.env`. Copy `RELAY_SECRET` from `.env` exactly. The status page footer shows refused requests with the Wii's address and station.
-- **The status page shows requests refused from an address that is not one of your Wiis.** Something else on the Wi-Fi is trying the relay. Nothing happened on start.gg; if it keeps up, change `RELAY_SECRET`, push, and update the cards.
-- **A Wii shows "no relay found yet" or relay 0.0.0.0.** It has not heard the relay's beacon: the Wii and the Pi are on different networks, or the Wi-Fi isolates clients. The status page footer shows where the beacon is going; `ssh pi@relay.local ip -4 addr show wlan0` shows the Pi's own address. Compare it with the Wii's network.
-- **A Wii shows "relay timeout".** It heard a beacon but cannot open a connection to that address: client isolation, or a firewall between the Wii's network and the Pi's.
+- **`relay.local` does not resolve.** Some routers block it. Find the Pi in the router's client
+  list, or run `ping relay.local` then `arp -a`, and use the address instead:
+  `.\deploy\push.ps1 -PiHost 192.168.x.y`.
+- **The Pi never appears after first boot.** It did not join the Wi-Fi: a typo in the network
+  name or password, or a 5 GHz-only network. Flash again, or plug in Ethernet once and add the
+  network with `add-wifi.sh`.
+- **`Permission denied (publickey)`.** The key in Imager is not the one `ssh` offers. Compare
+  `Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub` with what you pasted, and flash again if
+  needed.
+- **`FAILED` with `no tournament with short URL ...`.** No tournament you administer has that
+  short URL right now. Move it on start.gg, or check the token belongs to a tournament admin.
+  With `WEEKLY_NAME_PREFIX` set, this appears only when no matching weekly starts within 30 days.
+- **`FAILED` with `N Melee singles events ... have "<name>" in the name`.** `EVENT_NAME` matches
+  zero events or several. The message lists them. Make `EVENT_NAME` more specific and push again.
+- **`FAILED` with `no streams named "<name>"`.** Add the stream in the tournament's stream
+  settings, then restart the relay.
+- **`FAILED` with a fetch or TLS error.** The Pi has no internet, or its clock is wrong just
+  after first boot. Check `ssh pi@relay.local timedatectl`, then restart the relay.
+- **A config error from `push.ps1`.** A key is missing or malformed in `.env`. The message names
+  it.
+
+For problems on the night, see [night-of.md](night-of.md).

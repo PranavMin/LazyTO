@@ -1,4 +1,4 @@
-// beacon.test.ts -- relay discovery beacon (src/beacon.ts, design.md R15):
+// beacon.test.ts -- relay discovery beacon (src/beacon.ts, decisions.md R15):
 // the broadcast address math, and a real datagram received and decoded the
 // way a station will, taking the relay's address from the datagram source.
 

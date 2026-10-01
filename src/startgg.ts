@@ -1,4 +1,4 @@
-// startgg.ts -- the one place that talks to start.gg (design.md section 6.3).
+// startgg.ts -- the one place that talks to start.gg (architecture.md Relay).
 // GraphQL over HTTPS with the token, a token-bucket rate limiter (70 per
 // 60 s -- a guard under the API's 80/60 s, not a throttle), and retry on
 // 5xx only: max 2 retries, backoff 1 s then 3 s. Anything else fails
@@ -29,7 +29,7 @@ export class RateLimitedError extends Error {
 }
 
 // BracketSetGameDataInput as the relay uses it. stageId and selections are
-// present only when the Wii knew them (auto-scored games; design.md R13) --
+// present only when the Wii knew them (auto-scored games; decisions.md R13) --
 // a hand-scored game carries winner only.
 export interface GameDataInput {
   gameNum: number;
@@ -43,7 +43,7 @@ export interface GameDataInput {
 
 /** A set node as the event-sets query returns it (states 1 and 2 only). */
 export interface UpstreamSet {
-  id: number | string; // string = preview id (design.md R8)
+  id: number | string; // string = preview id (decisions.md R8)
   state: number;
   round: number;
   fullRoundText: string;

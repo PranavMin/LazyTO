@@ -1,6 +1,6 @@
 # protocol.yaml — single source of truth for the Wii <-> relay wire protocol.
 #
-# This file is design.md section 5 in machine-readable form. Everything on the
+# This file is architecture.md in machine-readable form. Everything on the
 # wire is defined here and nowhere else. Generated outputs (do not edit them):
 #
 #   generated/relay_proto.h   C header for the Melee decomp + Nintendont kernel
@@ -40,13 +40,13 @@ constants:
     doc: "player tag"
   BEACON_PORT:
     value: 29471
-    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address)"
+    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address)"
   BEACON_INTERVAL_MS:
     value: 2000
     doc: "the relay sends one relay_beacon per interval on every IPv4 interface"
   SECRET_LEN:
     value: 16
-    doc: "relay shared secret, printable ASCII, NUL-padded (design R16)"
+    doc: "relay shared secret, printable ASCII, NUL-padded (decisions.md R16)"
   AUTH_MAGIC_0:
     value: 0x4D
     doc: "'M', first byte of relay_auth"
@@ -96,7 +96,7 @@ enums:
       ST_STARTGG_ERROR: {value: 5, doc: "upstream rejected; see status page"}
       ST_RATE_LIMITED:  {value: 6}
       ST_INTERNAL:      {value: 7}
-      ST_BAD_SECRET:    {value: 8, doc: "relay_auth missing or its secret wrong; check secret= on the SD card (design R16)"}
+      ST_BAD_SECRET:    {value: 8, doc: "relay_auth missing or its secret wrong; check secret= on the SD card (decisions.md R16)"}
 
   exi_cmd:
     doc: >-
@@ -164,7 +164,7 @@ structs:
     fields:
       - {name: state,      type: u8,  doc: "enum exi_poll_state"}
       - {name: flags,      type: u8,  doc: "exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)"}
-      - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (design R10)"}
+      - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (decisions.md R10)"}
       - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
       - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
       - {name: host_opts,  type: u8,  doc: "exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)"}
@@ -172,7 +172,7 @@ structs:
 
   relay_beacon:
     doc: >-
-      Relay discovery (design R15). Not on the TCP wire: one UDP datagram,
+      Relay discovery (decisions.md R15). Not on the TCP wire: one UDP datagram,
       broadcast by the relay every BEACON_INTERVAL_MS to each IPv4
       interface's directed broadcast address, port BEACON_PORT. A station
       (Nintendont kernel, Slippi Dolphin forwarder) listens on BEACON_PORT,
@@ -195,7 +195,7 @@ structs:
 
   relay_auth:
     doc: >-
-      Relay shared secret (design R16). Not part of the game's messages: the
+      Relay shared secret (decisions.md R16). Not part of the game's messages: the
       host of the fake EXI device (Nintendont kernel, Slippi Dolphin
       forwarder) writes it on the TCP connection before the game's relay_hdr
       + payload, with the secret from its own config (tournament.cfg secret=,

@@ -1,4 +1,4 @@
-// scripts/probe.ts — live start.gg probe for design.md §11 R1 (assignStream
+// scripts/probe.ts — live start.gg probe for decisions.md R1 (assignStream
 // semantics) and R2 (reportBracketSet with gameData but no winnerId).
 //
 // Touches ONLY the test tournament configured in .env (see CLAUDE.md: the real
@@ -155,7 +155,7 @@ async function resetSet(label: string): Promise<void> {
 // --- read-only lookups (no mutations) ---------------------------------------
 
 // `node scripts/probe.ts --stages`: Melee's stage list with start.gg's ids, the
-// source for src/stages.ts (design.md section 6.3). Read-only; touches no set.
+// source for src/stages.ts (architecture.md Relay). Read-only; touches no set.
 async function listStages(): Promise<void> {
   const data = await gql(
     "videogame(id: 1) stages",
@@ -173,7 +173,7 @@ async function listStages(): Promise<void> {
 // `node scripts/probe.ts --tournament=<slug>`: what a tournament slug (full
 // slug or short URL, e.g. "abbey") resolves to: its events with game and
 // entrant type, and its streams. Read-only. Source for the relay's
-// slug-based event discovery (design.md section 6.3).
+// slug-based event discovery (architecture.md Relay).
 async function showTournament(slug: string): Promise<void> {
   const data = await gql(
     `tournament(slug: ${slug})`,

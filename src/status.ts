@@ -1,4 +1,4 @@
-// status.ts -- server-rendered status page on :29473 (design.md section 6.3,
+// status.ts -- server-rendered status page on :29473 (architecture.md Relay,
 // requirement F7). Read-only, no auth: the LAN is the trust boundary, same
 // as the TSH laptop. One row per station with its set, score, last action
 // (with the status and message the player saw), and any failed start.gg
@@ -31,9 +31,9 @@ export interface StatusDeps {
   streamStation: number;
   /** Tonight's tournament and event as resolve.ts found them, shown in the header so the TO can see it is the right week. */
   eventLabel: string;
-  /** Discovery beacon (design R15): where it is announcing the relay, and any send error. */
+  /** Discovery beacon (decisions.md R15): where it is announcing the relay, and any send error. */
   beacon: { status(): BeaconStatus };
-  /** Requests refused for their secret (design R16): a mis-copied SD card, or someone else on the Wi-Fi. */
+  /** Requests refused for their secret (decisions.md R16): a mis-copied SD card, or someone else on the Wi-Fi. */
   tcp: { refused(): RefusedStatus | null };
   /** Each Wii's own boot report: module load status and kernel log (telemetry.ts). */
   telemetry: { stations(): StationTelemetryRow[]; get(station: number): StationTelemetryRow | undefined; refused(): TelemetryRefused | null; beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null };

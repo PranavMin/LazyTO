@@ -1,10 +1,10 @@
 // fake-startgg.ts -- in-process fake of api.start.gg/gql/alpha for
-// integration tests (design.md section 9.2). Response shapes mirror what
+// integration tests (architecture.md "Development and testing"). Response shapes mirror what
 // scripts/probe.ts recorded on 2026-09-19 against the real test tournament
 // (event 1613010): mutations answer with the set's {id state ...} selection,
 // semantic failures are HTTP 200 with a GraphQL "errors" array, and the Game
 // OUTPUT type has orderNum, not gameNum -- a query selecting gameNum on games
-// is rejected exactly like the real schema rejects it (design.md section 6.3
+// is rejected exactly like the real schema rejects it (architecture.md Relay
 // gotcha). gameNum exists only inside the BracketSetGameDataInput variables.
 //
 // Behavior verified by the probe and reproduced here:
@@ -14,7 +14,7 @@
 //     (old ids deleted, fresh ids created), set stays state 2.
 //   - reportBracketSet with winnerId: same overwrite, state -> 3.
 //   - resetSet: state -> 1, games cleared, stream assignment KEPT (verified
-//     live 2026-09-20, design.md section 5.6).
+//     live 2026-09-20, architecture.md "start.gg calls").
 //
 //   - currentUser.tournaments(filter: {tournamentView: "admin"}): paged
 //     {slug, shortSlug} of the token owner's tournaments (resolve.ts).
@@ -40,7 +40,7 @@ export interface FakeGame {
 }
 
 export interface FakeSet {
-  id: number | string; // string ids are preview sets (design.md R8)
+  id: number | string; // string ids are preview sets (decisions.md R8)
   state: 1 | 2 | 3;
   round: number; // start.gg round: positive winners, negative losers
   fullRoundText: string;
@@ -355,7 +355,7 @@ export class FakeStartgg {
     set.state = 1;
     set.games = [];
     // set.stream stays: the real resetSet does not clear a stream assignment
-    // (verified live 2026-09-20, design.md section 5.6).
+    // (verified live 2026-09-20, architecture.md "start.gg calls").
     return { status: 200, body: JSON.stringify({ data: { resetSet: { id: set.id, state: set.state } } }) };
   }
 }
@@ -363,7 +363,7 @@ export class FakeStartgg {
 // ---- default fixture: the shape of the real test tournament ----
 // Event 1613010, 16 dummy entrants Alpha..Papa. Pool 1 is started (numeric
 // set ids like the probe's 107949994); pool 2 (3292311) is deliberately
-// unstarted, so its sets have preview_* string ids (design.md R8).
+// unstarted, so its sets have preview_* string ids (decisions.md R8).
 // Matches the live event's shape (2026-09-20 run): sets are Bo5 and the
 // first round is "Winners Quarter-Final".
 

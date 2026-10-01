@@ -1,5 +1,5 @@
 // chars.ts -- Melee external character id -> start.gg character id
-// (design.md section 6.3). The wire carries the CSS ckind value
+// (architecture.md Relay). The wire carries the CSS ckind value
 // (CharacterKind, the EXTERNAL id ordering, sessions 5's finding); start.gg
 // numbers Melee's cast 1..26 alphabetically. Both tables are frozen -- the
 // cast has not changed since 2001. Verified against the real API 2026-09-19:

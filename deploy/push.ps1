@@ -48,7 +48,7 @@ foreach ($line in Get-Content $envPath) {
   if ($line -match '^\s*([A-Z_]+)=(.*)$') { $dotenv[$Matches[1]] = $Matches[2].Trim() }
 }
 if (-not $dotenv['STARTGG_TOKEN']) { throw 'STARTGG_TOKEN missing from .env' }
-# The relay's shared secret (design R16): the same value is secret= on every
+# The relay's shared secret (decisions.md R16): the same value is secret= on every
 # Wii's SD card and SlippiRelaySecret in Dolphin. 8-16 letters, digits, - or _.
 if ($dotenv['RELAY_SECRET'] -notmatch '^[A-Za-z0-9_-]{8,16}$') {
   throw 'RELAY_SECRET in .env must be 8-16 letters, digits, - or _ (it goes on every SD card as secret=)'
@@ -84,7 +84,7 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -Recurse (Join-Path $repo 'dist') (Join-Path $stage 'dist')
 Copy-Item -Recurse (Join-Path $repo 'deploy') (Join-Path $stage 'deploy')
 Copy-Item (Join-Path $repo 'package.json') $stage   # "type": "module", needed beside dist/
-Copy-Item (Join-Path $repo 'README.md') $stage      # night-of table, referenced by the unit
+Copy-Item (Join-Path $repo 'README.md') $stage
 $config = [ordered]@{
   startggEndpoint = 'https://api.start.gg/gql/alpha'
   token         = $dotenv['STARTGG_TOKEN']

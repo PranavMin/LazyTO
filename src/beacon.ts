@@ -1,4 +1,4 @@
-// beacon.ts -- relay discovery (design.md R15). Every BEACON_INTERVAL_MS the
+// beacon.ts -- relay discovery (decisions.md R15). Every BEACON_INTERVAL_MS the
 // relay broadcasts one relay_beacon datagram (protocol.yaml) to the directed
 // broadcast address of each of its IPv4 interfaces, UDP port BEACON_PORT.
 // Stations take the datagram's source address plus its tcp_port as the relay,

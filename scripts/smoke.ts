@@ -5,7 +5,7 @@
 //
 // Run: npx tsx scripts/smoke.ts relay.local          (ports 29470 / 29473)
 //      npx tsx scripts/smoke.ts 192.168.1.10 29470 29473
-// Sends RELAY_SECRET from .env as its relay_auth, like a Wii (design R16).
+// Sends RELAY_SECRET from .env as its relay_auth, like a Wii (decisions.md R16).
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

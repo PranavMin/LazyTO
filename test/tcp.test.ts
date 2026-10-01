@@ -1,5 +1,5 @@
 // Integration tests for the TCP server: every relay-side row of the
-// design.md section 8 error table, plus the happy paths. The first two rows
+// architecture.md error table, plus the happy paths. The first two rows
 // of that table (no tournament.cfg, relay unreachable) are Wii-side
 // behaviors with no relay code to test; the closest relay-side property --
 // a connection that is not our protocol gets dropped, not answered -- is
@@ -130,7 +130,7 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(r.resp.msg, 'started on station 3');
   });
 
-  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (design.md R13)', async () => {
+  await t.test('REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (decisions.md R13)', async () => {
     // Game 1: Alpha (slot 1) wins as Fox (ext 2) vs Marth (ext 9) on
     // Battlefield (StKind 0x1F) -- what an auto-scored game carries.
     const r = await wii.reportScore(SET, [game(1, 2, 9, 0x1f)]);
@@ -357,7 +357,7 @@ test('claim guards', async (t) => {
     assert.equal(r.resp.msg, 'in progress on start.gg');
   });
 
-  await t.test('an out-of-range character or stage value never blocks the report (design.md R13)', async () => {
+  await t.test('an out-of-range character or stage value never blocks the report (decisions.md R13)', async () => {
     // ext 77 has no start.gg character mapping and 0x15 (Akaneia) no stage
     // mapping: both are dropped, the mapped Marth selection and the winner
     // still go through.
@@ -404,7 +404,7 @@ test('abandon (section 5.6)', async (t) => {
   });
 
   await t.test('abandoning a stream set leaves the stream assigned upstream', async () => {
-    // Verified live 2026-09-20 (design.md section 5.6): resetSet does not
+    // Verified live 2026-09-20 (architecture.md "start.gg calls"): resetSet does not
     // clear a stream assignment; only the TO can, by hand.
     const streamWii = env.wii(STREAM_STATION, 1);
     await streamWii.startSet(107949995, 1);
@@ -437,7 +437,7 @@ test('LIST_SETS caps at the wire limit of MAX_SETS rows', async (t) => {
   assert.equal(listed.length, MAX_SETS);
 });
 
-// ---- shared secret (design R16) ----
+// ---- shared secret (decisions.md R16) ----
 
 test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream or on the status page', async () => {
   const env = await setup();

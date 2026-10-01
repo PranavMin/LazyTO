@@ -12,11 +12,8 @@
     - give it a real visual pass (it has had none - written blind, no render seen);
     - consider a big-type "quick card" variant with only the CSS scoring binds;
     - bump the build footer whenever the poster is re-verified.
-  MODULE ERA (2026-09-24): the kiosk is now a module on a stock ISO and stage
-  striking / rumble toggle come from the venue's own codes. Re-verify on the
-  venue Wii: does Y still restore struck stages? are only the six legal stages
-  shown? (both were our code before). Fix the SSS card accordingly.
-  Published copy: https://claude.ai/artifact/KGp3kXq5udrMwSVqAMbuSn (private).
+  Stage select comes from the venue's own Slippi codes, so the poster does not
+  describe its binds. Verify the character select cards on a real Wii.
 -->
 <title>LazyTO Controls Poster</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;700&display=swap">
@@ -225,14 +222,9 @@
     <section class="screen">
       <header><span class="n">3</span> Stage select</header>
       <div class="body">
-        <p class="lead">Only the six legal stages are on the screen. Strike right here: a struck stage disappears and can't be picked, by hand or by random.</p>
-        <div class="bind"><div class="keys"><span class="k x">X</span></div><div class="does"><b>Strike the stage under the cursor</b></div></div>
-        <div class="bind"><div class="keys"><span class="k y">Y</span></div><div class="does">Bring every struck stage back<small>Mis-strike? Y and start over</small></div></div>
+        <p class="lead">Stage striking works the way your venue's Slippi setup does. LazyTO doesn't change this screen.</p>
         <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does">Pick the stage</div></div>
-        <div class="bind"><div class="keys"><span class="k a">A</span></div><div class="does">On the random icon: random from what's left</div></div>
         <div class="bind"><div class="keys"><span class="k b">B</span></div><div class="does">Back to character select</div></div>
-        <div class="sep"></div>
-        <p class="lead">Strikes clear every time you come back to this screen, so strike fresh for each game (loser of the last game picks, as usual).</p>
         <div class="sep"></div>
         <p class="lead"><b>After the game</b> you land back on character select with the score already updated (<code>GAME 2 TO MANGO</code>). Quitting with L+R+A+Start is a no contest and is not scored.</p>
       </div>
@@ -254,7 +246,7 @@
       <h3>Already set for you</h3>
       <ul>
         <li>4 stock, 8:00, items off</li>
-        <li>UCF 0.8 and neutral spawns</li>
+        <li>Your venue's usual settings, such as UCF and neutral spawns</li>
         <li>All characters and stages unlocked</li>
         <li>Music off; a handwarmer shows a count-up clock top-left that goes red after 1:00</li>
       </ul>
@@ -271,6 +263,6 @@
 
   <div class="foot">
     <span>Wrong set started, or a score you can't fix with undo? Get the TO before ending the set.</span>
-    <span>LazyTO &middot; module build 2026-09-30 (set list and CSS cards match the shipped screens; verified on a Wii 2026-09-30)</span>
+    <span>LazyTO &middot; module build 2026-09-30 (set list verified on a Wii; character select cards verified in development)</span>
   </div>
 </main>

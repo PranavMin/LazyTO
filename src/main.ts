@@ -1,4 +1,4 @@
-// main.ts -- process entry point (design.md sections 6.3 and 10). Reads the
+// main.ts -- process entry point (architecture.md (Relay, Deployment)). Reads the
 // config path from the CONFIG environment variable (the systemd unit sets
 // it), validates everything, resolves the configured tournament short URL,
 // event name and stream name to tonight's ids (resolve.ts), does one cache
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
     secret: config.secret,
   });
   await tcp.listen(config.tcpPort);
-  // Stations find the relay from this broadcast (design R15); started only
+  // Stations find the relay from this broadcast (decisions.md R15); started only
   // once TCP is listening, so a station never learns an address that refuses.
   const beacon = new RelayBeacon({ tcpPort: config.tcpPort, eventId: ev.eventId });
   await beacon.start();

@@ -1,7 +1,7 @@
 /* relay_proto.h -- GENERATED from protocol.yaml by tools/gen_protocol.py -- DO NOT EDIT.
  *
  * Wire protocol between the Wii (Melee decomp / Nintendont kernel) and the
- * relay on the Pi. See design.md section 5.
+ * relay on the Pi. See docs/architecture.md.
  *
  * All integers big-endian on the wire; PowerPC is big-endian, so these
  * structs are sent and received as-is with zero byte-swapping.
@@ -42,9 +42,9 @@ typedef unsigned long uint32_t;
 #define MSG_LEN             30  /* human-readable status text in relay_resp */
 #define ROUND_LEN           24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
 #define TAG_LEN             16  /* player tag */
-#define BEACON_PORT         29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (design R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_PORT         29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address) */
 #define BEACON_INTERVAL_MS  2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
-#define SECRET_LEN          16  /* relay shared secret, printable ASCII, NUL-padded (design R16) */
+#define SECRET_LEN          16  /* relay shared secret, printable ASCII, NUL-padded (decisions.md R16) */
 #define AUTH_MAGIC_0        77  /* 'M', first byte of relay_auth */
 #define AUTH_MAGIC_1        75  /* 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so */
 #define TELEMETRY_PORT      29472  /* UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from */
@@ -74,7 +74,7 @@ enum relay_status {
     ST_STARTGG_ERROR = 5,  /* upstream rejected; see status page */
     ST_RATE_LIMITED  = 6,
     ST_INTERNAL      = 7,
-    ST_BAD_SECRET    = 8,  /* relay_auth missing or its secret wrong; check secret= on the SD card (design R16) */
+    ST_BAD_SECRET    = 8,  /* relay_auth missing or its secret wrong; check secret= on the SD card (decisions.md R16) */
 };
 
 /* Command byte on the fake relay EXI device. Shared by the game side (lbrelayexi.c), Slippi Dolphin's forwarder, and Nintendont's RelayEXI; not part of the TCP wire format. Values chosen clear of Slippi's EXI command space, which extends to 0xE5 (CMD_GET_RANK_VISIBILITY in EXI_DeviceSlippi.h). */
@@ -135,7 +135,7 @@ enum module_state {
 struct exi_poll_hdr {
     uint8_t  state;  /* enum exi_poll_state */
     uint8_t  flags;  /* exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0) */
-    uint16_t station;  /* tournament.cfg station; 0 in Dolphin (design R10) */
+    uint16_t station;  /* tournament.cfg station; 0 in Dolphin (decisions.md R10) */
     uint32_t relay_ip;  /* relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown */
     uint16_t relay_port;  /* relay TCP port; 0 = unknown */
     uint8_t  host_opts;  /* exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin) */
@@ -151,7 +151,7 @@ RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, relay_port) == 8, exi_poll_hdr
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, host_opts) == 10, exi_poll_hdr_host_opts);
 RELAY_STATIC_ASSERT(offsetof(struct exi_poll_hdr, host_build) == 11, exi_poll_hdr_host_build);
 
-/* Relay discovery (design R15). Not on the TCP wire: one UDP datagram,
+/* Relay discovery (decisions.md R15). Not on the TCP wire: one UDP datagram,
  * broadcast by the relay every BEACON_INTERVAL_MS to each IPv4 interface's
  * directed broadcast address, port BEACON_PORT. A station (Nintendont kernel,
  * Slippi Dolphin forwarder) listens on BEACON_PORT, ignores datagrams whose
@@ -180,10 +180,10 @@ RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, tcp_port) == 4, relay_beacon_t
 RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, _pad2) == 6, relay_beacon__pad2);
 RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, event_id) == 8, relay_beacon_event_id);
 
-/* Relay shared secret (design R16). Not part of the game's messages: the host
- * of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder) writes
- * it on the TCP connection before the game's relay_hdr + payload, with the
- * secret from its own config (tournament.cfg secret=, Dolphin
+/* Relay shared secret (decisions.md R16). Not part of the game's messages: the
+ * host of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder)
+ * writes it on the TCP connection before the game's relay_hdr + payload, with
+ * the secret from its own config (tournament.cfg secret=, Dolphin
  * SlippiRelaySecret). The relay compares the secret with its config in
  * constant time and answers a missing or wrong one with ST_BAD_SECRET without
  * acting on the request. Responses carry no relay_auth. Plaintext on the LAN:

@@ -6,7 +6,7 @@
 // module silently refused to load and only the SD log said why).
 //
 // Every datagram is relay_auth + telemetry_hdr + payload. A wrong or missing
-// secret is dropped and counted, exactly like a TCP request (design R16), so
+// secret is dropped and counted, exactly like a TCP request (decisions.md R16), so
 // nobody else on the venue Wi-Fi can paint a station's row. Nothing is ever
 // sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
 // lines cut to MAX_LINE_LEN.

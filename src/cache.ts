@@ -1,7 +1,7 @@
-// cache.ts -- the pending-set cache (design.md section 6.3). One upstream
+// cache.ts -- the pending-set cache (architecture.md Relay). One upstream
 // query, refreshed every 20 s; everything the Wiis can see comes from here.
 //
-// Preview set ids (design.md R8, option a): a set in an unstarted pool has a
+// Preview set ids (decisions.md R8, option a): a set in an unstarted pool has a
 // string id like preview_3292311_1_1, which cannot be a uint32 on the wire.
 // The cache DROPS those sets and records a warning for the status page; the
 // per-tournament setup checklist says to start all pools before doors.

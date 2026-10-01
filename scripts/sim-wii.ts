@@ -1,4 +1,4 @@
-// sim-wii.ts -- load test (design.md section 9.2): 12 fake stations drive
+// sim-wii.ts -- load test (architecture.md "Development and testing"): 12 fake stations drive
 // the relay through list -> start -> score x3 -> end in a loop, paced like a
 // venue (one button press every ~12 s per station). Asserts at the end:
 //   - peak upstream call rate (any 60 s window, cache refreshes included)

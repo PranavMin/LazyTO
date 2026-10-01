@@ -1,5 +1,5 @@
 // stages.ts -- Melee internal stage id (StKind) -> start.gg stage id
-// (design.md section 6.3 / R13). The wire carries the game's own StKind (the
+// (architecture.md Relay / decisions.md R13). The wire carries the game's own StKind (the
 // value in the start rules, melee/src/melee/gr/forward.h); start.gg numbers
 // Melee's 29 selectable stages 1..29. Both tables are frozen. The start.gg side
 // was read from the real API 2026-09-22 (`node scripts/probe.ts --stages`:

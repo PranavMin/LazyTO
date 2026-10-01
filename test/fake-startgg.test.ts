@@ -115,7 +115,7 @@ test('fake start.gg', async (t) => {
     });
     assert.equal(json.data.resetSet.state, 1);
     assert.equal(fake.getSet(SET).games.length, 0);
-    // Verified live 2026-09-20 (design.md section 5.6): the real resetSet
+    // Verified live 2026-09-20 (architecture.md "start.gg calls"): the real resetSet
     // does not clear the stream assigned by the earlier assignStream.
     assert.equal(fake.getSet(SET).stream?.id, 1358079);
   });

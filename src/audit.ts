@@ -1,4 +1,4 @@
-// audit.ts -- append-only JSONL audit log (design.md section 6.3): every
+// audit.ts -- append-only JSONL audit log (architecture.md Relay): every
 // request, response, and upstream call, one JSON object per line with a
 // timestamp. Named <eventId>.jsonl so each tournament gets its own file
 // (section 10). Writes are synchronous appends -- the request rate is a few

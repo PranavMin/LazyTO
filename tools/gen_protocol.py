@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the wire-protocol sources from protocol.yaml (design.md section 5).
+"""Generate the wire-protocol sources from protocol.yaml (architecture.md).
 
 Outputs (committed; never edit by hand):
     generated/relay_proto.h   packed big-endian structs + _Static_asserts,
@@ -248,7 +248,7 @@ def emit_c(p: Protocol) -> str:
     w(f"/* relay_proto.h -- {GENERATED_BANNER}")
     w(" *")
     w(" * Wire protocol between the Wii (Melee decomp / Nintendont kernel) and the")
-    w(" * relay on the Pi. See design.md section 5.")
+    w(" * relay on the Pi. See docs/architecture.md.")
     w(" *")
     w(" * All integers big-endian on the wire; PowerPC is big-endian, so these")
     w(" * structs are sent and received as-is with zero byte-swapping.")
@@ -348,7 +348,7 @@ def emit_ts(p: Protocol) -> str:
     w = out.append
     w(f"// wire.ts -- {GENERATED_BANNER}")
     w("//")
-    w("// Struct encode/decode for the Wii <-> relay protocol (design.md section 5).")
+    w("// Struct encode/decode for the Wii <-> relay protocol (architecture.md).")
     w("// All integers big-endian. Strings are ASCII, NUL-padded, not NUL-terminated")
     w("// if full; encode silently truncates over-long strings and replaces")
     w("// non-printable-ASCII characters with '?'. _pad and variable-array count")
@@ -409,7 +409,7 @@ def emit_ts(p: Protocol) -> str:
         _ts_decode(w, st, p)
 
     w("")
-    w("// ---- message map (design.md section 5): request struct after relay_hdr,")
+    w("// ---- message map (architecture.md): request struct after relay_hdr,")
     w("// ---- payload struct after relay_resp in an ST_OK response ----")
     w("")
     cmd_enum = _cmd_enum_name(p)

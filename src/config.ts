@@ -1,5 +1,5 @@
 // config.ts -- load and validate /etc/lazyto/config.json
-// (design.md section 6.3). Every field is required, every field is checked,
+// (architecture.md Relay). Every field is required, every field is checked,
 // there are no defaults; any problem is a ConfigError listing everything
 // wrong so one restart fixes it all. main.ts turns that into a non-zero exit.
 //
@@ -26,7 +26,7 @@ export interface Config {
   eventName: string; // e.g. "Melee Singles"
   streamName: string; // the stream's name in the tournament's stream settings
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "Melee @ Abbey Tavern #"
-  secret: string; // shared with every station's relay_auth (design R16)
+  secret: string; // shared with every station's relay_auth (decisions.md R16)
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   tcpPort: number;
   httpPort: number;

@@ -30,10 +30,10 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 
 ## 4. Cleanup
 
-- [ ] Review all documentation for accuracy against the shipped build.
-- [ ] Split `docs/design.md`: architecture and protocol stay; R1-R16 to `decisions.md`; dated progress to `changelog.md`; `sessions.md`, `bootstrap-audit.md`, upstream-sync notes to `docs/history/`.
+- [x] Review all documentation; rewrite for a general audience (no personal paths or venue names).
+- [x] Split the old design doc into `architecture.md`, `decisions.md` and `changelog.md`; build-history docs removed.
 - [ ] Split dev tools from user-facing builds: dev-only switches, diagnostics and scripts out of the release loader, module and Pi bundle; dev tools from session scratchpads into `tools/`.
-- [ ] `.env.example` covering every key; config errors name the `.env` key.
+- [x] `.env.example` covering every key; venue values moved from the code to `.env`.
 - [ ] General code cleanup across the four repos.
 
 ## 5. Release packaging
@@ -44,6 +44,7 @@ Exit: two consecutive weeklies with zero manual start.gg edits and no card refla
 
 ## 6. Operator docs
 
-- [ ] `setup.md`: Pi flash to first beacon.
-- [ ] `night-of.md`: arrival, status page checks, failure table.
-- [ ] Kiosk poster verified against the shipped build and printed once.
+- [x] `pi-setup.md`: Pi flash to first beacon.
+- [x] `night-of.md`: arrival, status page checks, failure table.
+- [ ] Kiosk poster: character select cards verified on a real Wii, then printed once.
+- [ ] Publish the first release so operators don't need to build `tournament.bin` and the loader (`wii-setup.md` points at it).
