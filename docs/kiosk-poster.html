@@ -113,7 +113,8 @@
   .k.b { background: var(--btn-b); }
   .k.x, .k.y { background: var(--btn-xy); color: var(--ink); border-radius: 11px; width: 22px; }
   .k.z { background: var(--btn-z); border-radius: 5px; }
-  .k.c { background: var(--btn-c); color: var(--ink); font-size: 11px; width: 26px; border-radius: 13px; }
+  .k.c { background: var(--btn-c); color: var(--ink); font-size: 12px; width: auto; height: 24px; padding: 0 6px 0 7px; gap: 3px; border-radius: 12px; display: inline-flex; align-items: center; }
+  .k.c .arr { font-family: Arial, sans-serif; font-size: 11px; line-height: 1; }
   .k.l { background: var(--btn-l); border-radius: 5px; width: 24px; font-size: 11px; }
   .k.st { background: var(--btn-d); font-size: 9px; width: 26px; border-radius: 13px; }
   .k.d { background: var(--btn-d); border-radius: 4px; font-size: 12px; }
@@ -208,10 +209,10 @@
         <div class="bind"><div class="keys"><span class="k l">L</span><span class="plus">+</span><span class="k l">R</span></div><div class="does"><b>I am the player named first</b> (hold 1 s)</div></div>
         <div class="sep"></div>
         <span class="tag">Corrections only &mdash; hold Z + flick the C-stick</span>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&larr;</span></div><div class="does"><b>Give the left player a game</b></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&rarr;</span></div><div class="does"><b>Give the right player a game</b></div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&darr;</span></div><div class="does">Undo the last game</div></div>
-        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C&uarr;</span></div><div class="does"><b>End the set</b> (hold 1 s)</div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C<span class="arr">&#9664;</span></span></div><div class="does"><b>Give the left player a game</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C<span class="arr">&#9654;</span></span></div><div class="does"><b>Give the right player a game</b></div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C<span class="arr">&#9660;</span></span></div><div class="does">Undo the last game</div></div>
+        <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k c">C<span class="arr">&#9650;</span></span></div><div class="does"><b>End the set</b> (hold 1 s)</div></div>
         <div class="sep"></div>
         <div class="bind"><div class="keys"><span class="k z">Z</span><span class="plus">+</span><span class="k x">X</span></div><div class="does"><b>Handwarmer</b> (not scored)</div></div>
         <div class="bind"><div class="keys"><span class="k d">&uarr;</span><span class="k d">&darr;</span></div><div class="does">D-pad: rumble on / off for your port</div></div>
