@@ -314,6 +314,7 @@ export class RelayTcpServer {
         // TO -- decisions.md R6): the claim is stale, drop it.
         state.release(station);
         audit.record({ type: 'release', station, setId: claim.setId, reason: 'set left cache' });
+        this.deps.archive.setAbandoned(claim.setId);
       }
     }
 
