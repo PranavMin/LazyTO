@@ -38,24 +38,22 @@ python kiosk/tools/build_module.py
 
 Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
-The build needs no `main.dol`: hook addresses are checked against `splits.txt` and the guard
-word is the constant `GUARD_WORD`. With the DOL present it also checks both against the DOL
-(the guard line says "checked against main.dol"). CI's `kiosk` workflow runs the same build and
-uploads `tournament.bin` as the `tournament-bin` artifact.
+The build uses no `main.dol`: hook addresses are checked against `splits.txt` and the guard
+word is the constant `GUARD_WORD`. CI's `kiosk` workflow runs the same build and uploads
+`tournament.bin` as the `tournament-bin` artifact.
 
 Read the tail of the output:
 
 - the applied patch list (one line per `module_hooks.txt` entry),
-- `guard: 0x8016D800 == 0x7C0802A6 (checked against main.dol)` locally,
+- `guard: 0x8016D800 == 0x7C0802A6`,
 - the file size. It must stay under 100 KB (load address 0x817E0000, FST at 0x817F8AC0).
 
 A failed external resolution or a gecko overlap stops the build and names the symbol or
 address. A missing venue codeset in `Nintendont/kernel/gecko` also stops it: run
 `git submodule update --init`.
 
-First-time setup of `melee/` (only if `melee/build` is missing): vanilla `main.dol` at
-`melee/orig/GALE01/sys/main.dol`, then `python configure.py --non-matching` and
-`python -m ninja` inside `melee/`. `ninja.exe` is not on PATH; use the pip package.
+First-time setup (only if `melee/build/compilers` is missing): `git submodule update --init`,
+`pip install ninja`, then `python kiosk/tools/fetch_decomp_tools.py`. No `main.dol` needed.
 
 ## When on-screen text looks jammed or stale
 

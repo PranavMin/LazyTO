@@ -71,11 +71,9 @@ fake's fixture values. Then run `CONFIG=<that file> node dist/main.js`, and driv
 ## The kiosk module
 
 The kiosk's source is `kiosk/`. It builds against the decomp in the `melee/` submodule, which
-needs its compilers set up once: put your own Melee 1.02 `main.dol` at
-`melee/orig/GALE01/sys/main.dol`, then run `python configure.py --non-matching` and
-`python -m ninja` inside `melee/`. No DOL? The build itself does not need one; fetch the tools
-as the `kiosk` workflow does ([kiosk.md](kiosk.md)), or download `tournament.bin` from that
-workflow's `tournament-bin` artifact. Then, from the repo root:
+needs its compilers fetched once (no Melee files needed): `pip install ninja`, then
+`python kiosk/tools/fetch_decomp_tools.py`. Or skip building and download `tournament.bin` from
+the `kiosk` workflow's `tournament-bin` artifact. Then, from the repo root:
 
 ```
 python kiosk/tools/build_module.py

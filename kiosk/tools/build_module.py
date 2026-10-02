@@ -6,18 +6,17 @@ game ISO stays stock Melee; see docs/architecture.md.
 
 The kiosk's own sources live in kiosk/src and kiosk/include. Everything else
 comes from the unmodified Melee decompilation in the melee/ submodule: its
-headers, its compilers (set up by `python configure.py --non-matching` there
-once), config/GALE01/symbols.txt and config/GALE01/splits.txt.
+headers, its compilers (kiosk/tools/fetch_decomp_tools.py fetches them once),
+config/GALE01/symbols.txt and config/GALE01/splits.txt.
 
+    python kiosk/tools/fetch_decomp_tools.py    # once
     python kiosk/tools/build_module.py          # from the repo root
 
-No Nintendo file is needed, so CI builds the same tournament.bin
-(.github/workflows/kiosk.yml). The build reads two facts of stock 1.02 from
-the decomp, not from main.dol: every hook address must fall inside a DOL
-section as splits.txt lays them out, and the guard word is the constant
-GUARD_WORD. When the vanilla main.dol is in melee/orig/GALE01/sys/ (a local
-decomp setup), the build also checks both against it and stops on any
-difference; the decomp pins that DOL by SHA-1 (config/GALE01/build.sha1).
+No Nintendo file is used, so CI builds the same tournament.bin
+(.github/workflows/kiosk.yml). The two facts of stock 1.02 the build checks
+come from the decomp, which pins that DOL by SHA-1 (config/GALE01/build.sha1):
+every hook address must fall inside a DOL section as splits.txt lays them out,
+and the guard word is the constant GUARD_WORD.
 
 Output file format (all big-endian):
     "TMOD" u32 version=1  u32 load_addr  u32 blob_len  u32 n_patches
@@ -46,7 +45,6 @@ KIOSK = Path(__file__).resolve().parent.parent      # kiosk/
 REPO = KIOSK.parent                                  # the LazyTO repo
 DECOMP = REPO / "melee"                              # doldecomp/melee submodule
 OUT_DIR = KIOSK / "build" / "obj"
-DOL = DECOMP / "orig" / "GALE01" / "sys" / "main.dol"
 SYMBOLS = DECOMP / "config" / "GALE01" / "symbols.txt"
 HOOKS = KIOSK / "tools" / "module_hooks.txt"
 GECKO_DIR = REPO / "Nintendont" / "kernel" / "gecko"
@@ -64,7 +62,7 @@ OUTPUT = KIOSK / "build" / "tournament.bin"
 LOAD_ADDR = 0x817E0000
 REGION_END = 0x817F8AC0  # FST start on a 1.02 disc; loaders also assert *0x34 >= end
 GUARD_ADDR = 0x8016D800  # gm_Scene_Vs_OnFrame's first instruction (not patched)
-GUARD_WORD = 0x7C0802A6  # mflr r0: that instruction in the stock 1.02 DOL (checked when main.dol is present)
+GUARD_WORD = 0x7C0802A6  # mflr r0: that instruction in stock 1.02 (read once from the decomp-pinned DOL)
 SPLITS = DECOMP / "config" / "GALE01" / "splits.txt"
 
 TUS = [KIOSK / "src" / "melee" / t for t in (
@@ -274,17 +272,6 @@ def in_dol_section(addr, sections):
     return any(lo <= addr and addr + 4 <= hi for lo, hi in sections.values())
 
 
-def dol_word(addr):
-    d = DOL.read_bytes()
-    offs = struct.unpack(">18I", d[0:0x48])
-    addrs = struct.unpack(">18I", d[0x48:0x90])
-    sizes = struct.unpack(">18I", d[0x90:0xD8])
-    for o, a, sz in zip(offs, addrs, sizes):
-        if sz and a <= addr < a + sz:
-            return struct.unpack(">I", d[o + (addr - a): o + (addr - a) + 4])[0]
-    die(f"0x{addr:08X} is not inside the vanilla DOL")
-
-
 def gecko_touches():
     """Every address a venue codeset writes or hooks."""
     touched = {}
@@ -321,9 +308,8 @@ def main():
 
     for need in (SYMBOLS, SPLITS, MWCC, SJISWRAP, MWLD, NM):
         if not need.exists():
-            die(f"{need} missing: run `git submodule update --init`, then fetch the "
-                "decomp's compilers and tools in melee/ (docs/kiosk.md)")
-    have_dol = DOL.exists()
+            die(f"{need} missing: run `git submodule update --init`, then "
+                "`python kiosk/tools/fetch_decomp_tools.py`")
     sections = dol_sections()
     print("module version:", write_version_inc())
     syms = load_symbols()
@@ -358,8 +344,6 @@ def main():
             die("bad hook kind " + kind)
         if not in_dol_section(addr, sections):
             die(f"hook address 0x{addr:08X} is not inside a DOL section (splits.txt)")
-        if have_dol:
-            dol_word(addr)  # and inside the real DOL
 
     touched = gecko_touches()
     for addr, _ in patches:
@@ -370,11 +354,6 @@ def main():
         die("gecko codesets write inside the module region: " +
             ", ".join(f"0x{a:08X} {touched[a]}" for a in inside[:5]))
 
-    if have_dol:
-        actual = dol_word(GUARD_ADDR)
-        if actual != GUARD_WORD:
-            die(f"guard word at 0x{GUARD_ADDR:08X} is 0x{actual:08X} in {DOL}, "
-                f"GUARD_WORD says 0x{GUARD_WORD:08X}: not the stock 1.02 DOL?")
     guard_word = GUARD_WORD
     out = bytearray(b"TMOD")
     out += struct.pack(">IIIIII", 1, lo, len(blob), len(patches), GUARD_ADDR, guard_word)
@@ -392,8 +371,7 @@ def main():
     print(f"patches: {len(patches)}")
     for (kind, addr, target), (_, val) in zip(hooks, patches):
         print(f"  {kind:6s} 0x{addr:08X} = 0x{val:08X}  {target}")
-    print(f"guard: 0x{GUARD_ADDR:08X} == 0x{guard_word:08X}"
-          + (" (checked against main.dol)" if have_dol else " (main.dol absent: decomp constants)"))
+    print(f"guard: 0x{GUARD_ADDR:08X} == 0x{guard_word:08X}")
     print(f"wrote {OUTPUT} ({len(out)} bytes)")
 
 

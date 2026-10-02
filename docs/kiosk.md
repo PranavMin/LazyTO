@@ -29,10 +29,9 @@ python kiosk/tools/build_module.py        # -> kiosk/build/tournament.bin (about
 ```
 
 Prerequisite: the `melee/` submodule (the unmodified decomp) and its compilers, binutils and
-`sjiswrap`. With your own vanilla `main.dol` in `melee/orig/GALE01/sys/`, run
-`python configure.py --non-matching` and `python -m ninja` inside `melee/` once. Without a DOL,
-`ninja` cannot run, so fetch only the three tools the way `.github/workflows/kiosk.yml` does
-(its "Download the compilers" step). Objects go to `kiosk/build/obj/`;
+`sjiswrap`, fetched once with `pip install ninja` and
+`python kiosk/tools/fetch_decomp_tools.py`. No `main.dol` is needed: the decomp's own setup
+(`python -m ninja` in `melee/`) splits the DOL, so the script runs only the three downloads. Objects go to `kiosk/build/obj/`;
 delete them to force a clean rebuild. The output ends with the applied patch list, the guard
 check and the file size.
 
@@ -46,8 +45,7 @@ which pins that DOL by SHA-1 (`melee/config/GALE01/build.sha1`):
   them out (alignment padding excluded);
 - the guard word is the constant `GUARD_WORD` (`0x7C0802A6`) in `build_module.py`.
 
-With `main.dol` present the build also reads both from it and stops on any difference. So CI
-(`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, keeps it as
+So CI (`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, keeps it as
 the `tournament-bin` artifact, and a `v*` tag attaches it to the draft release. A CI module
 and a local one from the same commit differ only in the version text (hash and build date).
 
