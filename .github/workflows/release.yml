@@ -50,11 +50,14 @@ jobs:
         with:
           path: out/apps
           key: loader-${{ steps.nin.outputs.sha }}-${{ hashFiles('.github/workflows/release.yml') }}
+      # GIT_VERSION empty, as in the fork's CI, where git refuses the mounted
+      # repo ("dubious ownership"): the same bytes as the loader proven on a
+      # Wii. meta.xml carries the commit.
       - name: Build
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           docker run --rm -v "$PWD/Nintendont:/work" -w /work "$IMAGE" \
-            make -j"$(nproc)" GIT_VERSION=LazyTO-${{ steps.nin.outputs.sha }}
+            make -j"$(nproc)" GIT_VERSION=
       - name: Package apps/LazyTO as the fork's CI does
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
