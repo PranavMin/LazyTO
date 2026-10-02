@@ -1,7 +1,5 @@
 <img src="docs/img/lazyto-logo.png" alt="LazyTO: Report that sh*t yourself" width="320">
 
-# LazyTO
-
 LazyTO lets players at a Melee tournament run their own start.gg sets from the Wii. They pick
 their set from a list on the console, play, and each game's result reaches start.gg as the game
 ends. The TO steps in only when something goes wrong.
