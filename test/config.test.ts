@@ -25,7 +25,7 @@ const VALID: Config = {
 };
 
 // A settings file as the relay before config v2 wrote it (the shape a Pi set
-// up with npm run push had on 2026-10-02, fake values). Every later build must
+// up with the old npm run push had on 2026-10-02, fake values). Every later build must
 // keep accepting it: auto-update installs a build only if it does.
 const V1_FILE = {
   startggEndpoint: 'https://api.start.gg/gql/alpha',

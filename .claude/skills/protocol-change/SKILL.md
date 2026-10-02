@@ -44,7 +44,7 @@ protocol versions shows `NO SETS LOADED YET`.
    - Loader: CI build only (`gh workflow run build.yml -R PranavMin/Nintendont --ref LazyTO`).
      A locally built loader stops at "Preparing IOS58 Kernel" on a real Wii.
    - Relay: restart any running relay on the new build. The Pi updates itself from `main`.
-   - Module: new `tournament.bin` on every card (`wii-test` skill).
+   - Module: new `tournament.bin` on every card (each station's zip from the relay).
    - Dolphin's relay forwarder is length-driven and needs no rebuild.
 
 Record the decision in `docs/decisions.md` if it changes the contract, and add a

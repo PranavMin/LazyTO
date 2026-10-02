@@ -277,19 +277,6 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       uses the claim over the tags. *`claim_port` in lbtourney.c, reset at START_SET and
       END_SET; a `build_module.py --demo` build fakes a claim by port 3 for the headless
       Dolphin loop (its slots stay N/A, so the demo also treats port 1 as human).*
-- [ ] **(superseded 2026-09-25: the score and status live in the banner and the hint is
-      top-left) CSS overlay layout (v31, tuned live by the user):** score `MANGO P1  0 - 0  P3
-      ZAIN` top centre (x 188, y -4, 0.62); hint `Z + X FOR HANDWARMER` (the `+` is the SJIS escape `{`, v34) bottom right
-      (x 456, y 446, 0.43); status (`SENDING... / SCORE SENT / SEND FAILED`) bottom left (x 2,
-      y 446, 0.45). (v32)
-      *`ZX`, not `Z + X`: the SIS font has no `+` (nor `(` `)` `/`). History: v25-v29
-      were placed by rebuild-and-look; v30 added **layout tune mode** so that never
-      happens again; **compiled out since v33** (`LB_TOURNEY_LAYOUT_TUNE 0` in lbtourney.c -
-      set it to 1 to get it back). With it on, on the CSS with a set active, hold **L + R**: D-pad nudges the
-      selected element 2 px (10 with Z), **X** cycles SCORE / HINT / STATUS, **Y** grows
-      the scale by 0.02 (shrinks with Z), and a mid-screen readout `TUNE SCORE X 212 Y 4
-      S 52` shows the live values for 3 s. Read them off and hardcode them in `el[]`
-      (lbtourney.c). The rumble D-pad toggle is suppressed while the chord is held.*
 - [ ] **SIS vertical rule (found fixing the icon letters, v36):** a glyph drawn at
       entry scale s lands **32*(1-s) px below the entry's y**. Each entry pushes its
       scale opcode at its start and pops it at its end, so every entry is measured as a
@@ -324,24 +311,3 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 - [ ] **Sheik's nametag vanishes during Vanish** (up-B) *(venue code - the stealth
       nametag hook in `g_mods_tournament.bin`, verified 2026-09-24)*. *Our `ifnametag.c` edit
       is retired.*
-
-## 8. Dolphin (development setup)
-
-Only for testing the module in the patched Slippi Dolphin kept as a separate development
-setup. Paths are inside that Dolphin's folder. Venue Wiis never run it.
-
-- [ ] **Dolphin picked up the new file**: `SlippiTournamentModule` in
-      `User/Config/Dolphin.ini` points at `kiosk/build/tournament.bin`
-      and `HLE_BS2 = True`; restart the game after every build (the module is read at boot).
-      *An old module + new expectations looks exactly like a silent no-op.*
-- [ ] **Gecko list is the generated one**: `Data/Sys/GameSettings/GALE01r2.ini` (and
-      the `Binary/x64/Sys` copy) from `Tools/make_venue_ini.py` - `[Gecko_Enabled]` =
-      `Required: Slippi Recording`, `Venue: UCF 0.84`, `Venue: Tournament Mods`, nothing else.
-      *Slippi's General Codes / Slippi Online blank the kiosk text and run the netplay CSS
-      (2026-09-24); a `[creator]` suffix on an enabled name silently disables it.* `EnableCheats
-      = True` and no per-ISO `User/GameSettings/GALE01.ini` override.
-- [ ] **No "missing memory card" popup.** *Slot A = Memory Card, Slot B = the relay EXI
-      device. This is config, not a code hack (the game edit was reverted).*
-
-History: before 2026-09-24 this list was run per `SmashTournament-vN.iso` (the retired
-shifted-DOL build).

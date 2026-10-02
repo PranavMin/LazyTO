@@ -55,8 +55,8 @@ and a local one from the same commit differ only in the version text (hash and b
 Two compile-time switches exist for development runs with no controller, such as a Dolphin
 session capturing screenshots. The sources keep both at `0`, and CI fails otherwise. A build
 with `python kiosk/tools/build_module.py --demo` turns them on for that build only and adds
-`DEMO` to the module's version text, which the set list shows; `npm run sync-card` refuses a
-`DEMO` module.
+`DEMO` to the module's version text, which the set list shows. CI never builds with `--demo`,
+so no bundle or station zip carries one.
 
 | Flag | File | `--demo` (start) | `--demo confirm` |
 |---|---|---|---|

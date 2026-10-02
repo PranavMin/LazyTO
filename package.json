@@ -14,9 +14,6 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "tsx src/main.ts",
     "sim": "tsx scripts/sim-wii.ts",
-    "sync-card": "tsx scripts/sync-card.ts",
-    "push": "tsx scripts/push.ts",
-    "wiiload": "tsx scripts/wiiload.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

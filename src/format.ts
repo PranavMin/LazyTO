@@ -10,7 +10,7 @@
 //   Their qualifiers are Winners Quarter-Final and the losers round before
 //   that. Those sets and everything after them are Bo5; the rest Bo3.
 //
-// Round numbers (scripts/probe.ts --rounds, test event 2026-10-01): within a
+// Round numbers (read from the real API, test event 2026-10-01): within a
 // phase, winners count up to the Grand Final (Grand Final and its reset
 // share a number); losers count down to Losers Final and do not start at
 // -1. Every phase numbers its rounds from 1 again.
