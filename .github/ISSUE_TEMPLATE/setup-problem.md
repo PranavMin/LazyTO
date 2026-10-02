@@ -14,6 +14,6 @@ labels: documentation
 
 **Setup**
 - Pi model and OS:
-- PC OS:
+- Computer OS (for Imager and ssh):
 - Wii: Homebrew Channel yes/no, loader version:
 - Network: the Wiis and the Pi are on the same Wi-Fi? Guest network?

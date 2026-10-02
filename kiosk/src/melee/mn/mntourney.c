@@ -1398,7 +1398,8 @@ void mnTourney_Think(HSD_GObj* gobj)
 }
 
 /* Force the venue's tournament state live each time we pass the main menu, so
- * it holds regardless of what the memory-card save has (decisions.md R12): all
+ * it holds regardless of what the memory-card save has (decisions.md, Stock
+ * Melee plus a module): all
  * characters unlocked, Stock mode, 4 stocks, 8:00, no items. Stages already
  * default to all-unlocked but we set the mask too for good measure. */
 static void forceKioskDefaults(void)

@@ -376,16 +376,11 @@ Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
 ### Network
 
-The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once with `scripts/smoke.ts` from a laptop on the same network.
+The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once by opening the status page from a phone on the venue Wi-Fi.
 
 The secret travels in plain text. It keeps passers-by out, not someone capturing the Wi-Fi traffic.
 
-### Per-tournament checklist
-
-1. Power on the Pi (or restart the relay). Check the status page header names tonight's tournament and event.
-2. Start every pool and phase on start.gg. Unstarted pools have preview sets the relay cannot show; the status page warns until this is done.
-3. Check each card's station number matches the station label, and exactly one card has `stream=1`.
-4. Boot one Wii and confirm the set list loads.
+The checklist for each tournament night is in [night-of.md](night-of.md).
 
 ## Development and testing
 
@@ -394,7 +389,7 @@ The secret travels in plain text. It keeps passers-by out, not someone capturing
 - **Load.** `scripts/sim-wii.ts` drives 12 fake stations through list, start, score and end for 10 minutes and checks the upstream call rate.
 - **Real API.** Only `scripts/probe.ts` (read-only) and `scripts/reset-bracket.ts` (the test event only) touch start.gg, using `.env`.
 - **Kiosk.** A development setup can load `tournament.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
-- **CI.** GitHub Actions runs `npm test` and the build on every push to main and on pull requests.
+- **CI.** `test.yml` (format, shellcheck, `npm test`, build) and `kiosk.yml` (the module, when kiosk files change) run on pull requests. `release.yml` runs on every push to main and every `v*` tag: the tests, the module, the loader, the bundle, then `main-build` or a draft release.
 
 ## Status
 
