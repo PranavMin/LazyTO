@@ -133,10 +133,10 @@ enum mnTourney_State {
  * translucent navy panels with a thin light-blue rim and a light fill, plus
  * a drop shadow under every text line (chosen 2026-09-25 among five trial
  * looks). */
-/* Dev flag (docs/kiosk.md): with 1 the list auto-confirms and starts its
+/* Dev switch (docs/kiosk.md): with 1 the list auto-confirms and starts its
  * first set two seconds after it is up, so the CSS overlay can be captured
  * in a Dolphin run that has no controller; with 2 it only opens the confirm
- * pane. Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
+ * pane. build_module.py --demo sets it; the source keeps 0. */
 #ifndef TM_DEMO_AUTOSTART
 #define TM_DEMO_AUTOSTART 0
 #endif

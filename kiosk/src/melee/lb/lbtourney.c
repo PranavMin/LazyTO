@@ -86,17 +86,11 @@ static bool handwarmer;
  * light press must do (2026-09-25: a light R press read 50 on the
  * trigger readout). The friction is the two-trigger one-second hold, not the depth. */
 #define LB_TOURNEY_CLAIM_PULL_RAW 49
-/* Dev flag (docs/kiosk.md): 1 draws the raw L/R trigger values of every
- * port bottom-left, to pick the claim threshold from a real pad. Must be 0
- * in a shipped build; sync-card.ps1 refuses otherwise. */
-#ifndef LB_TOURNEY_TRIGGER_READOUT
-#define LB_TOURNEY_TRIGGER_READOUT 0
-#endif
 static s8 claim_port = -1;   /* port that claimed entrant 1, or -1 */
 static u8 claim_hold[4];     /* frames each port has held L + R */
-/* Dev flag (docs/kiosk.md): 1 fakes an L + R claim by port 3 after 150 CSS
- * frames and treats port 1 as human, for a Dolphin run with no controller.
- * Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
+/* Dev switch (docs/kiosk.md): 1 fakes an L + R claim by port 3 after 150
+ * CSS frames and treats port 1 as human, for a Dolphin run with no
+ * controller. build_module.py --demo sets it; the source keeps 0. */
 #ifndef LB_TOURNEY_DEMO_CLAIM
 #define LB_TOURNEY_DEMO_CLAIM 0
 #endif
@@ -780,19 +774,6 @@ static void redraw(void)
         ovLine(css_shadow, css_text, 10.0f, -8.0f, 0.50f,
                handwarmer ? &ov_amb : &ov_white, fmt);
     }
-#if LB_TOURNEY_TRIGGER_READOUT
-    {
-        /* Raw trigger values as the game sees them (0-140), to pick the
-         * claim threshold from a real pad. Dev build only. */
-        char line[64];
-        sprintf(line, "L %d R %d   L %d R %d   L %d R %d   L %d R %d",
-                HSD_PadCopyStatus[0].analogL, HSD_PadCopyStatus[0].analogR,
-                HSD_PadCopyStatus[1].analogL, HSD_PadCopyStatus[1].analogR,
-                HSD_PadCopyStatus[2].analogL, HSD_PadCopyStatus[2].analogR,
-                HSD_PadCopyStatus[3].analogL, HSD_PadCopyStatus[3].analogR);
-        ovLine(css_shadow, css_text, 30.0f, 430.0f, 0.50f, &ov_white, line);
-    }
-#endif
 
     /* The CSS's own rules banner carries the score and the status: score
      * "NAME P1   0 - 0   P3 NAME" (entrant 1 left, digits yellow, amber
@@ -974,11 +955,6 @@ void lbTourney_CSSFrame(void)
             css_dirty = true;
         }
         css_frames++;
-#if LB_TOURNEY_TRIGGER_READOUT
-        if (css_frames % 6 == 0) {
-            css_dirty = true;
-        }
-#endif
         if ((last_failed || entrantPort(1) < 0 || entrantPort(2) < 0) &&
             css_frames % 120 == 0)
         {

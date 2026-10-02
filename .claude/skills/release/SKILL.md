@@ -17,22 +17,21 @@ Every push and the tag push are outward-facing: confirm each with the user.
 ## Steps
 
 1. Clean tree on `main`, up to date with origin. `npm test` passes.
-2. Kiosk developer flags all `0` (see `kiosk-build` skill).
-3. Version: set `version` in `package.json` (for example `0.9.0-beta.1`).
-4. Changelog: rename the `## [Unreleased]` heading in `docs/changelog.md` to the version and
+2. Version: set `version` in `package.json` (for example `0.9.0-beta.1`).
+3. Changelog: rename the `## [Unreleased]` heading in `docs/changelog.md` to the version and
    date, and start a new empty `[Unreleased]` section.
-5. Public docs must not name the user's venue, router, network or personal paths.
-6. Commit, then tag and push (after the user confirms):
+4. Public docs must not name the user's venue, router, network or personal paths.
+5. Commit, then tag and push (after the user confirms):
    ```bash
    git tag v0.9.0-beta.1
    ```
    ```bash
    git push origin main v0.9.0-beta.1
    ```
-7. Wait for the draft: `gh run list --workflow release.yml --limit 1`.
-8. Check the draft has the four assets, and that `lazyto.tgz` holds `wii/tournament.bin` and
+6. Wait for the draft: `gh run list --workflow release.yml --limit 1`.
+7. Check the draft has the four assets, and that `lazyto.tgz` holds `wii/tournament.bin` and
    `wii/apps/LazyTO/boot.dol` (the run's `lazyto.tgz` step lists the contents).
-9. Install the draft's bundle on a test Pi before publishing:
+8. Install the draft's bundle on a test Pi before publishing:
    `sudo bash install.sh --bundle lazyto.tgz` with both files from the draft.
-10. Edit the draft notes from the changelog section. The user publishes the release, as a full
+9. Edit the draft notes from the changelog section. The user publishes the release, as a full
     release: `/releases/latest`, which Pis follow, skips pre-releases and drafts.

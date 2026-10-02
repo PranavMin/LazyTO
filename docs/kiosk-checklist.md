@@ -275,9 +275,8 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       are known the **lower port is on the left** (`BRAVO P1  0 - 0  P3 ALPHA`), and
       Z + C-left / C-right give the game to the left / right name AS SHOWN. Auto-score
       uses the claim over the tags. *`claim_port` in lbtourney.c, reset at START_SET and
-      END_SET; `LB_TOURNEY_DEMO_CLAIM 1` fakes a claim by port 3 for the headless Dolphin
-      loop (its slots stay N/A, so the demo also treats port 1 as human) - must be 0 in a
-      shipped build.*
+      END_SET; a `build_module.py --demo` build fakes a claim by port 3 for the headless
+      Dolphin loop (its slots stay N/A, so the demo also treats port 1 as human).*
 - [ ] **(superseded 2026-09-25: the score and status live in the banner and the hint is
       top-left) CSS overlay layout (v31, tuned live by the user):** score `MANGO P1  0 - 0  P3
       ZAIN` top centre (x 188, y -4, 0.62); hint `Z + X FOR HANDWARMER` (the `+` is the SJIS escape `{`, v34) bottom right
