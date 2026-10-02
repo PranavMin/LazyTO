@@ -1,4 +1,4 @@
-<img src="docs/img/lazyto-icon.png" alt="LazyTO, Melee tournament kiosk: the Homebrew Channel icon" width="256">
+<img src="docs/img/lazyto-logo.png" alt="LazyTO: Report that sh*t yourself" width="320">
 
 # LazyTO
 
