@@ -1,17 +1,18 @@
 name: test
 
+# Pull requests run it directly; release.yml calls it on every push to main
+# before anything is published.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true   # npm test checks the protocol header copy in Nintendont/kernel/
+      # npm test checks the protocol header copy in Nintendont/kernel/; melee is not needed.
+      - run: git submodule update --init --depth 1 Nintendont
       - uses: actions/setup-node@v4
         with:
           node-version: 22

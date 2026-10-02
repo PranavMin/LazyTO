@@ -50,7 +50,6 @@ export interface UpstreamSet {
   totalGames: number;
   phaseGroup: { phase: { phaseOrder: number } }; // phases number their rounds from 1 again (format.ts)
   slots: { entrant: { id: number; name: string } | null }[];
-  games: { orderNum: number; winnerId: number }[] | null;
   stream: { id: number } | null;
 }
 
@@ -108,7 +107,6 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
         totalGames
         phaseGroup { phase { phaseOrder } }
         slots { entrant { id name } }
-        games { orderNum winnerId }
         stream { id }
       }
     }

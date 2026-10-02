@@ -6,7 +6,7 @@ name: release
 # CI), then publish the draft. Run by hand (workflow_dispatch) it only
 # uploads the bundles as artifacts.
 #
-# Every push to main also runs the tests and republishes the relay bundle as
+# Every push to main also runs the tests (test.yml) and republishes the relay bundle as
 # lazyto-relay-main.tgz (+ VERSION, .sha256) on the moving prerelease tag
 # `latest`. The Pi's deploy/update.sh fetches it at every relay start, so a
 # push to main reaches a venue Pi at its next boot or service restart with no
@@ -20,20 +20,21 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   bundles:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true   # npm test checks the protocol header copy in Nintendont/kernel/
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run build
       - name: Version
         id: v

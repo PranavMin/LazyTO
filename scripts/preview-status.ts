@@ -1,24 +1,25 @@
-// scripts/preview-status.ts -- the status page with fake data, for checking
-// its layout in a browser (a phone-width window, light and dark). Nothing
-// touches start.gg: an in-process fake (test/fake-startgg.ts), three Wiis
-// that start sets, one with a score, one failed start.gg call, telemetry
-// from two consoles. TO password: preview-pass.
+// scripts/preview-status.ts -- a relay on fake data: the relay stack from
+// test/harness.ts on the in-process fake start.gg, with three Wiis that have
+// started sets (one with a score, one with a failed start.gg call) and
+// telemetry from two consoles. Nothing touches the real start.gg.
 //
 //   npx tsx scripts/preview-status.ts [--port=29480]
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import { RelayTcpServer } from '../src/tcp.js';
-import { StatusServer } from '../src/status.js';
-import { Admin } from '../src/admin.js';
-import { StationTelemetry } from '../src/telemetry.js';
+//       the status page, for checking its layout in a browser (phone width,
+//       light and dark)
+//   npx tsx scripts/preview-status.ts --network [--secret=<s>]
+//       also a real relay on the LAN (beacon, telemetry, TCP 29470) that a
+//       development Dolphin can find and play against; Dolphin's
+//       SlippiRelaySecret must match --secret (default: the test secret)
 import { TelemetryKind, ModuleState } from '../generated/wire.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID, type FakeSet } from '../test/fake-startgg.js';
-import { WiiClient, game, TEST_SECRET } from '../test/wii-client.js';
-import { telemetryDatagram, statusPayload } from '../test/telemetry.test.js';
-import { entrant, defaultFixture } from '../test/fake-startgg.js';
+import { defaultFixture, entrant, type FakeSet } from '../test/fake-startgg.js';
+import { game } from '../test/wii-client.js';
+import { telemetryDatagram, statusPayload } from '../test/telemetry-helpers.js';
+import { startHarness, TEST_PASSWORD } from '../test/harness.js';
 
-const port = Number(/--port=(\d+)/.exec(process.argv.join(' '))?.[1] ?? 29480);
+const args = process.argv.join(' ');
+const port = Number(/--port=(\d+)/.exec(args)?.[1] ?? 29480);
+const network = process.argv.includes('--network');
+const secret = /--secret=(\S+)/.exec(args)?.[1];
 
 const sets: FakeSet[] = defaultFixture();
 for (let i = 0; i < 6; i++) {
@@ -33,56 +34,26 @@ for (let i = 0; i < 6; i++) {
     stream: null,
   });
 }
-const fake = makeFake(sets);
-await fake.start();
-const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN });
-const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'top8q');
-await cache.refresh();
-const state = new StationState();
-const audit = { record() {} };
-const tcp = new RelayTcpServer({
-  cache,
-  state,
-  startgg,
-  audit,
-  streamStation: 1,
-  streamId: 1358079,
-  secret: TEST_SECRET,
+const h = await startHarness({
+  sets,
+  setFormat: 'top8q',
+  statusPort: port,
+  network,
+  tcpPort: network ? 29470 : 0,
+  secret,
 });
-await tcp.listen(0, '127.0.0.1');
-const telemetry = new StationTelemetry({ secret: TEST_SECRET });
-const status = new StatusServer({
-  state,
-  cache,
-  startgg,
-  streamStation: 1,
-  eventLabel: `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`,
-  beacon: {
-    status: () => ({
-      targets: ['192.168.1.255'],
-      sent: 1,
-      lastSentAt: Date.now(),
-      lastError: null,
-    }),
-  },
-  tcp,
-  telemetry,
-  admin: { actions: new Admin({ state, cache, startgg, audit }), password: 'preview-pass' },
-});
-await status.listen(port, '127.0.0.1');
 
-const wii = (n: number, stream: 0 | 1 = 0) => new WiiClient(tcp.address().port, n, stream);
-await wii(1, 1).startSet(107949994, 1);
-await wii(1, 1).reportScore(107949994, [game(1), game(2)]);
-await wii(2).startSet(107949995);
-fake.failNext('reportBracketSet', 'gqlError', 1, 'Set is already completed');
-await wii(2).reportScore(107949995, [game(1)]);
-await wii(3).startSet(107949996);
+await h.wii(1, 1).startSet(107949994, 1);
+await h.wii(1, 1).reportScore(107949994, [game(1), game(2)]);
+await h.wii(2).startSet(107949995);
+h.fake.failNext('reportBracketSet', 'gqlError', 1, 'Set is already completed');
+await h.wii(2).reportScore(107949995, [game(1)]);
+await h.wii(3).startSet(107949996);
 for (const [station, from] of [
   [1, '192.168.1.81'],
   [2, '192.168.1.82'],
 ] as const) {
-  telemetry.receive(
+  h.ev.telemetry.receive(
     telemetryDatagram(
       TelemetryKind.TM_LOG,
       station,
@@ -91,7 +62,7 @@ for (const [station, from] of [
     ),
     from,
   );
-  telemetry.receive(
+  h.ev.telemetry.receive(
     telemetryDatagram(
       TelemetryKind.TM_STATUS,
       station,
@@ -101,4 +72,5 @@ for (const [station, from] of [
     from,
   );
 }
-console.log(`status preview: http://127.0.0.1:${port}/  (TO password: preview-pass)`);
+console.log(`status preview: ${h.statusUrl}/  (TO password: ${TEST_PASSWORD})`);
+if (network) console.log(`relay on the LAN: tcp :29470, beacon and telemetry on (Ctrl+C stops it)`);

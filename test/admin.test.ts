@@ -3,22 +3,13 @@
 // audit replay that keeps best-of overrides across a restart.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { StatusServer, passwordMatches } from '../src/status.js';
-import { Admin } from '../src/admin.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import { RelayTcpServer } from '../src/tcp.js';
-import { AuditLog, replayBestOf } from '../src/audit.js';
-import { StationTelemetry } from '../src/telemetry.js';
+import { passwordMatches } from '../src/status.js';
+import { replayBestOf } from '../src/audit.js';
 import { RelayStatus } from '../generated/wire.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
-import { WiiClient, game, TEST_SECRET } from './wii-client.js';
+import { game } from './wii-client.js';
+import { startHarness, TEST_PASSWORD } from './harness.js';
 
-const PASSWORD = 'to-pass-9876';
+const PASSWORD = TEST_PASSWORD;
 const SET = 107949994; // Alpha vs Bravo, WQF, Bo5 in the fixture
 const OTHER = 107949995;
 
@@ -27,58 +18,26 @@ function basic(password: string, user = 'to'): string {
 }
 
 async function setup(t: { after(fn: () => Promise<void> | void): void }) {
-  const dir = mkdtempSync(join(tmpdir(), 'tr-admin-'));
-  const fake = makeFake();
-  await fake.start();
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  const audit = new AuditLog(join(dir, `${FIXTURE_EVENT_ID}.jsonl`));
-  const tcp = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit,
-    streamStation: 1,
-    streamId: 1358079,
-    secret: TEST_SECRET,
-  });
-  await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({
-    state,
-    cache,
-    startgg,
-    streamStation: 1,
-    eventLabel: 'LazyTO Test Tournament',
-    beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: 0, lastError: null }) },
-    tcp,
-    telemetry: new StationTelemetry({ secret: TEST_SECRET }),
-    admin: { actions: new Admin({ state, cache, startgg, audit }), password: PASSWORD },
-  });
-  await status.listen(0, '127.0.0.1');
-  const base = `http://127.0.0.1:${status.address().port}`;
-  t.after(async () => {
-    await status.close();
-    await tcp.close();
-    await fake.close();
-    audit.close();
-    rmSync(dir, { recursive: true, force: true });
-  });
+  const h = await startHarness();
+  t.after(h.close);
   const post = (
     path: string,
     headers: Record<string, string> = { authorization: basic(PASSWORD) },
-  ) => fetch(base + path, { method: 'POST', headers, redirect: 'manual' });
+  ) => fetch(h.statusUrl + path, { method: 'POST', headers, redirect: 'manual' });
   const get = (
     path: string,
     headers: Record<string, string> = { authorization: basic(PASSWORD) },
-  ) => fetch(base + path, { headers, redirect: 'manual' });
-  const wii = (station: number) => new WiiClient(tcp.address().port, station);
-  return { fake, cache, state, audit, base, post, get, wii };
+  ) => fetch(h.statusUrl + path, { headers, redirect: 'manual' });
+  return {
+    fake: h.fake,
+    cache: h.ev.cache,
+    state: h.ev.state,
+    audit: h.ev.audit,
+    base: h.statusUrl,
+    post,
+    get,
+    wii: (station: number) => h.wii(station),
+  };
 }
 
 /** The message a 303 back to the page carries. */
@@ -205,36 +164,4 @@ test('free station: a stale page cannot free a newer set; a failed reset frees n
   );
   assert.equal(env.state.get(3)?.setId, SET, 'still claimed');
   assert.equal(env.fake.getSet(SET).state, 2);
-});
-
-test('without admin the page has no actions and the routes are 404', async (t) => {
-  const fake = makeFake();
-  await fake.start();
-  t.after(() => fake.close());
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const status = new StatusServer({
-    state: new StationState(),
-    cache,
-    startgg,
-    streamStation: 1,
-    eventLabel: 'x',
-    beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: 0, lastError: null }) },
-    tcp: { refused: () => null },
-    telemetry: new StationTelemetry({ secret: TEST_SECRET }),
-  });
-  await status.listen(0, '127.0.0.1');
-  t.after(() => status.close());
-  const base = `http://127.0.0.1:${status.address().port}`;
-  assert.doesNotMatch(await (await fetch(base)).text(), /Waiting sets/);
-  const r = await fetch(`${base}/bestof?set=${SET}&bo=3`, {
-    method: 'POST',
-    headers: { authorization: basic(PASSWORD) },
-  });
-  assert.equal(r.status, 404);
 });

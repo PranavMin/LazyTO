@@ -1,19 +1,16 @@
-// audit.ts tests, including the last section 8 row: a relay restart
-// rebuilds the station map by replaying the audit log.
+// audit.ts tests, including the relay-restart row of architecture.md's error
+// table: a restarted relay rebuilds its station claims by replaying the audit log.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RelayStatus } from '../generated/wire.js';
 import { AuditLog, auditPath, replayClaims } from '../src/audit.js';
-import { RelayTcpServer } from '../src/tcp.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
-import { WiiClient, game, TEST_SECRET } from './wii-client.js';
+import { makeFake, FIXTURE_EVENT_ID } from './fake-startgg.js';
+import { game } from './wii-client.js';
+import { startHarness } from './harness.js';
 
 let dir: string;
 test.before(() => {
@@ -66,50 +63,29 @@ test('replayClaims tolerates a torn final line but not a corrupt middle line', (
   assert.throws(() => replayClaims(corrupt), /corrupt audit line 1/);
 });
 
-test('relay restart rebuilds claims from the audit log (section 8 last row)', async (t) => {
+test('relay restart rebuilds claims from the audit log', async (t) => {
   const fake = makeFake();
   await fake.start();
   t.after(() => fake.close());
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-  });
-  const path = auditPath(dir, FIXTURE_EVENT_ID);
+  const dataDir = join(dir, 'restart');
+  const path = auditPath(dataDir, FIXTURE_EVENT_ID);
 
   const SET_A = 107949994; // station 3: in progress at 2-0 when the relay dies
   const SET_B = 107949995; // station 4: completed before the relay dies
 
   // ---- first relay process ----
   {
-    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-    await cache.refresh();
-    const state = new StationState();
-    const audit = new AuditLog(path);
-    const server = new RelayTcpServer({
-      cache,
-      state,
-      startgg,
-      audit,
-      streamStation: 1,
-      streamId: 1358079,
-      secret: TEST_SECRET,
-    });
-    await server.listen(0, '127.0.0.1');
-    const port = server.address().port;
-
-    const wii3 = new WiiClient(port, 3);
+    const h = await startHarness({ fake, dataDir });
+    const wii3 = h.wii(3);
     await wii3.startSet(SET_A);
     await wii3.reportScore(SET_A, [game(1), game(1)]);
-    const wii4 = new WiiClient(port, 4);
+    const wii4 = h.wii(4);
     await wii4.startSet(SET_B);
     await wii4.endSet(SET_B, [game(2), game(2), game(2)]);
-
-    await server.close();
-    audit.close();
+    await h.close();
   }
 
-  // ---- restarted relay process: fresh state, same audit file ----
+  // ---- what the restarted relay will replay ----
   const claims = replayClaims(path);
   assert.equal(claims.size, 1, 'only the unfinished set survives replay');
   const claim = claims.get(3)!;
@@ -117,25 +93,10 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
   assert.equal(claim.games.length, 2);
   assert.equal(claim.games[0]!.winner_slot, 1);
 
+  // ---- restarted relay process: fresh state, same audit file ----
   {
-    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-    await cache.refresh();
-    const state = new StationState();
-    for (const [station, c] of claims) if (cache.get(c.setId)) state.claim(station, c);
-
-    const audit = new AuditLog(path);
-    const server = new RelayTcpServer({
-      cache,
-      state,
-      startgg,
-      audit,
-      streamStation: 1,
-      streamId: 1358079,
-      secret: TEST_SECRET,
-    });
-    await server.listen(0, '127.0.0.1');
-    const port = server.address().port;
-    const wii3 = new WiiClient(port, 3);
+    const h = await startHarness({ fake, dataDir });
+    const wii3 = h.wii(3);
 
     // Station 3 continues its set as if nothing happened.
     const { sets } = await wii3.listSets();
@@ -144,39 +105,29 @@ test('relay restart rebuilds claims from the audit log (section 8 last row)', as
     const finish = await wii3.endSet(SET_A, [game(1), game(1), game(1)]);
     assert.equal(finish.resp.status, RelayStatus.ST_OK);
     assert.equal(fake.getSet(SET_A).state, 3);
-
-    await server.close();
-    audit.close();
+    assert.ok(h.auditEvents().some((e) => e.type === 'replay' && e.station === 3));
+    await h.close();
   }
 });
 
-test('a replayed claim whose set is gone from the cache is dropped by the boot filter', async (t) => {
+test('a replayed claim whose set is gone from the cache is dropped at startup', async (t) => {
   const fake = makeFake();
   await fake.start();
   t.after(() => fake.close());
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
+  const dataDir = join(dir, 'stale');
+  const log = new AuditLog(auditPath(dataDir, FIXTURE_EVENT_ID));
+  log.record({
+    type: 'claim',
+    station: 5,
+    setId: 999999,
+    p1Id: 1,
+    p2Id: 2,
+    bestOf: 3,
+    games: [],
   });
+  log.close();
 
-  const path = join(dir, 'stale.jsonl');
-  appendFileSync(
-    path,
-    JSON.stringify({
-      type: 'claim',
-      station: 5,
-      setId: 999999,
-      p1Id: 1,
-      p2Id: 2,
-      bestOf: 3,
-      games: [],
-    }) + '\n',
-  );
-
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  for (const [station, c] of replayClaims(path)) if (cache.get(c.setId)) state.claim(station, c);
-  assert.equal(state.get(5), undefined);
+  const h = await startHarness({ fake, dataDir });
+  assert.equal(h.ev.state.get(5), undefined);
+  await h.close();
 });

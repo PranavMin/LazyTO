@@ -712,17 +712,3 @@ export function decodeAbandonSetReq(buf: Uint8Array, off = 0): AbandonSetReq {
   };
 }
 
-
-// ---- message map (architecture.md): request struct after relay_hdr,
-// ---- payload struct after relay_resp in an ST_OK response ----
-
-export const REQUEST_DECODERS = {
-  [RelayCmd.CMD_START_SET]: decodeStartSetReq,
-  [RelayCmd.CMD_REPORT_SCORE]: decodeReportScoreReq,
-  [RelayCmd.CMD_END_SET]: decodeEndSetReq,
-  [RelayCmd.CMD_ABANDON_SET]: decodeAbandonSetReq,
-} as const;
-
-export const RESPONSE_PAYLOAD_DECODERS = {
-  [RelayCmd.CMD_LIST_SETS]: decodeListSetsResp,
-} as const;

@@ -145,7 +145,7 @@ test('set cache', async (t) => {
     }
   });
 
-  await t.test('in-progress sets stay cached with games mapped to winner slots', async () => {
+  await t.test('in-progress sets stay cached and are not selectable', async () => {
     const SET = 107949995;
     await client.markSetInProgress(SET);
     await client.reportGames(SET, [
@@ -157,10 +157,6 @@ test('set cache', async (t) => {
     await cache.refresh();
     const s = cache.get(SET)!;
     assert.equal(s.state, 2);
-    assert.deepEqual(s.games, [
-      { orderNum: 1, winnerSlot: 1 },
-      { orderNum: 2, winnerSlot: 2 },
-    ]);
     // In progress -> not selectable.
     assert.ok(!cache.pending().some((p) => p.id === SET));
     await client.resetSet(SET);

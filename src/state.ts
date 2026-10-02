@@ -84,3 +84,9 @@ export class StationState {
     return [...new Set([...this.claims.keys(), ...this.actions.keys()])].sort((a, b) => a - b);
   }
 }
+
+/** Games won by slot 1 and slot 2. */
+export function wins(games: readonly { winner_slot: number }[]): [number, number] {
+  const w1 = games.filter((g) => g.winner_slot === 1).length;
+  return [w1, games.length - w1];
+}

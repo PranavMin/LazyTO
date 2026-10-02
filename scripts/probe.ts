@@ -8,8 +8,6 @@
 //   npx tsx scripts/probe.ts --tournament=<slug>       a tournament's events and streams (full slug or short URL)
 //   npx tsx scripts/probe.ts --resolve=<tournament>    what the relay would pick at startup with your .env
 //   npx tsx scripts/probe.ts --weekly                  the weekly fallback's pick (WEEKLY_NAME_PREFIX)
-//   npx tsx scripts/probe.ts --stages                  Melee's stages with start.gg's ids (source of src/stages.ts)
-//   npx tsx scripts/probe.ts --rounds=<eventId>        every round of an event with its number and best-of (src/format.ts)
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -65,68 +63,6 @@ async function gql(label: string, query: string, variables: Record<string, unkno
     );
   }
   return json.data;
-}
-
-// --stages: Melee's stage list with start.gg's ids, the source for src/stages.ts.
-async function listStages(): Promise<void> {
-  const data = await gql(
-    'videogame(id: 1) stages',
-    `query MeleeStages { videogame(id: 1) { id name stages { id name } } }`,
-    {},
-  );
-  const stages = (data.videogame?.stages ?? []) as { id: number; name: string }[];
-  console.log(`\n${data.videogame?.name}: ${stages.length} stages`);
-  for (const s of stages.slice().sort((a, b) => a.id - b.id)) {
-    console.log(`  ${String(s.id).padStart(6)}  ${s.name}`);
-  }
-}
-
-// --rounds=<eventId>: every round of the event, all set states, with
-// start.gg's round number and totalGames -- the shape src/format.ts reasons
-// about. Rounds are listed once each with their set count.
-async function showRounds(eventId: string): Promise<void> {
-  const data = await gql(
-    `event(id: ${eventId}).sets`,
-    `query R($eventId: ID!) {
-      event(id: $eventId) {
-        id name numEntrants
-        phases { id name phaseOrder }
-        sets(perPage: 200) { nodes { id round fullRoundText totalGames state phaseGroup { phase { id } } } }
-      }
-    }`,
-    { eventId },
-  );
-  const e = data.event;
-  if (!e) throw new ProbeError(`no event ${eventId}`);
-  console.log(`
-${e.name}  id=${e.id}  entrants=${e.numEntrants}`);
-  const phases: { id: number; name: string; phaseOrder: number }[] = e.phases ?? [];
-  for (const ph of phases.sort((a, b) => a.phaseOrder - b.phaseOrder)) {
-    console.log(`phase ${ph.id} order=${ph.phaseOrder} "${ph.name}"`);
-    const rounds = new Map<
-      number,
-      { text: string; bestOf: Set<number>; sets: number; preview: number }
-    >();
-    for (const s of e.sets?.nodes ?? []) {
-      if (s.phaseGroup?.phase?.id !== ph.id) continue;
-      const r = rounds.get(s.round) ?? {
-        text: s.fullRoundText,
-        bestOf: new Set<number>(),
-        sets: 0,
-        preview: 0,
-      };
-      r.bestOf.add(s.totalGames);
-      r.sets++;
-      if (typeof s.id === 'string' && s.id.startsWith('preview_')) r.preview++;
-      rounds.set(s.round, r);
-    }
-    if (rounds.size === 0) console.log('  (no sets)');
-    for (const [round, r] of [...rounds].sort((a, b) => a[0] - b[0])) {
-      console.log(
-        `  round ${String(round).padStart(3)}  ${r.text.padEnd(22)}  sets=${r.sets}  bo=${[...r.bestOf].join('/')}${r.preview ? '  (preview ids)' : ''}`,
-      );
-    }
-  }
 }
 
 // --tournament=<slug>: a tournament's events (with game and entrant type) and
@@ -229,11 +165,8 @@ async function main(): Promise<void> {
   if (process.argv.includes('--mine')) return showMine();
   const t = arg('--tournament');
   if (t) return showTournament(t);
-  if (process.argv.includes('--stages')) return listStages();
-  const ev = arg('--rounds');
-  if (ev) return showRounds(ev);
   fail(
-    'usage: npx tsx scripts/probe.ts --mine | --tournament=<slug> | --resolve=<tournament> | --weekly | --stages | --rounds=<eventId>',
+    'usage: npx tsx scripts/probe.ts --mine | --tournament=<slug> | --resolve=<tournament> | --weekly',
   );
 }
 

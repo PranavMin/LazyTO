@@ -1,13 +1,13 @@
 // audit.ts -- append-only JSONL audit log (architecture.md Relay): every
 // request, response, and upstream call, one JSON object per line with a
-// timestamp. Named <eventId>.jsonl so each tournament gets its own file
-// (section 10). Writes are synchronous appends -- the request rate is a few
-// per second at worst and a crash must not lose the tail.
+// timestamp. Named <eventId>.jsonl so each tournament gets its own file.
+// Writes are synchronous appends -- the request rate is a few per second at
+// worst and a crash must not lose the tail.
 //
-// The log is also the relay's persistence (section 8, relay restart):
-// replayClaims() folds claim / score / release events back into the
-// station -> set map. main.ts drops any replayed claim whose set is no
-// longer live in the cache.
+// The log is also the relay's persistence across a restart (architecture.md
+// Error handling): replayClaims() folds claim / score / release events back
+// into the station -> set map, and replayBestOf() the TO's best-of overrides.
+// relay.ts drops any replayed claim whose set is no longer live in the cache.
 
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

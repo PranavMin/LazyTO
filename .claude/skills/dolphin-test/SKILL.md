@@ -25,9 +25,9 @@ Actions: `start [-Wait 30]`, `shot` (prints the PNG path; read it with the Read 
 1. Build with the `kiosk-build` skill. For a headless run with no controller, set a developer
    flag first (`docs/kiosk.md`): `TM_DEMO_AUTOSTART 1` to reach CSS, `LB_TOURNEY_DEMO_CLAIM 1`
    for a port claim. Set them back to `0` afterwards.
-2. Run a relay backed by the fake start.gg, never the live one. Recipe:
-   "Rehearsing the built relay without start.gg" in `docs/development.md`. Start it as one
-   process (`node dist/main.js`), not through `npx`, so stopping it really stops it.
+2. Run a relay on fake data, never the live one:
+   `npx tsx scripts/preview-status.ts --network --secret=<SlippiRelaySecret>`. It serves the
+   beacon, telemetry and TCP 29470 like a real relay, with the status page on port 29480.
 3. Dolphin finds a relay by its UDP beacon. If the Pi is up on the LAN, Dolphin may pair with
    it instead. Check the dev relay's status page shows the Dolphin station.
 4. `stop` Dolphin, edit `Dolphin.ini` if needed, then `start -Wait 30`. The set list is up

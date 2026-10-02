@@ -10,30 +10,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
 import { RelayStatus, RelayCmd, MAX_SETS, encodeStartSetReq } from '../generated/wire.js';
-import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import {
-  makeFake,
-  defaultFixture,
-  FIXTURE_TOKEN,
-  FIXTURE_EVENT_ID,
-  entrant,
-  type FakeSet,
-} from './fake-startgg.js';
-import { WiiClient, rawRequest, game, TEST_SECRET } from './wii-client.js';
+import { entrant, FIXTURE_STREAM_ID, type FakeSet } from './fake-startgg.js';
+import { rawRequest, game } from './wii-client.js';
+import { startHarness, STREAM_STATION } from './harness.js';
 
-const STREAM_STATION = 1;
-const STREAM_ID = 1358079;
+const STREAM_ID = FIXTURE_STREAM_ID;
 const SET = 107949994; // Alpha vs Bravo, WQF, bo5
-
-class ArrayAudit implements AuditSink {
-  events: Record<string, unknown>[] = [];
-  record(event: Record<string, unknown>): void {
-    this.events.push(event);
-  }
-}
 
 async function setup(
   opts: {
@@ -41,42 +23,13 @@ async function setup(
     limits?: { capacity: number; refillPerMinute: number; maxWaitMs: number };
   } = {},
 ) {
-  const fake = makeFake(opts.sets);
-  await fake.start();
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-    limits: opts.limits,
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  const audit = new ArrayAudit();
-  const server = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit,
-    streamStation: STREAM_STATION,
-    streamId: STREAM_ID,
-    secret: TEST_SECRET,
-  });
-  await server.listen(0, '127.0.0.1');
-  const port = server.address().port;
+  const h = await startHarness(opts);
   return {
-    fake,
-    startgg,
-    cache,
-    state,
-    audit,
-    server,
-    port,
-    wii: (station: number, stream: 0 | 1 = 0) => new WiiClient(port, station, stream),
-    close: async () => {
-      await server.close();
-      await fake.close();
-    },
+    ...h,
+    cache: h.ev.cache,
+    state: h.ev.state,
+    server: h.ev.tcp,
+    port: h.ev.tcp.address().port,
   };
 }
 
@@ -146,17 +99,14 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(env.state.get(3)!.setId, SET);
   });
 
-  await t.test(
-    'the started set disappears from another station and is taken (section 8 row 3)',
-    async () => {
-      const other = env.wii(4);
-      const { sets } = await other.listSets();
-      assert.ok(!sets.some((s) => s.set_id === SET));
-      const r = await other.startSet(SET);
-      assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
-      assert.equal(r.resp.msg, 'started on station 3');
-    },
-  );
+  await t.test('the started set disappears from another station and is taken', async () => {
+    const other = env.wii(4);
+    const { sets } = await other.listSets();
+    assert.ok(!sets.some((s) => s.set_id === SET));
+    const r = await other.startSet(SET);
+    assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
+    assert.equal(r.resp.msg, 'started on station 3');
+  });
 
   await t.test(
     'REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (decisions.md R13)',
@@ -260,7 +210,7 @@ test('stream station rules', async (t) => {
   });
 });
 
-test('assignStream fails after markSetInProgress (section 8 row 4)', async (t) => {
+test('assignStream fails after markSetInProgress', async (t) => {
   const env = await setup();
   t.after(env.close);
 
@@ -281,7 +231,7 @@ test('assignStream fails after markSetInProgress (section 8 row 4)', async (t) =
   assert.equal(score.resp.status, RelayStatus.ST_OK);
 });
 
-test('upstream 5xx handling (section 8 row 5)', async (t) => {
+test('upstream 5xx handling', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(5);
@@ -313,7 +263,7 @@ test('upstream 5xx handling (section 8 row 5)', async (t) => {
   );
 });
 
-test('upstream 4xx: set completed by the TO (section 8 row 6, R6)', async (t) => {
+test('upstream 4xx: set completed by the TO (decisions.md R6)', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(6);
@@ -334,7 +284,7 @@ test('upstream 4xx: set completed by the TO (section 8 row 6, R6)', async (t) =>
   assert.equal(env.state.get(6), undefined);
 });
 
-test('rate limited request gets ST_RATE_LIMITED (section 8 row 7)', async (t) => {
+test('rate limited request gets ST_RATE_LIMITED', async (t) => {
   // A 2-token bucket refilling one token a minute: the initial cache
   // refresh and the first start each take one; the next upstream call
   // cannot get a token inside the 50 ms budget.
@@ -348,7 +298,7 @@ test('rate limited request gets ST_RATE_LIMITED (section 8 row 7)', async (t) =>
   assert.equal(second.resp.msg, 'rate limited; retry');
 });
 
-test('station reboot mid-set (section 8 row 8)', async (t) => {
+test('station reboot mid-set', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(7);
@@ -367,7 +317,7 @@ test('station reboot mid-set (section 8 row 8)', async (t) => {
   assert.equal(r.resp.status, RelayStatus.ST_OK);
   assert.equal(r.resp.msg, 'resumed');
   assert.equal(env.fake.calls.length, upstreamBefore, 'resume makes no upstream call');
-  assert.equal(env.state.get(7)!.games.length, 2, 'games reloaded from the cache');
+  assert.equal(env.state.get(7)!.games.length, 2, 'the claim keeps its games');
 });
 
 test('claim guards', async (t) => {
@@ -423,48 +373,6 @@ test('claim guards', async (t) => {
   );
 });
 
-test('abandon (section 5.6)', async (t) => {
-  const env = await setup();
-  t.after(env.close);
-  const wii = env.wii(10);
-
-  await t.test('abandoning an unplayed set resets it upstream and frees it', async () => {
-    await wii.startSet(SET);
-    const r = await wii.abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(SET).state, 1);
-    assert.equal(env.state.get(10), undefined);
-    await env.cache.refresh();
-    const { sets } = await wii.listSets();
-    assert.ok(sets.some((s) => s.set_id === SET));
-  });
-
-  await t.test('abandoning a set with reported games is a TO decision', async () => {
-    await wii.startSet(SET);
-    await wii.reportScore(SET, [game(1)]);
-    const r = await wii.abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
-    assert.equal(r.resp.msg, 'set has games - ask TO');
-    assert.equal(env.fake.getSet(SET).state, 2, 'set untouched upstream');
-  });
-
-  await t.test('abandoning a set the station does not hold', async () => {
-    const r = await env.wii(11).abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_SET_NOT_FOUND);
-  });
-
-  await t.test('abandoning a stream set leaves the stream assigned upstream', async () => {
-    // Verified live 2026-09-20 (architecture.md "start.gg calls"): resetSet does not
-    // clear a stream assignment; only the TO can, by hand.
-    const streamWii = env.wii(STREAM_STATION, 1);
-    await streamWii.startSet(107949995, 1);
-    const r = await streamWii.abandonSet(107949995);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(107949995).state, 1);
-    assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);
-  });
-});
-
 test('LIST_SETS caps at the wire limit of MAX_SETS rows', async (t) => {
   const sets: FakeSet[] = [];
   for (let i = 0; i < MAX_SETS + 6; i++) {
@@ -516,20 +424,6 @@ test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream 
     assert.equal(rf?.count, 1);
     assert.equal(rf?.lastStation, 3);
     assert.equal(rf?.lastReason, 'wrong relay secret');
-  } finally {
-    await env.close();
-  }
-});
-
-test('a host that sends no relay_auth at all is told so, within its own framing', async () => {
-  const env = await setup();
-  try {
-    const r = await rawRequest(env.port, 5, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
-      secret: null,
-    });
-    assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
-    assert.equal(r.resp.msg, 'no relay secret sent');
-    assert.equal(r.hdr.station, 5);
   } finally {
     await env.close();
   }

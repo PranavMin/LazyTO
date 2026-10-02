@@ -30,9 +30,8 @@ check.
 | `npm test` | The gate, also run by CI: checks `generated/` matches `protocol.yaml`, type-checks, and runs every test. Integration tests use the fake start.gg in `test/fake-startgg.ts`, never the real API. |
 | `npm run build` | Compiles to `dist/`. The Pi runs `dist/main.js`. |
 | `CONFIG=<config.json> npm start` | Runs the relay from source with a config file. The fields are in [pi-setup.md](pi-setup.md#relay-settings-reference). |
-| `npm run fake -- --port=18081` | Serves the fake start.gg on its own: token `test-token`, 400 pending sets. |
 | `npm run sim` | Load test: 12 simulated Wiis play sets for 10 minutes against an in-process relay and fake start.gg. Fails on any error or on 70 or more start.gg calls in a minute. For a shorter run: `npx tsx scripts/sim-wii.ts --duration=60`. |
-| `npx tsx scripts/preview-status.ts` | The status page on fake data at `http://127.0.0.1:29480/` (three Wiis, a flagged station, telemetry), for checking its layout at phone width. TO password `preview-pass`. |
+| `npx tsx scripts/preview-status.ts` | The status page on fake data at `http://127.0.0.1:29480/` (three Wiis, a flagged station, telemetry), for checking its layout at phone width. TO password `to-pass-9876`. With `--network` it is also a relay on the LAN (beacon, telemetry, TCP 29470) that a development Dolphin can play against. |
 | `npx tsx scripts/smoke.ts <host>` | Lists sets from a running relay over the Wii protocol and fetches its status page. |
 | `npx tsx scripts/probe.ts --mine` | Read-only lookups on the real start.gg API with the token in `.env`: `--mine` lists your tournaments and short URLs, `--tournament=<slug>` lists a tournament's events and streams (to pick `EVENT_NAME` and `STREAM_NAME`), `--resolve=<tournament>` shows what the relay would pick at startup, `--weekly` shows the weekly fallback's pick. |
 | `npx tsx scripts/reset-bracket.ts` | Lists every set of the event `EVENT_ID` in `.env`; with `--yes` resets them all on start.gg so a test bracket can be played again. Only ever point it at a test event. |
@@ -48,22 +47,15 @@ starts the whole pool: every set gets a real numeric id. This is asynchronous; q
 after a few seconds. `resetSet` on one started set leaves the pool started, so to get a pristine
 started bracket, start one set and reset it. `resetSet` keeps a set's stream assignment.
 
-**Rehearsing the built relay without start.gg.** Run `npm run build` and `npm run fake -- --port=18081`.
-Write a config with `"startggEndpoint": "http://127.0.0.1:18081/gql/alpha"`, `"token": "test-token"`,
-`"tournament": "tournament/lazyto-test"`, `"eventName": "Melee Singles"`,
-`"streamName": "LazyTOStream"`, `"weeklyNamePrefix": ""`, a secret, and free ports. Those are the
-fake's fixture values. Then run `CONFIG=<that file> node dist/main.js`, and drive it with
-`npx tsx scripts/sim-wii.ts --relay=127.0.0.1:<tcpPort> --secret=<secret>`.
-
 ## The protocol
 
-`protocol.yaml` defines every message between the Wii and the relay. Never edit the files under
-`generated/` by hand. After changing `protocol.yaml`:
+`protocol.yaml` defines every message between the Wii and the relay. Never edit the generated
+files by hand. After changing `protocol.yaml`:
 
-1. Run `python tools/gen_protocol.py`. It writes `generated/` and the header copies in both
-   copies, `kiosk/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
+1. Run `python tools/gen_protocol.py`. It writes `generated/wire.ts` and the C header in both
+   places that build with it, `kiosk/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
    `npm test` fails if any of them drift.
-2. Commit and push the header in the Nintendont submodule, then commit `generated/`,
+2. Commit and push the header in the Nintendont submodule, then commit `generated/wire.ts`,
    `kiosk/include` and the new Nintendont position here.
 3. Rebuild the module and the loader together. A Wii with a module and loader from different
    protocol versions shows `NO SETS LOADED YET`.
