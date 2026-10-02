@@ -10,11 +10,6 @@ import { ROUND_LEN } from '../generated/wire.js';
 import { bestOfFor, bracketShape, type SetFormat } from './format.js';
 import type { StartggClient, UpstreamSet } from './startgg.js';
 
-export interface CachedGame {
-  orderNum: number;
-  winnerSlot: 1 | 2;
-}
-
 export interface CachedSet {
   id: number; // fits uint32
   state: number; // 1 pending, 2 in progress (upstream's view)
@@ -26,7 +21,6 @@ export interface CachedSet {
   bestOfOverridden: boolean; // the TO set it on the status page (admin.ts)
   p1: { id: number; tag: string };
   p2: { id: number; tag: string };
-  games: CachedGame[]; // reloaded from upstream, for state rebuild after reboots
 }
 
 const WORD_ABBREV: Record<string, string> = {
@@ -112,17 +106,6 @@ export class SetCache {
         continue;
       }
 
-      const games: CachedGame[] = [];
-      for (const g of s.games ?? []) {
-        if (g.winnerId === e1.id) games.push({ orderNum: g.orderNum, winnerSlot: 1 });
-        else if (g.winnerId === e2.id) games.push({ orderNum: g.orderNum, winnerSlot: 2 });
-        else
-          warnings.push(
-            `set ${s.id}: game ${g.orderNum} winner ${g.winnerId} is neither entrant, skipped`,
-          );
-      }
-      games.sort((a, b) => a.orderNum - b.orderNum);
-
       next.set(s.id, {
         id: s.id,
         state: s.state,
@@ -139,7 +122,6 @@ export class SetCache {
         ),
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },
-        games,
       });
     }
 
@@ -197,13 +179,10 @@ export class SetCache {
     if (s) Object.assign(s, this.withOverride(setId, s.autoBestOf));
   }
 
-  /** After the relay reset a set on start.gg: pending again with no games, without waiting for the next refresh. */
+  /** After the relay reset a set on start.gg: pending again, without waiting for the next refresh. */
   markReset(setId: number): void {
     const s = this.sets.get(setId);
-    if (s) {
-      s.state = 1;
-      s.games = [];
-    }
+    if (s) s.state = 1;
   }
 
   /** Selectable sets: upstream-pending with both entrants, earliest rounds first. */

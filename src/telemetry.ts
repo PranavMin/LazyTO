@@ -42,7 +42,7 @@ import {
 
 export const MAX_STATIONS = 64;
 export const MAX_LINES = 400;
-export const MAX_LINE_LEN = 300;
+const MAX_LINE_LEN = 300;
 
 export interface StationTelemetryRow {
   station: number;

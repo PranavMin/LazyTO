@@ -3,8 +3,9 @@
 # This file is architecture.md in machine-readable form. Everything on the
 # wire is defined here and nowhere else. Generated outputs (do not edit them):
 #
-#   generated/relay_proto.h   C header for the Melee decomp + Nintendont kernel
-#   generated/wire.ts         encode/decode module for the relay
+#   generated/wire.ts                 encode/decode module for the relay
+#   kiosk/include/relay_proto.h       C header for the kiosk module
+#   Nintendont/kernel/relay_proto.h   the same header for the Nintendont kernel
 #
 # Regenerate:  python tools/gen_protocol.py
 # Verify:      python tools/check_protocol.py   (CI fails on drift)

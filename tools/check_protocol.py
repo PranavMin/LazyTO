@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Fail if generated/ is out of date with protocol.yaml (the CI drift check).
+"""Fail if the generated protocol files are out of date with protocol.yaml (the CI drift check).
 
-Regenerates relay_proto.h and wire.ts in memory and compares them against the
-committed copies in generated/, kiosk/include and the Nintendont submodule. Prints a unified diff and exits non-zero on
-any mismatch, so a PR that touches protocol.yaml without regenerating (or
-hand-edits a generated file) fails CI.
+Regenerates generated/wire.ts and the two relay_proto.h copies (kiosk/include and
+the Nintendont submodule) in memory and compares them against the committed files.
+Prints a unified diff and exits non-zero on any mismatch, so a PR that touches
+protocol.yaml without regenerating (or hand-edits a generated file) fails CI.
 
 Usage:
     python tools/check_protocol.py
@@ -19,12 +19,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_protocol import DEFAULT_OUT_DIR, ROOT, ProtocolError, generate
+from gen_protocol import ROOT, ProtocolError, generate
 
 
 def main() -> int:
     try:
-        expected = generate(DEFAULT_OUT_DIR)
+        expected = generate()
     except ProtocolError as e:
         print(f"protocol.yaml: {e}", file=sys.stderr)
         return 1
@@ -47,9 +47,9 @@ def main() -> int:
             rc = max(rc, 1)
 
     if rc == 0:
-        print("generated/ and the header copies are up to date with protocol.yaml")
+        print("generated/wire.ts and both relay_proto.h copies are up to date with protocol.yaml")
     else:
-        print("\nfix: python tools/gen_protocol.py  (then commit generated/, kiosk/include and the Nintendont header)",
+        print("\nfix: python tools/gen_protocol.py  (then commit generated/wire.ts, kiosk/include and the Nintendont header)",
               file=sys.stderr)
     return rc
 

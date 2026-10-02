@@ -2,9 +2,10 @@
 """Generate the wire-protocol sources from protocol.yaml (architecture.md).
 
 Outputs (committed; never edit by hand):
-    generated/relay_proto.h   packed big-endian structs + _Static_asserts,
-                              for the Melee decomp and the Nintendont kernel
-    generated/wire.ts         DataView encode/decode for the relay
+    generated/wire.ts                 DataView encode/decode for the relay
+    kiosk/include/relay_proto.h       packed big-endian structs + _Static_asserts,
+    Nintendont/kernel/relay_proto.h   the same header for the kiosk module and
+                                      the Nintendont kernel (two copies, one each)
 
 The generator computes every struct layout with natural alignment and refuses
 to emit anything if a field would need implicit padding (padding must be an
@@ -13,14 +14,13 @@ in protocol.yaml. So the YAML, the C header, and the TS codec cannot drift
 from each other without this script failing.
 
 Usage:
-    python tools/gen_protocol.py [--out-dir generated]
+    python tools/gen_protocol.py
 
 Requires: PyYAML (pip install pyyaml).
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,7 +29,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 PROTOCOL_YAML = ROOT / "protocol.yaml"
-DEFAULT_OUT_DIR = ROOT / "generated"
+WIRE_TS = ROOT / "generated" / "wire.ts"
 
 GENERATED_BANNER = "GENERATED from protocol.yaml by tools/gen_protocol.py -- DO NOT EDIT."
 
@@ -408,30 +408,7 @@ def emit_ts(p: Protocol) -> str:
         _ts_encode(w, st, p)
         _ts_decode(w, st, p)
 
-    w("")
-    w("// ---- message map (architecture.md): request struct after relay_hdr,")
-    w("// ---- payload struct after relay_resp in an ST_OK response ----")
-    w("")
-    cmd_enum = _cmd_enum_name(p)
-    w("export const REQUEST_DECODERS = {")
-    for cmd, (req, _) in p.messages.items():
-        if req is not None:
-            w(f"  [{cmd_enum}.{cmd}]: decode{pascal(req)},")
-    w("} as const;")
-    w("")
-    w("export const RESPONSE_PAYLOAD_DECODERS = {")
-    for cmd, (_, resp) in p.messages.items():
-        if resp is not None:
-            w(f"  [{cmd_enum}.{cmd}]: decode{pascal(resp)},")
-    w("} as const;")
     return "\n".join(out) + "\n"
-
-
-def _cmd_enum_name(p: Protocol) -> str:
-    for ename, (_, values) in p.enums.items():
-        if any(v in p.messages for v in values):
-            return pascal(ename)
-    raise ProtocolError("no enum contains the message commands")
 
 
 def _is_count_field(st: Struct, f: Field) -> bool:
@@ -582,38 +559,29 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 
 # ---------------------------------------------------------------- main
 
-# The C header's other copies: the kiosk module builds with one, and the
-# Nintendont submodule's kernel builds the relay EXI device with the other.
-# Written and checked with generated/, so the three never drift.
+# The C header: the kiosk module builds with one copy, and the Nintendont
+# submodule's kernel builds the relay EXI device with the other (it builds on
+# its own in its own CI). Written and checked together, so they never drift.
 HEADER_COPIES = (ROOT / "kiosk" / "include" / "relay_proto.h",
-                     ROOT / "Nintendont" / "kernel" / "relay_proto.h")
+                 ROOT / "Nintendont" / "kernel" / "relay_proto.h")
 
 
-def generate(out_dir: Path) -> dict[Path, str]:
+def generate() -> dict[Path, str]:
     p = load_protocol(PROTOCOL_YAML)
     header = emit_c(p)
-    files = {
-        out_dir / "relay_proto.h": header,
-        out_dir / "wire.ts": emit_ts(p),
-    }
-    if out_dir == DEFAULT_OUT_DIR:
-        for path in HEADER_COPIES:
-            files[path] = header
+    files = {WIRE_TS: emit_ts(p)}
+    for path in HEADER_COPIES:
+        files[path] = header
     return files
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    args = ap.parse_args()
-
     try:
-        files = generate(args.out_dir)
+        files = generate()
     except ProtocolError as e:
         print(f"protocol.yaml: {e}", file=sys.stderr)
         return 1
 
-    args.out_dir.mkdir(parents=True, exist_ok=True)
     for path, content in files.items():
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(content)

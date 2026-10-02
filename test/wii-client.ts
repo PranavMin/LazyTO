@@ -13,7 +13,6 @@ import {
   decodeListSetsResp,
   decodeRelayHdr,
   decodeRelayResp,
-  encodeAbandonSetReq,
   encodeEndSetReq,
   encodeRelayHdr,
   encodeRelayAuth,
@@ -41,17 +40,9 @@ export function rawRequest(
   station: number,
   cmd: number,
   payload: Uint8Array = new Uint8Array(0),
-  {
-    version = PROTO_VERSION,
-    host = '127.0.0.1',
-    timeoutMs = 3000,
-    secret = TEST_SECRET as string | null, // null: send no relay_auth at all, like a pre-R16 host
-  } = {},
+  { version = PROTO_VERSION, host = '127.0.0.1', timeoutMs = 3000, secret = TEST_SECRET } = {},
 ): Promise<WireReply> {
-  const auth =
-    secret === null
-      ? new Uint8Array(0)
-      : encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
+  const auth = encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
   const req = Buffer.concat([
     auth,
     encodeRelayHdr({
@@ -125,10 +116,6 @@ export class WiiClient {
       RelayCmd.CMD_END_SET,
       encodeEndSetReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
     );
-  }
-
-  abandonSet(setId: number): Promise<WireReply> {
-    return this.request(RelayCmd.CMD_ABANDON_SET, encodeAbandonSetReq({ set_id: setId }));
   }
 }
 

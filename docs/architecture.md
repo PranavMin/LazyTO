@@ -186,7 +186,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 ## Wire protocol
 
-[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/relay_proto.h` (for the module and the kernel) and `generated/wire.ts` (for the relay), and CI fails on drift. This section is a summary.
+[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary.
 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.
@@ -372,10 +372,10 @@ The secret travels in plain text. It keeps passers-by out, not someone capturing
 
 ## Development and testing
 
-- **Protocol first.** Change `protocol.yaml`, run `python tools/gen_protocol.py`, and copy `relay_proto.h` to the forks. `tools/check_protocol.py` compiles the header and compares every size and offset with the TS encoder.
+- **Protocol first.** Change `protocol.yaml` and run `python tools/gen_protocol.py`, which writes `generated/wire.ts` and both header copies. `tools/check_protocol.py` regenerates them in memory and fails on any difference; the generator itself refuses implicit padding and any size that disagrees with `protocol.yaml`.
 - **Relay tests.** `npm test`: codec round-trips, the character and stage tables, and integration tests against `test/fake-startgg.ts` covering every row of the error table. Tests never touch the real API.
 - **Load.** `scripts/sim-wii.ts` drives 12 fake stations through list, start, score and end for 10 minutes and checks the upstream call rate.
-- **Real API.** Only `scripts/probe.ts` touches start.gg, using `.env`, against an unpublished test tournament.
+- **Real API.** Only `scripts/probe.ts` (read-only) and `scripts/reset-bracket.ts` (the test event only) touch start.gg, using `.env`.
 - **Kiosk.** A development setup can load `tournament.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
 - **CI.** GitHub Actions runs `npm test` and the build on every push to main and on pull requests.
 

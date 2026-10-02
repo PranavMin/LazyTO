@@ -24,7 +24,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { SetCache } from './cache.js';
-import type { StationState } from './state.js';
+import { wins, type StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
 import type { RefusedStatus } from './tcp.js';
@@ -36,7 +36,7 @@ import {
   type TelemetryRefused,
 } from './telemetry.js';
 import { ModuleState } from '../generated/wire.js';
-import type { Admin, AdminResult } from './admin.js';
+import { BEST_OF_CHOICES, type Admin, type AdminResult } from './admin.js';
 
 export interface StatusDeps {
   state: StationState;
@@ -56,14 +56,14 @@ export interface StatusDeps {
     refused(): TelemetryRefused | null;
     beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null;
   };
-  /** The TO's actions and the password they need; without them the page is read-only. */
-  admin?: { actions: Admin; password: string };
+  /** The TO's actions and the password they need. */
+  admin: { actions: Admin; password: string };
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
-export const SILENT_STATION_MS = 20_000;
+const SILENT_STATION_MS = 20_000;
 /** Log lines shown per Wii on the main page; the rest is on /log. */
-export const LOG_TAIL_LINES = 6;
+const LOG_TAIL_LINES = 6;
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
 export const STALE_CACHE_MS = 60_000;
@@ -232,8 +232,7 @@ export class StatusServer {
   }
 
   render(done: string | null = null, error: string | null = null): string {
-    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp, telemetry, admin } =
-      this.deps;
+    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp, telemetry } = this.deps;
     const flags = state.flags();
 
     const cards = state.stations().map((station) => {
@@ -244,9 +243,7 @@ export class StatusServer {
           ? `${set.roundShort}  ${set.p1.tag} vs ${set.p2.tag} (Bo${set.bestOf})`
           : `set ${claim.setId}`
         : 'no set';
-      const score = claim?.games.length
-        ? `${claim.games.filter((g) => g.winner_slot === 1).length}–${claim.games.filter((g) => g.winner_slot === 2).length}`
-        : '';
+      const score = claim?.games.length ? wins(claim.games).join('–') : '';
 
       const action = state.lastAction(station);
       let actionText = '<span class="muted">no action yet</span>';
@@ -266,10 +263,9 @@ export class StatusServer {
         )
         .join('');
       const star = station === streamStation ? ' ★' : '';
-      const free =
-        admin && claim
-          ? `<div class="acts"><form method="get" action="/free"><input type="hidden" name="station" value="${station}"><button>free station</button></form></div>`
-          : '';
+      const free = claim
+        ? `<div class="acts"><form method="get" action="/free"><input type="hidden" name="station" value="${station}"><button>free station</button></form></div>`
+        : '';
       return (
         `<div class="card${stationFlags.length ? ' bad' : ''}">` +
         `<div class="row"><span class="st">${station}${star}</span>` +
@@ -362,7 +358,7 @@ export class StatusServer {
       : done
         ? `<p class="ok">✓ ${escapeHtml(done)}</p>`
         : '';
-    const waiting = admin ? this.renderWaiting() : '';
+    const waiting = this.renderWaiting();
 
     return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -393,12 +389,10 @@ ${staleLine}${errorLine}${warningLines}
     const { cache, state } = this.deps;
     const sets = cache.pending().filter((s) => state.stationFor(s.id) === undefined);
     const items = sets.map((s) => {
-      const buttons = [3, 5]
-        .filter((bo) => bo !== s.bestOf)
-        .map(
-          (bo) =>
-            `<form method="post" action="/bestof?set=${s.id}&amp;bo=${bo}"><button>Bo${bo}</button></form>`,
-        );
+      const buttons = BEST_OF_CHOICES.filter((bo) => bo !== s.bestOf).map(
+        (bo) =>
+          `<form method="post" action="/bestof?set=${s.id}&amp;bo=${bo}"><button>Bo${bo}</button></form>`,
+      );
       if (s.bestOfOverridden) {
         buttons.push(
           `<form method="post" action="/bestof?set=${s.id}&amp;bo=auto"><button>auto (Bo${s.autoBestOf})</button></form>`,
@@ -423,11 +417,6 @@ ${items.join('\n')}
   /** /free and /bestof: password first, then same-origin for POSTs, then the action. */
   private async adminRoute(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const admin = this.deps.admin;
-    if (!admin) {
-      res.writeHead(404, { 'content-type': 'text/plain' });
-      res.end('not found');
-      return;
-    }
     if (!passwordMatches(req.headers.authorization, admin.password)) {
       res.writeHead(401, {
         'www-authenticate': 'Basic realm="LazyTO TO actions", charset="UTF-8"',
@@ -475,8 +464,7 @@ ${items.join('\n')}
       body = `<p>Station ${station} has no set.</p>`;
     } else {
       const set = cache.get(claim.setId);
-      const w1 = claim.games.filter((g) => g.winner_slot === 1).length;
-      const w2 = claim.games.length - w1;
+      const [w1, w2] = wins(claim.games);
       const name = set
         ? `${escapeHtml(set.roundShort)} ${escapeHtml(set.p1.tag)} vs ${escapeHtml(set.p2.tag)}`
         : `set ${claim.setId}`;

@@ -1,65 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect, type Socket } from 'node:net';
-import { StatusServer, STALE_CACHE_MS } from '../src/status.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
-import { WiiClient, game, TEST_SECRET } from './wii-client.js';
-import { StationTelemetry } from '../src/telemetry.js';
-import { telemetryDatagram, statusPayload, crashPayload } from './telemetry.test.js';
+import { rmSync } from 'node:fs';
+import { STALE_CACHE_MS } from '../src/status.js';
+import { WiiClient, game } from './wii-client.js';
+import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
-
-const nullAudit: AuditSink = { record() {} };
+import { startHarness } from './harness.js';
 
 test('status page', async (t) => {
-  const fake = makeFake();
-  await fake.start();
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  const tcp = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit: nullAudit,
-    streamStation: 1,
-    streamId: 1358079,
-    secret: TEST_SECRET,
-  });
-  await tcp.listen(0, '127.0.0.1');
-  const telemetry = new StationTelemetry({ secret: TEST_SECRET });
-  const status = new StatusServer({
-    state,
-    cache,
-    startgg,
-    streamStation: 1,
-    eventLabel: `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`,
-    beacon: {
-      status: () => ({
-        targets: ['192.168.1.255'],
-        sent: 1,
-        lastSentAt: Date.now(),
-        lastError: null,
-      }),
-    },
-    tcp,
-    telemetry,
-  });
-  await status.listen(0, '127.0.0.1');
-  const statusUrl = `http://127.0.0.1:${status.address().port}`;
-  t.after(async () => {
-    await status.close();
-    await tcp.close();
-    await fake.close();
-  });
+  const h = await startHarness();
+  t.after(h.close);
+  const { fake, statusUrl } = h;
+  const { cache, state } = h.ev;
+  const tcp = h.ev.tcp;
+  const telemetry = h.ev.telemetry;
+  const status = h.status;
 
   await t.test('Wii consoles: module status, log tail, full log page', async () => {
     let html = await (await fetch(statusUrl)).text();
@@ -260,22 +216,8 @@ test(
   'close() drops open browser connections instead of waiting for them',
   { timeout: 5000 },
   async () => {
-    const fake = makeFake();
-    await fake.start();
-    const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN });
-    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-    await cache.refresh();
-    const status = new StatusServer({
-      state: new StationState(),
-      cache,
-      startgg,
-      streamStation: 1,
-      eventLabel: 'LazyTO Test Tournament',
-      beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) },
-      tcp: { refused: () => null },
-      telemetry: new StationTelemetry({ secret: TEST_SECRET }),
-    });
-    await status.listen(0, '127.0.0.1');
+    const h = await startHarness();
+    const status = h.status;
     const port = status.address().port;
 
     // A phone between meta refreshes: one keep-alive socket that has fetched the
@@ -295,6 +237,9 @@ test(
     await status.close();
     assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
     await Promise.all([keptAlive.dropped, preconnected.dropped, halfSent.dropped]);
-    await fake.close();
+    // The status server is closed above; shut the rest down without closing it twice.
+    await h.ev.stop();
+    await h.fake.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
   },
 );

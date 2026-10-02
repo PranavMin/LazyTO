@@ -10,12 +10,8 @@
 // weeklyNamePrefix ("" for none) lets a numbered weekly series be found by
 // name when the short URL has not been moved yet (resolve.ts).
 //
-// Two fields beyond the design's example: auditDir, the directory the audit
-// log <eventId>.jsonl is written to (section 10 hardcodes a Linux path; a
-// hardcoded path is a hidden default, so it lives in the config instead),
-// and startggEndpoint, the GraphQL URL -- https://api.start.gg/gql/alpha in
-// production, the in-process fake (test/fake-startgg.ts) when the built
-// relay is exercised on a dev machine. Same reasoning: explicit, not hidden.
+// auditDir is the directory the audit log <eventId>.jsonl and the Wii logs go
+// to; startggEndpoint is the GraphQL URL, always https://api.start.gg/gql/alpha.
 
 import { readFileSync } from 'node:fs';
 import { SET_FORMATS, type SetFormat } from './format.js';

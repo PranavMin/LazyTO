@@ -34,14 +34,14 @@
 import type { AdminTournament, StartggClient, TournamentDetail } from './startgg.js';
 
 /** Melee's videogame id and start.gg's singles event type. */
-export const MELEE_VIDEOGAME_ID = 1;
-export const SINGLES_EVENT_TYPE = 1;
+const MELEE_VIDEOGAME_ID = 1;
+const SINGLES_EVENT_TYPE = 1;
 
 /** Admin tournaments fetched per page while looking for the short URL. */
 export const ADMIN_PAGE_SIZE = 50;
 
 /** How far from now a weekly's start may be for the weekly fallback to take it. */
-export const WEEKLY_WINDOW_DAYS = 30;
+const WEEKLY_WINDOW_DAYS = 30;
 
 export interface ResolveInput {
   tournament: string; // short URL (e.g. "mybar") or full slug ("tournament/<slug>")

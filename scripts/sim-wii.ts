@@ -1,71 +1,30 @@
 // sim-wii.ts -- load test (architecture.md "Development and testing"): 12 fake stations drive
 // the relay through list -> start -> score x3 -> end in a loop, paced like a
-// venue (one button press every ~12 s per station). Asserts at the end:
+// venue (one button press every ~12 s per station), against the real relay
+// stack (test/harness.ts) and the in-process fake start.gg. Asserts at the end:
 //   - peak upstream call rate (any 60 s window, cache refreshes included)
 //     stayed under 70/min,
 //   - zero errors: every request answered ST_OK, with ST_SET_TAKEN counted
 //     separately as benign contention (two stations racing for one set).
 //
-// Two modes:
-//   npm run sim                          in-process: fake start.gg + the real
-//                                        client/cache/state/tcp/status stack
-//   npx tsx scripts/sim-wii.ts --relay=127.0.0.1:29470 --secret=<relay's secret>
-//                                        external: drive an already-running
-//                                        relay (e.g. `node dist/main.js`
-//                                        pointed at `npm run fake`). The
-//                                        upstream rate is then reported by
-//                                        scripts/serve-fake.ts, not here.
-// Either mode takes --duration=<seconds> (default 600). npm swallows
-// unknown flags unless they follow `--`; `npx tsx scripts/sim-wii.ts
-// --duration=60` avoids the issue.
+//   npm run sim                                   10 minutes
+//   npx tsx scripts/sim-wii.ts --duration=60      npm swallows unknown flags unless
+//                                                 they follow `--`; this avoids it
 
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { RelayStatus } from '../generated/wire.js';
-import { StartggClient } from '../src/startgg.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { AuditLog, auditPath } from '../src/audit.js';
-import { RelayTcpServer } from '../src/tcp.js';
-import { StatusServer } from '../src/status.js';
-import { StationTelemetry } from '../src/telemetry.js';
-import {
-  FakeStartgg,
-  FIXTURE_TOKEN,
-  FIXTURE_EVENT_ID,
-  loadFixture,
-  peakPerMinute,
-} from '../test/fake-startgg.js';
-import { WiiClient, TEST_SECRET } from '../test/wii-client.js';
+import { loadFixture, peakPerMinute } from '../test/fake-startgg.js';
+import { game, type WiiClient } from '../test/wii-client.js';
+import { startHarness } from '../test/harness.js';
 
 const STATIONS = 12;
 const ACTION_DELAY_MS = 12_000; // one player action every ~12 s, +/- 25% jitter
 const RATE_LIMIT_PER_MIN = 70;
 
-function flag(name: string): string | undefined {
-  const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return arg?.slice(name.length + 3);
-}
-
-const DURATION_S = Number(flag('duration') ?? 600);
+const durationArg = process.argv.find((a) => a.startsWith('--duration='));
+const DURATION_S = Number(durationArg?.slice('--duration='.length) ?? 600);
 if (!Number.isFinite(DURATION_S) || DURATION_S <= 0) {
   console.error('bad --duration');
   process.exit(1);
-}
-
-// --secret=: the external relay's secret (its config.json); in-process uses TEST_SECRET.
-const SECRET = flag('secret') ?? TEST_SECRET;
-
-const relayArg = flag('relay');
-let external: { host: string; port: number } | null = null;
-if (relayArg !== undefined) {
-  const m = /^([^:]+):(\d+)$/.exec(relayArg);
-  if (!m || Number(m[2]) < 1 || Number(m[2]) > 65535) {
-    console.error('bad --relay (want host:port)');
-    process.exit(1);
-  }
-  external = { host: m[1], port: Number(m[2]) };
 }
 
 const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
@@ -131,38 +90,9 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
 
     // A 2-1 set: winners of games 1 and 2 split, game 3 decides.
     const decider = (Math.random() < 0.5 ? 1 : 2) as 1 | 2;
-    const games = [
-      {
-        winner_slot: decider,
-        p1_char: randChar(),
-        p2_char: randChar(),
-        stage: 0x1f,
-        p1_stocks: 0xff,
-        p2_stocks: 0xff,
-        p1_costume: 0xff,
-        p2_costume: 0xff,
-      },
-      {
-        winner_slot: (3 - decider) as 1 | 2,
-        p1_char: randChar(),
-        p2_char: randChar(),
-        stage: 0x1f,
-        p1_stocks: 0xff,
-        p2_stocks: 0xff,
-        p1_costume: 0xff,
-        p2_costume: 0xff,
-      },
-      {
-        winner_slot: decider,
-        p1_char: randChar(),
-        p2_char: randChar(),
-        stage: 0x1f,
-        p1_stocks: 0xff,
-        p2_stocks: 0xff,
-        p1_costume: 0xff,
-        p2_costume: 0xff,
-      },
-    ];
+    const games = [decider, (3 - decider) as 1 | 2, decider].map((w) =>
+      game(w, randChar(), randChar(), 0x1f),
+    );
 
     let dead = false;
     for (let n = 1; n <= 3; n++) {
@@ -179,66 +109,6 @@ async function stationLoop(wii: WiiClient, deadline: number, tally: Tally): Prom
   }
 }
 
-interface Stack {
-  host: string;
-  port: number;
-  upstreamCalls: () => number | null; // null: not observable (external relay)
-  upstreamTimes: () => number[] | null;
-  stop: () => Promise<void>;
-}
-
-async function inProcessStack(tally: Tally): Promise<Stack> {
-  const fake = new FakeStartgg(FIXTURE_TOKEN, FIXTURE_EVENT_ID, loadFixture(400));
-  await fake.start();
-
-  const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN });
-  const audit = new AuditLog(auditPath(mkdtempSync(join(tmpdir(), 'tr-sim-')), FIXTURE_EVENT_ID));
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg', (e) => {
-    tally.errors.push(`cache refresh failed: ${String(e)}`);
-  });
-  await cache.refresh();
-  const state = new StationState();
-  const tcp = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit,
-    streamStation: 1,
-    streamId: 1358079,
-    secret: TEST_SECRET,
-  });
-  await tcp.listen(0, '127.0.0.1');
-  const status = new StatusServer({
-    state,
-    cache,
-    startgg,
-    streamStation: 1,
-    eventLabel: `sim fixture (${FIXTURE_EVENT_ID})`,
-    beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) },
-    tcp,
-    telemetry: new StationTelemetry({ secret: TEST_SECRET }),
-  });
-  await status.listen(0, '127.0.0.1');
-  cache.start();
-
-  console.log(`status page: http://127.0.0.1:${status.address().port}/`);
-  console.log(`audit log:   ${audit.path}`);
-
-  return {
-    host: '127.0.0.1',
-    port: tcp.address().port,
-    upstreamCalls: () => startgg.callsInWindow(),
-    upstreamTimes: () => fake.calls.map((c) => c.at),
-    stop: async () => {
-      cache.stop();
-      await tcp.close();
-      await status.close();
-      await fake.close();
-      audit.close();
-    },
-  };
-}
-
 async function main(): Promise<void> {
   const tally: Tally = {
     setsCompleted: 0,
@@ -247,43 +117,33 @@ async function main(): Promise<void> {
     contention: 0,
     errors: [],
   };
-  const stack: Stack = external
-    ? {
-        ...external,
-        upstreamCalls: () => null,
-        upstreamTimes: () => null,
-        stop: async () => {},
-      }
-    : await inProcessStack(tally);
+  const h = await startHarness({ sets: loadFixture(400), eventLabel: 'sim fixture' });
+  console.log(`status page: ${h.statusUrl}/`);
+  console.log(`audit log:   ${h.ev.audit.path}`);
 
   const deadline = Date.now() + DURATION_S * 1000;
-  console.log(
-    `sim-wii: ${STATIONS} stations for ${DURATION_S} s against ${stack.host}:${stack.port}` +
-      (external ? ' (external relay)' : ''),
-  );
+  console.log(`sim-wii: ${STATIONS} stations for ${DURATION_S} s`);
 
   const progress = setInterval(() => {
-    const upstream = stack.upstreamCalls();
     console.log(
       `  t+${Math.round((Date.now() - (deadline - DURATION_S * 1000)) / 1000)}s: ` +
         `${tally.setsCompleted} sets done, ${tally.requests} requests, ` +
-        (upstream === null ? '' : `${upstream} upstream calls last 60s, `) +
-        `${tally.errors.length} errors`,
+        `${h.startgg.callsInWindow()} upstream calls last 60s, ${tally.errors.length} errors`,
     );
   }, 30_000);
   progress.unref();
 
   await Promise.all(
-    Array.from({ length: STATIONS }, (_, i) =>
-      stationLoop(new WiiClient(stack.port, i + 1, 0, stack.host, SECRET), deadline, tally),
-    ),
+    Array.from({ length: STATIONS }, (_, i) => stationLoop(h.wii(i + 1), deadline, tally)),
   );
 
   clearInterval(progress);
-  await stack.stop();
+  const upstreamTimes = h.fake.calls.map((c) => c.at);
+  const refreshErrors = h.auditEvents().filter((e) => e.type === 'refresh_error');
+  for (const e of refreshErrors) tally.errors.push(`cache refresh failed: ${String(e.error)}`);
+  await h.close();
 
-  const upstreamTimes = stack.upstreamTimes();
-  const peakUpstream = upstreamTimes === null ? null : peakPerMinute(upstreamTimes);
+  const peakUpstream = peakPerMinute(upstreamTimes);
   console.log('\n=== sim-wii results ===');
   console.log(`duration:            ${DURATION_S} s`);
   console.log(`sets completed:      ${tally.setsCompleted}`);
@@ -292,15 +152,13 @@ async function main(): Promise<void> {
   );
   console.log(`benign contention:   ${tally.contention} (ST_SET_TAKEN races)`);
   console.log(
-    upstreamTimes === null
-      ? 'upstream calls:      (external relay -- see the serve-fake output)'
-      : `upstream calls:      ${upstreamTimes.length} total, peak ${peakUpstream}/min (limit ${RATE_LIMIT_PER_MIN})`,
+    `upstream calls:      ${upstreamTimes.length} total, peak ${peakUpstream}/min (limit ${RATE_LIMIT_PER_MIN})`,
   );
   console.log(`errors:              ${tally.errors.length}`);
   for (const e of tally.errors.slice(0, 20)) console.log(`  ${e}`);
 
   let failed = false;
-  if (peakUpstream !== null && peakUpstream >= RATE_LIMIT_PER_MIN) {
+  if (peakUpstream >= RATE_LIMIT_PER_MIN) {
     console.error(`FAIL: peak upstream rate ${peakUpstream}/min >= ${RATE_LIMIT_PER_MIN}/min`);
     failed = true;
   }
