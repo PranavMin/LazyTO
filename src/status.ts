@@ -104,6 +104,69 @@ function sameOrigin(req: IncomingMessage): boolean {
   }
 }
 
+/**
+ * One stylesheet for both pages. Phone first: the TO runs the night from a
+ * phone, so every block is a full-width card, text wraps instead of
+ * scrolling sideways, and buttons are at least 44 px tall. Light and dark
+ * follow the system setting.
+ */
+const PAGE_CSS = `
+  :root {
+    --bg: #f8fafc; --fg: #0f172a; --card: #ffffff; --line: #e2e8f0;
+    --muted: #64748b; --warn: #b45309; --bad: #b91c1c; --ok: #15803d;
+    --btn: #f1f5f9; --btnline: #cbd5e1; --link: #1d4ed8;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 12px 16px 32px; max-width: 56rem;
+    font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--fg); overflow-wrap: anywhere;
+  }
+  h1 { font-size: 1.3em; margin: 0 0 0.2em; }
+  h2 { font-size: 1.05em; margin: 1.4em 0 0.5em; }
+  .sub { margin: 0 0 0.8em; color: var(--muted); }
+  .sub b { color: var(--fg); }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin: 0 0 8px;
+  }
+  .card.bad { border-color: var(--warn); border-left-width: 4px; }
+  .row { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; }
+  .grow { flex: 1 1 10rem; min-width: 0; }
+  .st { font-weight: 700; min-width: 2.2em; }
+  .score { font-weight: 700; font-size: 1.2em; font-variant-numeric: tabular-nums; }
+  .line { margin-top: 4px; }
+  .acts { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .item:first-child { border-top: 0; padding-top: 0; }
+  .item:last-child { padding-bottom: 0; }
+  .list { padding-top: 10px; padding-bottom: 10px; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .rd { display: inline-block; min-width: 2.6em; }
+  .warn { color: var(--warn); }
+  .ok { color: var(--ok); }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.85em; }
+  p.warn, p.ok { font-weight: 600; }
+  a { color: var(--link); }
+  form { display: inline; margin: 0; }
+  button, .btnlink {
+    font: inherit; font-weight: 600; min-height: 44px; min-width: 44px; padding: 0 14px;
+    color: var(--fg); background: var(--btn); border: 1px solid var(--btnline); border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+  }
+  button.danger { color: #fff; background: #dc2626; border-color: #dc2626; }
+  details { margin-top: 6px; }
+  summary { color: var(--muted); cursor: pointer; min-height: 32px; }
+  pre {
+    margin: 4px 0; white-space: pre-wrap; word-break: break-all; font-size: 0.8em;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .foot { margin-top: 1.5em; font-size: 0.9em; }
+  .foot p { margin: 0.4em 0; }
+`;
+
 export class StatusServer {
   private readonly server: Server;
 
@@ -165,20 +228,20 @@ export class StatusServer {
       this.deps;
     const flags = state.flags();
 
-    const rows = state.stations().map((station) => {
+    const cards = state.stations().map((station) => {
       const claim = state.get(station);
       const set = claim ? cache.get(claim.setId) : undefined;
       const setText = claim
         ? set
           ? `${set.roundShort}  ${set.p1.tag} vs ${set.p2.tag} (Bo${set.bestOf})`
           : `set ${claim.setId}`
-        : '—';
+        : 'no set';
       const score = claim?.games.length
         ? `${claim.games.filter((g) => g.winner_slot === 1).length}–${claim.games.filter((g) => g.winner_slot === 2).length}`
-        : '—';
+        : '';
 
       const action = state.lastAction(station);
-      let actionText = '—';
+      let actionText = '<span class="muted">no action yet</span>';
       if (action) {
         const cmd = escapeHtml(action.cmd.replace('CMD_', ''));
         actionText = action.ok
@@ -187,24 +250,28 @@ export class StatusServer {
       }
 
       const stationFlags = flags.filter((f) => f.station === station);
-      const status = stationFlags.length
-        ? stationFlags
-            .map(
-              (f) =>
-                `<span class="warn">✗ ${escapeHtml(f.message)} (${age(f.at)} ago)</span> ` +
-                `<form method="post" action="/ack?id=${f.id}"><button>ack</button></form>`,
-            )
-            .join('<br>')
-        : 'OK';
+      const flagLines = stationFlags
+        .map(
+          (f) =>
+            `<div class="line row"><span class="warn grow">✗ ${escapeHtml(f.message)} (${age(f.at)} ago)</span>` +
+            `<form method="post" action="/ack?id=${f.id}"><button>ack</button></form></div>`,
+        )
+        .join('');
       const star = station === streamStation ? ' ★' : '';
       const free =
         admin && claim
-          ? ` <form method="get" action="/free"><input type="hidden" name="station" value="${station}"><button>free</button></form>`
+          ? `<div class="acts"><form method="get" action="/free"><input type="hidden" name="station" value="${station}"><button>free station</button></form></div>`
           : '';
-      return `<tr><td>${station}${star}</td><td>${escapeHtml(setText)}${free}</td><td>${score}</td><td>${actionText}</td><td>${status}</td></tr>`;
+      return (
+        `<div class="card${stationFlags.length ? ' bad' : ''}">` +
+        `<div class="row"><span class="st">${station}${star}</span>` +
+        `<span class="grow${claim ? '' : ' muted'}">${escapeHtml(setText)}</span>` +
+        `${score ? `<span class="score">${score}</span>` : ''}</div>` +
+        `<div class="line">${actionText}</div>${flagLines}${free}</div>`
+      );
     });
-    if (rows.length === 0) {
-      rows.push('<tr><td colspan="5" class="muted">no station has connected yet</td></tr>');
+    if (cards.length === 0) {
+      cards.push('<p class="muted">no station has connected yet</p>');
     }
 
     const cs = cache.status();
@@ -229,14 +296,17 @@ export class StatusServer {
       ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>`
       : '';
 
-    const wiiRows = telemetry.stations().map((t) => {
+    const wiiCards = telemetry.stations().map((t) => {
       const silent = Date.now() - t.lastSeenAt > SILENT_STATION_MS;
-      const heard = `${age(t.lastSeenAt)} ago${silent ? ' <span class="warn">(silent)</span>' : ''}`;
+      const heard = `heard ${age(t.lastSeenAt)} ago${silent ? ' <span class="warn">(silent)</span>' : ''}`;
+      const moduleBad =
+        t.status !== null &&
+        t.status.module_state !== ModuleState.MOD_LOADED &&
+        t.status.module_state !== ModuleState.MOD_PENDING;
       const mod = t.status
-        ? t.status.module_state === ModuleState.MOD_LOADED ||
-          t.status.module_state === ModuleState.MOD_PENDING
-          ? escapeHtml(moduleStateText(t.status))
-          : `<span class="warn">✗ ${escapeHtml(moduleStateText(t.status))}</span>`
+        ? moduleBad
+          ? `<span class="warn">✗ ${escapeHtml(moduleStateText(t.status))}</span>`
+          : escapeHtml(moduleStateText(t.status))
         : '<span class="muted">no status yet</span>';
       const extra = [
         t.lost ? `${t.lost} datagram(s) lost` : '',
@@ -245,24 +315,29 @@ export class StatusServer {
       ].filter(Boolean);
       const tail = t.lines.slice(-LOG_TAIL_LINES).map(escapeHtml).join('\n');
       const crash = t.crash
-        ? `<br><span class="warn">✗ crashed ${t.crashAt ? `${age(t.crashAt)} ago` : ''}: ${escapeHtml(crashText(t.crash, t.status))}</span>` +
-          `<br><span class="muted">words at the fault: ${t.crash.fetched.map((w) => w.toString(16).padStart(8, '0')).join(' ')}; ` +
+        ? `<div class="line warn">✗ crashed ${t.crashAt ? `${age(t.crashAt)} ago` : ''}: ${escapeHtml(crashText(t.crash, t.status))}</div>` +
+          `<div class="line muted small">words at the fault: ${t.crash.fetched.map((w) => w.toString(16).padStart(8, '0')).join(' ')}; ` +
           `stack: ${
             [...t.crash.stack]
               .filter(Boolean)
               .map((a) => escapeHtml(hexAddr(a, t.status)))
               .join(' &lt; ') || '—'
-          }</span>`
+          }</div>`
         : '';
+      const bad = silent || t.crash !== null || moduleBad;
       return (
-        `<tr><td>${t.station}</td><td>${heard}<br><span class="muted">${escapeHtml(t.from)}</span></td>` +
-        `<td>${mod}${extra.length ? `<br><span class="muted">${escapeHtml(extra.join(', '))}</span>` : ''}${crash}</td>` +
-        `<td><pre>${tail || '<span class="muted">no log yet</span>'}</pre><a href="/log?station=${t.station}">full log</a></td></tr>`
+        `<div class="card${bad ? ' bad' : ''}">` +
+        `<div class="row"><span class="st">${t.station}</span><span class="grow">${heard}</span>` +
+        `<span class="muted small">${escapeHtml(t.from)}</span></div>` +
+        `<div class="line">${mod}</div>` +
+        `${extra.length ? `<div class="line muted small">${escapeHtml(extra.join(', '))}</div>` : ''}${crash}` +
+        `<details><summary>kernel log</summary><pre>${tail || '<span class="muted">no log yet</span>'}</pre>` +
+        `<a href="/log?station=${t.station}">full log</a></details></div>`
       );
     });
-    if (wiiRows.length === 0) {
-      wiiRows.push(
-        '<tr><td colspan="4" class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</td></tr>',
+    if (wiiCards.length === 0) {
+      wiiCards.push(
+        '<p class="muted">no Wii has reported yet (needs the telemetry kernel and Nintendont Network on)</p>',
       );
     }
     const br = telemetry.beaconRequested?.() ?? null;
@@ -302,37 +377,42 @@ export class StatusServer {
   pre { margin: 0 0 0.3em; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
 
+    .muted { color: #9ca3af; }
+    a { color: #93c5fd; }
+    button {
+      color: #f9fafb;
+      background: #1f2937;
+      border: 1px solid #4b5563;
+    }
+  }
   @media (max-width: 600px) {
     body { font-size: 14px; margin: 0.5em; }
     td, th { padding: 0.3em 0.4em; }
   }
 </style></head><body>
 <h1>LazyTO</h1>
-${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
-<div class="scroll"><table>
-<tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
-${rows.join('\n')}
-</table></div>
+${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>stream station ${streamStation} ★ · refreshes every 5 s</p>
+<h2>Stations</h2>
+${cards.join('\n')}
 ${waiting}
 <h2>Wii consoles</h2>
-<div class="scroll"><table>
-<tr><th>Station</th><th>Last heard</th><th>Tournament module</th><th>Kernel log</th></tr>
-${wiiRows.join('\n')}
-</table></div>
+${wiiCards.join('\n')}
+<div class="foot">
 ${telemetryRefusedLine}
 ${beaconRequestLine}
-<p>${cacheLine}   Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
+<p>${cacheLine} Upstream: ${startgg.callsInWindow()} calls last 60s.</p>
 ${beaconLine}
 ${refusedLine}
 ${staleLine}${errorLine}${warningLines}
+</div>
 </body></html>`;
   }
 
-  /** Sets waiting for a station, with the TO's best-of buttons. */
+  /** Sets waiting for a station, with the TO's best-of buttons. */ /** Sets waiting for a station, with the TO's best-of buttons. */
   private renderWaiting(): string {
     const { cache, state } = this.deps;
     const sets = cache.pending().filter((s) => state.stationFor(s.id) === undefined);
-    const rows = sets.map((s) => {
+    const items = sets.map((s) => {
       const buttons = [3, 5]
         .filter((bo) => bo !== s.bestOf)
         .map(
@@ -344,20 +424,20 @@ ${staleLine}${errorLine}${warningLines}
           `<form method="post" action="/bestof?set=${s.id}&amp;bo=auto"><button>auto (Bo${s.autoBestOf})</button></form>`,
         );
       }
-      const mark = s.bestOfOverridden ? ' <span class="muted">set by TO</span>' : '';
+      const mark = s.bestOfOverridden ? ' <span class="muted small">set by TO</span>' : '';
       return (
-        `<tr><td>${escapeHtml(s.roundShort)}</td><td>${escapeHtml(s.p1.tag)} vs ${escapeHtml(s.p2.tag)}</td>` +
-        `<td>Bo${s.bestOf}${mark}</td><td>${buttons.join(' ')}</td></tr>`
+        `<div class="item"><div class="grow"><span class="muted rd">${escapeHtml(s.roundShort)}</span> ` +
+        `${escapeHtml(s.p1.tag)} vs ${escapeHtml(s.p2.tag)}<br><b>Bo${s.bestOf}</b>${mark}</div>` +
+        `<div class="btns">${buttons.join('')}</div></div>`
       );
     });
-    if (rows.length === 0) {
-      rows.push('<tr><td colspan="4" class="muted">no set is waiting</td></tr>');
+    if (items.length === 0) {
+      items.push('<p class="muted">no set is waiting</p>');
     }
     return `<h2>Waiting sets</h2>
-<div class="scroll"><table>
-<tr><th>Round</th><th>Set</th><th>Best of</th><th>Change</th></tr>
-${rows.join('\n')}
-</table></div>`;
+<div class="card list">
+${items.join('\n')}
+</div>`;
   }
 
   /** /free and /bestof: password first, then same-origin for POSTs, then the action. */
@@ -427,8 +507,8 @@ ${rows.join('\n')}
         : `<p>The set has already left start.gg's pending list; this only frees the station.</p>`;
       body =
         `<p>Free station ${station}, playing <b>${name}</b>?</p>${effect}` +
-        `<form method="post" action="/free?station=${station}&amp;set=${claim.setId}"><button>Free station ${station}</button></form> ` +
-        `<a href="/">cancel</a>`;
+        `<div class="acts"><form method="post" action="/free?station=${station}&amp;set=${claim.setId}"><button class="danger">Free station ${station}</button></form>` +
+        `<a class="btnlink" href="/">cancel</a></div>`;
     }
     return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -439,6 +519,9 @@ ${rows.join('\n')}
   .warn { color: #a40; }
   form { display: inline; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
+    a { color: #93c5fd; }
+    button { color: #f9fafb; background: #1f2937; border: 1px solid #4b5563; }
+  }
 </style></head><body>
 <h1>LazyTO</h1>
 ${body}
