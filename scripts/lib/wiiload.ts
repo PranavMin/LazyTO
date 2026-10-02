@@ -62,7 +62,8 @@ export function sendWiiload(
     // frame was handed to the kernel is success, like the reference tool
     // (which never reads back). A reset before that is a real failure.
     let sent = false;
-    const allWritten = (): boolean => sent || sock.writableFinished || (off === frame.length && sock.writableLength === 0);
+    const allWritten = (): boolean =>
+      sent || sock.writableFinished || (off === frame.length && sock.writableLength === 0);
     sock.once('error', (e) => (allWritten() ? resolve() : reject(e)));
     let off = 0;
     sock.once('connect', () => {

@@ -38,9 +38,9 @@ python kiosk/tools/build_module.py
 
 Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
-`--check` builds without `main.dol` (what CI's `kiosk` workflow runs): same compile, link and
-checks, minus the DOL address and guard checks, and no `tournament.bin`. Never use it for a
-module you will test or ship.
+The build uses no `main.dol`: hook addresses are checked against `splits.txt` and the guard
+word is the constant `GUARD_WORD`. CI's `kiosk` workflow runs the same build and uploads
+`tournament.bin` as the `tournament-bin` artifact.
 
 Read the tail of the output:
 
@@ -52,9 +52,8 @@ A failed external resolution or a gecko overlap stops the build and names the sy
 address. A missing venue codeset in `Nintendont/kernel/gecko` also stops it: run
 `git submodule update --init`.
 
-First-time setup of `melee/` (only if `melee/build` is missing): vanilla `main.dol` at
-`melee/orig/GALE01/sys/main.dol`, then `python configure.py --non-matching` and
-`python -m ninja` inside `melee/`. `ninja.exe` is not on PATH; use the pip package.
+First-time setup (only if `melee/build/compilers` is missing): `git submodule update --init`,
+`pip install ninja`, then `python kiosk/tools/fetch_decomp_tools.py`. No `main.dol` needed.
 
 ## When on-screen text looks jammed or stale
 

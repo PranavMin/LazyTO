@@ -28,26 +28,26 @@ external fails the build.
 python kiosk/tools/build_module.py        # -> kiosk/build/tournament.bin (about 81 KB, under 100 KB)
 ```
 
-Prerequisite: the `melee/` submodule (the unmodified decomp) set up once: your vanilla
-`main.dol` in `melee/orig/GALE01/sys/`, then `python configure.py --non-matching` and
-`python -m ninja` inside `melee/`. That provides the compilers, headers and symbol map. Objects go to `kiosk/build/obj/`;
+Prerequisite: the `melee/` submodule (the unmodified decomp) and its compilers, binutils and
+`sjiswrap`, fetched once with `pip install ninja` and
+`python kiosk/tools/fetch_decomp_tools.py`. No `main.dol` is needed: the decomp's own setup
+(`python -m ninja` in `melee/`) splits the DOL, so the script runs only the three downloads. Objects go to `kiosk/build/obj/`;
 delete them to force a clean rebuild. The output ends with the applied patch list, the guard
 check and the file size.
 
 The build runs on Windows only: the decomp's compilers and `powerpc-eabi-nm` are `.exe` files,
 and the wordmark generator uses GDI+.
 
-```
-python kiosk/tools/build_module.py --check   # build-check without main.dol; writes no module
-```
+The build needs no Nintendo file. The two facts of stock 1.02 it checks come from the decomp,
+which pins that DOL by SHA-1 (`melee/config/GALE01/build.sha1`):
 
-`--check` is for CI (`.github/workflows/kiosk.yml`), which has no `main.dol`. It compiles,
-links and runs every check that does not need the DOL: externals against `symbols.txt`, hook
-targets, the region, gecko collisions. It never opens the DOL, so it does not verify that each
-hook address is inside the vanilla DOL and does not read the guard word, and it writes no
-`tournament.bin`. It is never chosen automatically: without `--check` a missing DOL stops the
-build. CI fetches only the decomp's compilers, binutils and sjiswrap (`ninja tools` needs the
-DOL, see the workflow).
+- every hook address must lie inside a DOL section as `melee/config/GALE01/splits.txt` lays
+  them out (alignment padding excluded);
+- the guard word is the constant `GUARD_WORD` (`0x7C0802A6`) in `build_module.py`.
+
+So CI (`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, keeps it as
+the `tournament-bin` artifact, and a `v*` tag attaches it to the draft release. A CI module
+and a local one from the same commit differ only in the version text (hash and build date).
 
 ## Developer flags
 
