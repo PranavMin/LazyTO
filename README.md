@@ -1,3 +1,5 @@
+<img src="docs/img/lazyto-icon.png" alt="LazyTO, Melee tournament kiosk: the Homebrew Channel icon" width="256">
+
 # LazyTO
 
 LazyTO lets players at a Melee tournament run their own start.gg sets from the Wii. They pick
