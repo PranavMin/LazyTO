@@ -73,7 +73,7 @@ Start **LazyTO** from the Homebrew Channel. In its settings:
 | Melee Music, Melee Audio | your choice. Unless set to On and Stereo, the kiosk turns music off and uses mono. |
 | Everything else | as your venue normally runs Slippi Nintendont |
 
-Your venue's own options, such as UCF, stage striking and stage lists, work as usual. LazyTO
+Slippi Nintendont's options, such as UCF, stage striking and stage lists, work as usual. LazyTO
 adds nothing to them.
 
 Boot the game from the SD card. The loader only reads `tournament.cfg` from the card when the
