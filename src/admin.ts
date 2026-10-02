@@ -76,7 +76,7 @@ export class Admin {
       reason: 'dashboard',
       gamesDiscarded: live ? claim.games.length : 0,
     });
-    state.recordAction(station, 'DASHBOARD_FREE', true, 'ST_OK', 'freed by TO');
+    state.recordAction(station, 'FREED_BY_TO', true, 'ST_OK', 'freed by TO');
     return {
       ok: true,
       msg: live
