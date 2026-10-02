@@ -115,6 +115,14 @@ const PAGE_CSS = `
     --muted: #64748b; --warn: #b45309; --bad: #b91c1c; --ok: #15803d;
     --btn: #f1f5f9; --btnline: #cbd5e1; --link: #1d4ed8;
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a; --fg: #f1f5f9; --card: #1e293b; --line: #475569;
+      --muted: #cbd5e1; --warn: #fbbf24; --bad: #fca5a5; --ok: #86efac;
+      --btn: #334155; --btnline: #64748b; --link: #93c5fd;
+    }
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0 auto; padding: 12px 16px 32px; max-width: 56rem;
