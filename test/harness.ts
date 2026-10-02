@@ -44,6 +44,8 @@ export interface HarnessOptions {
   secret?: string;
   /** false: no stream tonight. Default: station STREAM_STATION streams to the fixture's stream. */
   stream?: false;
+  /** The bundle's wii/ folder, for the SD-card zips. */
+  wiiDir?: string;
 }
 
 export interface Harness {
@@ -94,6 +96,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     startggEndpoint: fake.url,
     startggOptions: { retryDelaysMs: [0, 0], limits: opts.limits },
     clockSynced: () => true,
+    wiiDir: opts.wiiDir,
   });
   await app.start();
   const m = app.current();

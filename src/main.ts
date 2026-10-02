@@ -4,20 +4,23 @@
 // Exits non-zero only if the web server can't start (port 29473 taken).
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { App } from './app.js';
 import { DATA_DIR, HTTP_PORT, TCP_PORT } from './config.js';
 
 /**
- * The VERSION file at the root of the release bundle (/opt/lazyto/VERSION),
- * two levels above the built dist/src/main.js; "dev" when run from source.
+ * The root of the release bundle (/opt/lazyto), two levels above the built
+ * dist/src/main.js; null when run from source, which has no bundle.
  */
+const BUNDLE = import.meta.filename.endsWith('.js')
+  ? resolve(import.meta.dirname, '..', '..')
+  : null;
+
+/** The bundle's VERSION; "dev" from source. */
 function version(): string {
-  if (!import.meta.filename.endsWith('.js')) return 'dev';
+  if (BUNDLE === null) return 'dev';
   try {
-    return (
-      readFileSync(resolve(import.meta.dirname, '..', '..', 'VERSION'), 'utf8').trim() || 'dev'
-    );
+    return readFileSync(join(BUNDLE, 'VERSION'), 'utf8').trim() || 'dev';
   } catch {
     return 'dev';
   }
@@ -29,6 +32,7 @@ async function main(): Promise<void> {
     httpPort: HTTP_PORT,
     tcpPort: TCP_PORT,
     version: version(),
+    wiiDir: BUNDLE === null ? undefined : join(BUNDLE, 'wii'),
   });
   await app.start();
 

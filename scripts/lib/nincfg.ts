@@ -4,10 +4,9 @@
 // and changes nothing else: Network (the relay needs it), Auto Boot (straight
 // into Melee; hold B at the loader for its menu) and Log (the SD log the
 // relay's telemetry reads) unless asked not to.
-export const NIN_CFG_MAGIC = 0x01070cf6;
-export const NIN_CFG_LOG = 1 << 8;
-export const NIN_CFG_AUTO_BOOT = 1 << 10;
-export const NIN_CFG_NETWORK = 1 << 13;
+import { NIN_CFG_AUTO_BOOT, NIN_CFG_LOG, NIN_CFG_MAGIC, NIN_CFG_NETWORK } from '../../src/cards.js';
+
+export { NIN_CFG_AUTO_BOOT, NIN_CFG_LOG, NIN_CFG_MAGIC, NIN_CFG_NETWORK };
 
 export type LoaderConfigPatch =
   | { kind: 'patched' | 'unchanged'; oldWord: number; newWord: number; bytes: Uint8Array }

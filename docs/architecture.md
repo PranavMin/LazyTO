@@ -173,6 +173,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
 | `setup.ts` | Setup wizard and settings page |
 | `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
+| `cards.ts` | The SD-card zips: the bundle's Wii files plus `tournament.cfg` and the loader's settings (`zip.ts` writes them) |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
@@ -341,8 +342,10 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 - The stock Melee 1.02 disc image on USB or SD, as at any Slippi local.
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
-- On the SD card root:
+- On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
+  - `apps/LazyTO/`: the loader.
   - `tournament.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
+  - `slippi_nincfg.bin`: the loader's settings, Network and Auto Boot on. Written as version 0xD, which the loader accepts and upgrades; the 0xE it saves itself is dropped at the next boot (no `case 0xE` in `LoadNinCFG`).
   - `tournament.cfg`: per card.
 
 ```
@@ -351,7 +354,7 @@ stream=0
 secret=<the relay's secret>
 ```
 
-`stream=1` goes on exactly one card. The relay refuses a stream START_SET from any station other than `streamStation`, so a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
+`stream=1` goes on the stream station's card. The relay decides the stream by station number (`streamStation`) and ignores the card's flag, so a mis-copied card cannot take over the stream; the kernel still needs the line. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
 
 ### Pi
 

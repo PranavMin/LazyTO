@@ -44,7 +44,7 @@ export interface Config {
   setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q" (format.ts)
 }
 
-const SECRET_RE = /^[A-Za-z0-9_-]{8,16}$/;
+export const SECRET_RE = /^[A-Za-z0-9_-]{8,16}$/;
 const PASSWORD_RE = /^[\x21-\x7e]{8,64}$/;
 const TOURNAMENT_RE = /^(tournament\/)?[A-Za-z0-9-]+$/;
 

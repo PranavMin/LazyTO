@@ -18,6 +18,9 @@
 //       also a real relay on the LAN (beacon, telemetry, TCP 29470) that a
 //       development Dolphin can find and play against; Dolphin's
 //       SlippiRelaySecret must match --secret (default: the test secret)
+//   --wii=<dir> (any of the above)
+//       a bundle's wii/ folder (unpacked lazyto.tgz), so the SD cards page
+//       serves real zips; without it, the page says there are no Wii files
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,6 +42,7 @@ const args = process.argv.join(' ');
 const port = Number(/--port=(\d+)/.exec(args)?.[1] ?? 29480);
 const network = process.argv.includes('--network');
 const secret = /--secret=(\S+)/.exec(args)?.[1];
+const wiiDir = /--wii=(\S+)/.exec(args)?.[1];
 const pageKind = /--page=(\w+)/.exec(args)?.[1] ?? 'running';
 if (!['running', 'setup', 'failed'].includes(pageKind)) {
   console.error(`preview-status: --page is running, setup or failed, not ${pageKind}`);
@@ -76,6 +80,7 @@ if (pageKind !== 'running') {
     startggOptions: { retryDelaysMs: [0, 0] },
     retryDelaysMs: [120_000],
     clockSynced: () => true,
+    wiiDir,
   });
   await app.start();
   const url = `http://127.0.0.1:${app.web.address().port}`;
@@ -94,6 +99,7 @@ if (pageKind !== 'running') {
     network,
     tcpPort: network ? 29470 : 0,
     secret,
+    wiiDir,
   });
 
   await h.wii(1, 1).startSet(107949994, 1);
