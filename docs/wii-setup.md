@@ -25,11 +25,12 @@ That is the whole card:
 | `apps/LazyTO/` | the LazyTO loader (`boot.dol`, `meta.xml`, `icon.png`) |
 | `tournament.bin` | the kiosk module, the same file on every card |
 | `tournament.cfg` | this Wii's station number and the relay's Wii secret, below |
-| `slippi_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, the game at `games/GALE01/game.iso` |
+| `lazyto_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, the game at `games/GALE01/game.iso` |
 | `games/GALE01/game.iso` | your Melee 1.02 image |
 
 The loader appears in the Homebrew Channel as **LazyTO**. Your usual Slippi Nintendont can stay
-installed beside it, but both use `slippi_nincfg.bin`: the zip's replaces the one on the card.
+installed beside it. Each keeps its own settings: LazyTO's in `lazyto_nincfg.bin`, Slippi
+Nintendont's in `slippi_nincfg.bin`.
 The zips carry the Wii files of the relay's version; the set list's top right shows the module
 and loader versions a Wii runs.
 
@@ -63,8 +64,8 @@ which needs a Wii Remote, and run the connection test.
 
 ## 3. Loader settings
 
-The zip's `slippi_nincfg.bin` turns on what LazyTO needs, so there is nothing to set. For
-reference, hold B while the loader starts to reach its menu:
+The zip's `lazyto_nincfg.bin` turns on what LazyTO needs, so there is nothing to set. To change
+something, hold B while the loader starts to reach its menu:
 
 | Setting | Value |
 |---|---|
@@ -72,10 +73,6 @@ reference, hold B while the loader starts to reach its menu:
 | Auto Boot | On, to start Melee straight away. |
 | Melee Music, Melee Audio | your choice. Unless set to On and Stereo, the kiosk turns music off and uses mono. |
 | Everything else | as your venue normally runs Slippi Nintendont |
-
-**Don't save settings from the loader's menu for now.** A bug in the loader forgets saved
-settings at the next boot, Network included. If it happened, copy `slippi_nincfg.bin` from the
-station's zip onto the card again.
 
 Slippi Nintendont's options, such as UCF, stage striking and stage lists, work as usual. LazyTO
 adds nothing to them.
@@ -105,7 +102,7 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | The Wii shows | Meaning | Do |
 |---|---|---|
 | `JOINING THE WI-FI`, then `THIS WII COULD NOT JOIN THE WI-FI` after 60 s | The Wii can't connect | Power cycle. Check the Wii's connection test and the router's 2.4 GHz mode. |
-| `NETWORK IS OFF IN THE LOADER` | The loader's settings lost Network, for example after a save in its menu | Copy `slippi_nincfg.bin` from the station's zip onto the card again. |
+| `NETWORK IS OFF IN THE LOADER` | The loader's Network setting is off | Turn it on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the station's zip onto the card again. |
 | `THIS CARD IS NOT SET UP` | `tournament.cfg` is missing, or has no `secret=` | Unzip the station's zip onto the card again. |
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
 | `RELAY SECRET MISMATCH` | The card's secret differs from the relay's, for example after a new Wii secret | Download the station's zip again and copy its `tournament.cfg` onto the card. |
@@ -116,4 +113,4 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | Boots to the character select instead of the Tournament screen | An old `tournament.bin` | Copy the one from the station's zip onto the card. |
 
 If a Wii never appears on the status page, turn on **Log** in the loader's menu, boot once, and
-read `slippi_ndebug.log` on the SD card. Then copy `slippi_nincfg.bin` from the zip again.
+read `slippi_ndebug.log` on the SD card. Then turn Log off again.

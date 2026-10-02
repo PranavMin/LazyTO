@@ -345,7 +345,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 - On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
   - `apps/LazyTO/`: the loader.
   - `tournament.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
-  - `slippi_nincfg.bin`: the loader's settings, Network and Auto Boot on. Written as version 0xD, which the loader accepts and upgrades; the 0xE it saves itself is dropped at the next boot (no `case 0xE` in `LoadNinCFG`).
+  - `lazyto_nincfg.bin`: the loader's settings, Network and Auto Boot on. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
   - `tournament.cfg`: per card.
 
 ```

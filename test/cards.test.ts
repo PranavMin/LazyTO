@@ -12,6 +12,7 @@ import {
   NIN_CFG_MAGIC,
   NIN_CFG_NETWORK,
   NIN_CFG_SIZE,
+  LOADER_SETTINGS_FILE,
   loaderSettings,
   stationZip,
 } from '../src/cards.js';
@@ -88,7 +89,7 @@ test('loaderSettings is the NIN_CFG the loader saves: version 0xD, Network, Auto
   const b = loaderSettings();
   assert.equal(b.length, NIN_CFG_SIZE);
   assert.equal(b.readUInt32BE(0x00), NIN_CFG_MAGIC);
-  assert.equal(b.readUInt32BE(0x04), 0xd, 'the version LoadNinCFG accepts');
+  assert.equal(b.readUInt32BE(0x04), 0xe, 'the version the loader writes itself');
   assert.equal(b.readUInt32BE(0x08), NIN_CFG_NETWORK | NIN_CFG_AUTO_BOOT, 'Log off');
   assert.equal(b.readUInt32BE(0x0c), 0, 'video: auto');
   assert.equal(b.readUInt32BE(0x10), 0xffffffff, 'language: auto');
@@ -124,7 +125,7 @@ test('a station zip: the loader, the module, its tournament.cfg, the loader sett
     'apps/LazyTO/icon.png',
     'apps/LazyTO/meta.xml',
     'games/GALE01/README.txt',
-    'slippi_nincfg.bin',
+    'lazyto_nincfg.bin',
     'tournament.bin',
     'tournament.cfg',
   ]);
@@ -134,7 +135,7 @@ test('a station zip: the loader, the module, its tournament.cfg, the loader sett
     files.get('tournament.cfg')!.toString(),
     `station=3\nstream=0\nsecret=${TEST_SECRET}\n`,
   );
-  assert.deepEqual(files.get('slippi_nincfg.bin'), loaderSettings());
+  assert.deepEqual(files.get(LOADER_SETTINGS_FILE), loaderSettings());
   assert.match(files.get('README.txt')!.toString(), /station 3\n[\s\S]*LazyTO v1\.2\.3 relay/);
 
   const stream = unzip(
