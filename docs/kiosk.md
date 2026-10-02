@@ -13,7 +13,7 @@ and wires in with a short list of word patches. Design rationale and history:
 | `kiosk/src/melee/mn/mntourney.c` | Tournament menu (set list, filter, confirm, error, loading), boot warm-up, `forceKioskDefaults` |
 | `kiosk/src/melee/lb/lbtourney.c` | set state, CSS binds, who-is-who (the L+R port claim), Z+X handwarmer, auto-score from `MatchEnd`, the score in the CSS banner, overlays |
 | `kiosk/src/melee/lb/lbrelayexi.c` | EXI driver for the relay device (channel 1 / device 0 / freq 4) |
-| `kiosk/src/melee/lb/lbbuttonglyph.c` | button icons: 4 I4 32x32 shapes in SIS font slot 4 (`lbbuttonglyph_shapes.inc` from `kiosk/tools/gen_button_glyphs.py`) |
+| `kiosk/src/melee/lb/lbbuttonglyph.c` | button icons and menu shapes: 13 I4 32x32 glyphs in SIS font slot 4 (`lbbuttonglyph_shapes.inc` from `kiosk/tools/gen_button_glyphs.py`) |
 | `kiosk/src/melee/lb/lbmodule_glue.c` | vanilla statics the kiosk reads (`mnCharSel_*`), `tm_bootOnLoad`, `tm_menuLightColor` |
 
 Compiled with the DOL's MWCC flags plus `-sdata 0 -sdata2 0 -DTOURNAMENT_MODULE` (no

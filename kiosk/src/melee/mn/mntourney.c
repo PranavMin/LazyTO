@@ -662,10 +662,10 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
         /* Bar inside the panel's rim; the yellow edge 7 px in, so it does
          * not read as part of the rim. */
         f32 in = 3.0f;
-        lbButton_Box(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
-                     L_BAR_H, c_bar);
-        lbButton_Box(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
-                     muted ? c_muted : c_yel);
+        lbButton_Rect(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
+                      L_BAR_H, LB_SHAPE_BLOCK, c_bar);
+        lbButton_Rect(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
+                      LB_SHAPE_BLOCK, muted ? c_muted : c_yel);
     }
     rightAt(L_TAG_L_R, y, s, c, p1);
     lineC(L_AXIS_X, y, L_VS_S, vs, "VS");

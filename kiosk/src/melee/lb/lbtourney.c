@@ -107,17 +107,6 @@ static u8 auto_stage;         /* internal StKind the game was played on */
 static char auto_note[40];    /* why nothing was scored, or what was */
 static u32 auto_note_frames;  /* frames left showing auto_note */
 
-/* CSS overlay layout: the shipped positions, tuned live on a Wii
- * (2026-09-22). */
-enum lbTourney_El { EL_SCORE, EL_HINT, EL_STATUS, EL_COUNT };
-static struct {
-    f32 x, y, scale;
-} el[EL_COUNT] = {
-    { 188.0f, -4.0f, 0.62f },  /* score, top centre (tuned live, 2026-09-22) */
-    { 456.0f, 446.0f, 0.43f }, /* handwarmer hint, bottom right (tuned live) */
-    { 2.0f, 446.0f, 0.45f },   /* SENDING / SENT / FAILED, bottom left (tuned
-                                * live) */
-};
 static bool match_seen;   /* a GS_VS frame ran since the last CSS frame */
 static u32 match_frames;  /* frames since the match scene began */
 static s32 vs_ctx = -1;   /* in-match SIS overlay, per GS_VS visit */
@@ -751,7 +740,6 @@ static void redraw(void)
 {
     char p1[TAG_LEN + 1];
     char p2[TAG_LEN + 1];
-    int entry;
 
     freeText(&css_text);
     freeText(&css_shadow);
@@ -765,7 +753,6 @@ static void redraw(void)
 
     css_shadow = newText(css_ctx, 190);
     css_text = newText(css_ctx, 255);
-    (void) entry;
 
     /* Handwarmer hint at the top-left corner (2026-09-25; it sat
      * top-right beside BACK before). */
