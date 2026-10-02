@@ -11,8 +11,10 @@ stock Melee image. Every card is the same except for its config file.
 - The LazyTO loader (the `apps/LazyTO` folder) and the kiosk module (`tournament.bin`). Until
   the first release is published, `npm run sync-card` fetches the loader from the newest
   successful CI build of the [Nintendont fork](https://github.com/PranavMin/Nintendont), and you
-  build `tournament.bin` yourself as described in [development.md](development.md). Never use a
-  loader you built yourself: it fails on a real Wii.
+  download `tournament.bin` as the `tournament-bin` artifact of the newest successful
+  [kiosk workflow](https://github.com/PranavMin/LazyTO/actions/workflows/kiosk.yml) run on
+  `main`, then pass it with `--module`. Never use a loader you built yourself: it fails on a
+  real Wii.
 - For `npm run sync-card`: a clone of this repo with Node 22, and the GitHub CLI
   ([`gh`](https://cli.github.com/)) installed and logged in (`gh auth login`). It uses `gh` to
   download the loader.

@@ -11,17 +11,20 @@ It has not run a full night at a venue yet.
 
 ## Quick start
 
-1. **Get LazyTO.** Clone this repo with `git clone --recursive` on a PC with Node 22, and run
-   `npm ci`. Releases will appear on [GitHub Releases](https://github.com/PranavMin/LazyTO/releases)
-   from the first `v*` tag. Until then, build `tournament.bin` from source as described in
-   [docs/development.md](docs/development.md).
+1. **Get LazyTO.** On a PC with Node 22, clone this repo with a plain
+   `git clone https://github.com/PranavMin/LazyTO.git` and run `npm ci`. You don't need the
+   submodules; they are only for building the kiosk and the loader yourself. Get the kiosk
+   module, `tournament.bin`, from [GitHub Releases](https://github.com/PranavMin/LazyTO/releases)
+   once the first `v*` release is out. Until then, download the `tournament-bin` artifact from the
+   newest successful run of the [kiosk workflow](https://github.com/PranavMin/LazyTO/actions/workflows/kiosk.yml)
+   on `main`.
 2. **Set up the Pi.** Flash Raspberry Pi OS, fill in `.env` with your start.gg token, secret,
    tournament, event and stream, then run `npm run push -- --test` against a test tournament.
    When it works, `npm run push` goes live. See [docs/pi-setup.md](docs/pi-setup.md).
 3. **Prepare each Wii's SD card.** With the card in the PC, run
    `npm run sync-card -- --station N` (add `--stream 1` on the stream Wii). It needs the GitHub
-   CLI `gh`, logged in, to fetch the loader, and `--module <file>` if your `tournament.bin` is not
-   at `kiosk/build/tournament.bin`. Then copy your own
+   CLI `gh`, logged in, to fetch the loader, and `--module <file>` pointing at the
+   `tournament.bin` you downloaded. Then copy your own
    Melee 1.02 image to `games/GALE01/game.iso`. See [docs/wii-setup.md](docs/wii-setup.md).
 4. **Run the night.** Power on the Pi, start every pool on start.gg, boot the Wiis and watch
    the status page at http://relay.local:29473. See [docs/night-of.md](docs/night-of.md).
@@ -77,7 +80,8 @@ The relay's status page during a test run: each station's set, score and last st
 
 ## Repositories
 
-The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Melee decompilation, a git submodule at `melee/`. The loader is the Nintendont fork, a submodule at `Nintendont/`. Clone with `git clone --recursive`.
+The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Melee decompilation, a git submodule at `melee/`. The loader is the Nintendont fork, a submodule at `Nintendont/`. To work on either, or to run
+`npm test`, clone with `git clone --recursive` ([docs/development.md](docs/development.md)).
 
 | Repo | What it builds |
 |---|---|
