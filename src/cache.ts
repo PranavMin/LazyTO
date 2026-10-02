@@ -21,7 +21,9 @@ export interface CachedSet {
   round: number;
   roundShort: string; // "WR2", "LF", "GF" -- the status page
   roundName: string; // "WINNERS QUARTER-FINAL" -- the wire field the Wii shows (ROUND_LEN chars)
-  bestOf: number;
+  bestOf: number; // what the Wiis are sent: the TO's override if any, else autoBestOf
+  autoBestOf: number; // setFormat's answer (format.ts)
+  bestOfOverridden: boolean; // the TO set it on the status page (admin.ts)
   p1: { id: number; tag: string };
   p2: { id: number; tag: string };
   games: CachedGame[]; // reloaded from upstream, for state rebuild after reboots
@@ -65,6 +67,8 @@ export class SetCache {
   private refreshError: string | null = null;
   private timer: NodeJS.Timeout | null = null;
   private refreshing = false;
+  /** TO overrides from the status page, set id -> best-of; outlive refreshes (admin.ts). */
+  private bestOfOverrides = new Map<number, number>();
 
   constructor(
     private readonly client: StartggClient,
@@ -125,10 +129,13 @@ export class SetCache {
         round: s.round,
         roundShort: abbreviateRound(s.fullRoundText),
         roundName: wireRoundName(s.fullRoundText),
-        bestOf: bestOfFor(
-          this.setFormat,
-          { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames },
-          shape,
+        ...this.withOverride(
+          s.id,
+          bestOfFor(
+            this.setFormat,
+            { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames },
+            shape,
+          ),
         ),
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },
@@ -172,6 +179,31 @@ export class SetCache {
 
   get(setId: number): CachedSet | undefined {
     return this.sets.get(setId);
+  }
+
+  private withOverride(
+    setId: number,
+    autoBestOf: number,
+  ): Pick<CachedSet, 'bestOf' | 'autoBestOf' | 'bestOfOverridden'> {
+    const o = this.bestOfOverrides.get(setId);
+    return { bestOf: o ?? autoBestOf, autoBestOf, bestOfOverridden: o !== undefined };
+  }
+
+  /** The TO's best-of for one set (3 or 5), or null to go back to setFormat's. Applies now and on every refresh. */
+  setBestOfOverride(setId: number, bestOf: number | null): void {
+    if (bestOf === null) this.bestOfOverrides.delete(setId);
+    else this.bestOfOverrides.set(setId, bestOf);
+    const s = this.sets.get(setId);
+    if (s) Object.assign(s, this.withOverride(setId, s.autoBestOf));
+  }
+
+  /** After the relay reset a set on start.gg: pending again with no games, without waiting for the next refresh. */
+  markReset(setId: number): void {
+    const s = this.sets.get(setId);
+    if (s) {
+      s.state = 1;
+      s.games = [];
+    }
   }
 
   /** Selectable sets: upstream-pending with both entrants, earliest rounds first. */

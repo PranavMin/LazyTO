@@ -28,6 +28,7 @@ export interface Config {
   streamName: string; // the stream's name in the tournament's stream settings
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
   secret: string; // shared with every station's relay_auth (decisions.md R16)
+  adminPassword: string; // the TO's password for the status page's actions (admin.ts); never the secret
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q": Bo3, Bo5 from the top-8 qualifiers (format.ts)
   tcpPort: number;
@@ -43,6 +44,7 @@ const FIELDS = [
   'streamName',
   'weeklyNamePrefix',
   'secret',
+  'adminPassword',
   'streamStation',
   'setFormat',
   'tcpPort',
@@ -108,6 +110,7 @@ export function loadConfig(path: string): Config {
     streamName,
     weeklyNamePrefix,
     secret,
+    adminPassword,
     streamStation,
     setFormat,
     tcpPort,
@@ -154,6 +157,17 @@ export function loadConfig(path: string): Config {
   if ('secret' in obj && (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{8,16}$/.test(secret))) {
     problems.push('secret must be 8-16 letters, digits, - or _');
   }
+  // Typed into a browser's password prompt, so any printable ASCII; never the
+  // secret, which is printed on every SD card.
+  if (
+    'adminPassword' in obj &&
+    (typeof adminPassword !== 'string' || !/^[\x21-\x7e]{8,64}$/.test(adminPassword))
+  ) {
+    problems.push('adminPassword must be 8-64 printable characters, no spaces');
+  }
+  if (typeof adminPassword === 'string' && adminPassword === secret) {
+    problems.push('adminPassword must differ from secret (the secret is on every SD card)');
+  }
   if ('streamStation' in obj && (!isPositiveInt(streamStation) || streamStation > 0xffff)) {
     problems.push('streamStation must be an integer in 1..65535');
   }
@@ -185,6 +199,7 @@ export function loadConfig(path: string): Config {
     streamName: streamName as string,
     weeklyNamePrefix: weeklyNamePrefix as string,
     secret: secret as string,
+    adminPassword: adminPassword as string,
     streamStation: streamStation as number,
     setFormat: setFormat as SetFormat,
     tcpPort: tcpPort as number,

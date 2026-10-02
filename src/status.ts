@@ -1,10 +1,16 @@
 // status.ts -- server-rendered status page on :29473 (architecture.md Relay,
-// requirement F7). Read-only, no auth: the LAN is the trust boundary, same
+// requirement F7). Reading needs no auth: the LAN is the trust boundary, same
 // as the TSH laptop. One row per station with its set, score, last action
 // (with the status and message the player saw), and any failed start.gg
 // call; rows with a failed start.gg call stay flagged until the TO clicks
-// ack -- the only interactive element. Plain HTML, no client JS; a meta
-// refresh every 5 s. Readable on a phone (viewport meta, wrapping table).
+// ack. Plain HTML, no client JS; a meta refresh every 5 s. Readable on a
+// phone (viewport meta, wrapping table).
+//
+// The TO's actions (admin.ts) -- free a stuck station, set a waiting set's
+// best-of -- need adminPassword through HTTP Basic auth: the browser asks
+// once, any user name. Freeing goes through a confirm page that names the
+// set and the score it discards. A POST whose Origin is another site is
+// refused, so a page elsewhere cannot use the browser's saved password.
 //
 // The footer is the "night of" dashboard: event id, cache size and age
 // (stale = warning), how many sets are selectable vs on stations, upstream
@@ -14,7 +20,8 @@
 // heard, whether its tournament module loaded and why not, and the tail of
 // its kernel log; /log?station=N is the whole log as plain text.
 
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { SetCache } from './cache.js';
 import type { StationState } from './state.js';
@@ -29,6 +36,7 @@ import {
   type TelemetryRefused,
 } from './telemetry.js';
 import { ModuleState } from '../generated/wire.js';
+import type { Admin, AdminResult } from './admin.js';
 
 export interface StatusDeps {
   state: StationState;
@@ -48,6 +56,8 @@ export interface StatusDeps {
     refused(): TelemetryRefused | null;
     beaconRequested?(): { count: number; lastAt: number; lastFrom: string } | null;
   };
+  /** The TO's actions and the password they need; without them the page is read-only. */
+  admin?: { actions: Admin; password: string };
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -71,6 +81,29 @@ function age(at: number): string {
   return s < 120 ? `${s}s` : `${Math.round(s / 60)}m`;
 }
 
+/** HTTP Basic: any user name, the password compared in constant time. */
+export function passwordMatches(header: string | undefined, password: string): boolean {
+  const m = /^Basic\s+([A-Za-z0-9+/=]+)$/.exec(header ?? '');
+  if (!m) return false;
+  const decoded = Buffer.from(m[1]!, 'base64').toString('utf8');
+  const colon = decoded.indexOf(':');
+  if (colon < 0) return false;
+  const given = Buffer.from(decoded.slice(colon + 1), 'utf8');
+  const want = Buffer.from(password, 'utf8');
+  return given.length === want.length && timingSafeEqual(given, want);
+}
+
+/** A POST with an Origin header must come from this page's own host. */
+function sameOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 export class StatusServer {
   private readonly server: Server;
 
@@ -81,6 +114,10 @@ export class StatusServer {
         const ok = this.deps.state.ack(Number(url.searchParams.get('id')));
         res.writeHead(ok ? 303 : 404, { location: '/' });
         res.end();
+        return;
+      }
+      if (url.pathname === '/free' || url.pathname === '/bestof') {
+        void this.adminRoute(req, res, url);
         return;
       }
       if (req.method === 'GET' && url.pathname === '/log') {
@@ -95,7 +132,7 @@ export class StatusServer {
       }
       if (req.method === 'GET' && url.pathname === '/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(this.render());
+        res.end(this.render(url.searchParams.get('done'), url.searchParams.get('error')));
         return;
       }
       res.writeHead(404, { 'content-type': 'text/plain' });
@@ -123,8 +160,9 @@ export class StatusServer {
     );
   }
 
-  render(): string {
-    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp, telemetry } = this.deps;
+  render(done: string | null = null, error: string | null = null): string {
+    const { state, cache, startgg, streamStation, eventLabel, beacon, tcp, telemetry, admin } =
+      this.deps;
     const flags = state.flags();
 
     const rows = state.stations().map((station) => {
@@ -159,7 +197,11 @@ export class StatusServer {
             .join('<br>')
         : 'OK';
       const star = station === streamStation ? ' ★' : '';
-      return `<tr><td>${station}${star}</td><td>${escapeHtml(setText)}</td><td>${score}</td><td>${actionText}</td><td>${status}</td></tr>`;
+      const free =
+        admin && claim
+          ? ` <form method="get" action="/free"><input type="hidden" name="station" value="${station}"><button>free</button></form>`
+          : '';
+      return `<tr><td>${station}${star}</td><td>${escapeHtml(setText)}${free}</td><td>${score}</td><td>${actionText}</td><td>${status}</td></tr>`;
     });
     if (rows.length === 0) {
       rows.push('<tr><td colspan="5" class="muted">no station has connected yet</td></tr>');
@@ -232,11 +274,17 @@ export class StatusServer {
       ? `<p class="warn">✗ ${trf.count} Wii report(s) dropped for a wrong relay secret — last ${age(trf.lastAt)} ago from ${escapeHtml(trf.lastFrom)} claiming station ${trf.lastStation}.</p>`
       : '';
     const warningLines = cs.warnings.map((w) => `<p class="warn">⚠ ${escapeHtml(w)}</p>`).join('');
+    const banner = error
+      ? `<p class="warn">✗ ${escapeHtml(error)}</p>`
+      : done
+        ? `<p class="ok">✓ ${escapeHtml(done)}</p>`
+        : '';
+    const waiting = admin ? this.renderWaiting() : '';
 
     return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5">
+<meta http-equiv="refresh" content="5;url=/">
 <title>LazyTO</title>
 <style>
   body { font-family: monospace; font-size: 16px; margin: 1em; }
@@ -248,21 +296,24 @@ export class StatusServer {
   td, th { padding: 0.4em 0.6em; border-bottom: 1px solid #ccc; text-align: left; vertical-align: top; }
   td:first-child, td:nth-child(3) { white-space: nowrap; }
   .warn { color: #a40; }
+  .ok { color: #070; }
   .muted { color: #888; }
   form { display: inline; }
   pre { margin: 0 0 0.3em; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
+
   @media (max-width: 600px) {
     body { font-size: 14px; margin: 0.5em; }
     td, th { padding: 0.3em 0.4em; }
   }
 </style></head><body>
 <h1>LazyTO</h1>
-<p class="sub"><b>${escapeHtml(eventLabel)}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
+${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b> · stream station ${streamStation} ★ · refreshes every 5 s</p>
 <div class="scroll"><table>
 <tr><th>Station</th><th>Set</th><th>Score</th><th>Last action</th><th>start.gg</th></tr>
 ${rows.join('\n')}
 </table></div>
+${waiting}
 <h2>Wii consoles</h2>
 <div class="scroll"><table>
 <tr><th>Station</th><th>Last heard</th><th>Tournament module</th><th>Kernel log</th></tr>
@@ -274,6 +325,123 @@ ${beaconRequestLine}
 ${beaconLine}
 ${refusedLine}
 ${staleLine}${errorLine}${warningLines}
+</body></html>`;
+  }
+
+  /** Sets waiting for a station, with the TO's best-of buttons. */
+  private renderWaiting(): string {
+    const { cache, state } = this.deps;
+    const sets = cache.pending().filter((s) => state.stationFor(s.id) === undefined);
+    const rows = sets.map((s) => {
+      const buttons = [3, 5]
+        .filter((bo) => bo !== s.bestOf)
+        .map(
+          (bo) =>
+            `<form method="post" action="/bestof?set=${s.id}&amp;bo=${bo}"><button>Bo${bo}</button></form>`,
+        );
+      if (s.bestOfOverridden) {
+        buttons.push(
+          `<form method="post" action="/bestof?set=${s.id}&amp;bo=auto"><button>auto (Bo${s.autoBestOf})</button></form>`,
+        );
+      }
+      const mark = s.bestOfOverridden ? ' <span class="muted">set by TO</span>' : '';
+      return (
+        `<tr><td>${escapeHtml(s.roundShort)}</td><td>${escapeHtml(s.p1.tag)} vs ${escapeHtml(s.p2.tag)}</td>` +
+        `<td>Bo${s.bestOf}${mark}</td><td>${buttons.join(' ')}</td></tr>`
+      );
+    });
+    if (rows.length === 0) {
+      rows.push('<tr><td colspan="4" class="muted">no set is waiting</td></tr>');
+    }
+    return `<h2>Waiting sets</h2>
+<div class="scroll"><table>
+<tr><th>Round</th><th>Set</th><th>Best of</th><th>Change</th></tr>
+${rows.join('\n')}
+</table></div>`;
+  }
+
+  /** /free and /bestof: password first, then same-origin for POSTs, then the action. */
+  private async adminRoute(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    const admin = this.deps.admin;
+    if (!admin) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
+    if (!passwordMatches(req.headers.authorization, admin.password)) {
+      res.writeHead(401, {
+        'www-authenticate': 'Basic realm="LazyTO TO actions", charset="UTF-8"',
+        'content-type': 'text/plain; charset=utf-8',
+      });
+      res.end('The TO password (ADMIN_PASSWORD in .env) is needed for this.\n');
+      return;
+    }
+    if (req.method === 'POST' && !sameOrigin(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain' });
+      res.end('refused: request from another site\n');
+      return;
+    }
+
+    const station = Number(url.searchParams.get('station'));
+    if (url.pathname === '/free' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(this.renderFreeConfirm(station));
+      return;
+    }
+    let result: AdminResult;
+    if (url.pathname === '/free' && req.method === 'POST') {
+      result = await admin.actions.freeStation(station, Number(url.searchParams.get('set')));
+    } else if (url.pathname === '/bestof' && req.method === 'POST') {
+      const bo = url.searchParams.get('bo');
+      result = admin.actions.setBestOf(
+        Number(url.searchParams.get('set')),
+        bo === 'auto' ? null : Number(bo),
+      );
+    } else {
+      res.writeHead(405, { 'content-type': 'text/plain' });
+      res.end('method not allowed');
+      return;
+    }
+    const q = new URLSearchParams({ [result.ok ? 'done' : 'error']: result.msg });
+    res.writeHead(303, { location: `/?${q.toString()}` });
+    res.end();
+  }
+
+  private renderFreeConfirm(station: number): string {
+    const { state, cache } = this.deps;
+    const claim = state.get(station);
+    let body: string;
+    if (!claim) {
+      body = `<p>Station ${station} has no set.</p>`;
+    } else {
+      const set = cache.get(claim.setId);
+      const w1 = claim.games.filter((g) => g.winner_slot === 1).length;
+      const w2 = claim.games.length - w1;
+      const name = set
+        ? `${escapeHtml(set.roundShort)} ${escapeHtml(set.p1.tag)} vs ${escapeHtml(set.p2.tag)}`
+        : `set ${claim.setId}`;
+      const effect = set
+        ? claim.games.length > 0
+          ? `<p class="warn">This resets the set on start.gg and discards its score, ${w1}–${w2}. The players replay it from 0–0 on any setup.</p>`
+          : `<p>This resets the set on start.gg. It goes back on every Wii's list.</p>`
+        : `<p>The set has already left start.gg's pending list; this only frees the station.</p>`;
+      body =
+        `<p>Free station ${station}, playing <b>${name}</b>?</p>${effect}` +
+        `<form method="post" action="/free?station=${station}&amp;set=${claim.setId}"><button>Free station ${station}</button></form> ` +
+        `<a href="/">cancel</a>`;
+    }
+    return `<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LazyTO</title>
+<style>
+  body { font-family: monospace; font-size: 16px; margin: 1em; }
+  .warn { color: #a40; }
+  form { display: inline; }
+  button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
+</style></head><body>
+<h1>LazyTO</h1>
+${body}
 </body></html>`;
   }
 }

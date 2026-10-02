@@ -16,6 +16,7 @@ export interface RelayConfig {
   streamName: string;
   weeklyNamePrefix: string;
   secret: string;
+  adminPassword: string;
   streamStation: number;
   setFormat: SetFormat;
   tcpPort: number;
@@ -42,6 +43,12 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
     if (!env[key]) fail(`${key} missing from .env (see .env.example)`);
     return env[key];
   };
+  // The TO's password for the status page's actions (src/admin.ts).
+  const adminPassword = need('ADMIN_PASSWORD');
+  if (!/^[!-~]{8,64}$/.test(adminPassword))
+    fail('ADMIN_PASSWORD in .env must be 8-64 printable characters, no spaces');
+  if (adminPassword === env.RELAY_SECRET)
+    fail('ADMIN_PASSWORD in .env must differ from RELAY_SECRET (the secret is on every SD card)');
   const eventName = need('EVENT_NAME');
   const streamName = need('STREAM_NAME');
   const streamStation = env.STREAM_STATION ? Number.parseInt(env.STREAM_STATION, 10) : 1;
@@ -69,6 +76,7 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
     streamName,
     weeklyNamePrefix,
     secret: env.RELAY_SECRET,
+    adminPassword,
     streamStation,
     setFormat,
     tcpPort: opts.tcpPort,

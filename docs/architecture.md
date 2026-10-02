@@ -179,6 +179,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `state.ts` | In-memory station to set map |
 | `audit.ts` | Append-only JSONL log |
 | `status.ts` | Status page on 29473 |
+| `admin.ts` | The status page's TO actions: free a station, per-set best-of |
 | `chars.ts` | Melee character id to start.gg character id |
 | `stages.ts` | Melee stage id to start.gg stage id |
 | `config.ts` | Loads and validates the config |
@@ -242,6 +243,7 @@ Startup validates every config field and exits non-zero on any problem. There ar
 | `streamName` | the stream to assign the stream station's sets to |
 | `weeklyNamePrefix` | `""` for none; otherwise the numbered-weekly fallback below |
 | `secret` | shared secret, 8 to 16 of `A-Z a-z 0-9 - _` |
+| `adminPassword` | the TO's password for the status page's actions, 8 to 64 printable characters, never the same as `secret` |
 | `streamStation` | the station number of the stream setup |
 | `setFormat` | `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
 | `tcpPort`, `httpPort` | 29470, 29473 |
@@ -297,10 +299,12 @@ Every request, response, refusal and upstream call is appended as one JSON line 
 
 ### Status page
 
-A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. No client script, no login (anyone on the network can view it).
+A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. No client script. Anyone on the network can view it; its actions need `adminPassword` (HTTP Basic auth, any user name), and a POST from another site is refused.
 
 - Per station: set, score, last action and its age, the status the player saw, and the station's telemetry (module state, recent log lines, last crash).
 - Every failed start.gg call with its message, until the TO clicks "ack". Ack only hides the flag.
+- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it, because the protocol never sends a Wii earlier games.
+- **Waiting sets** with their best-of and a button to switch Bo3/Bo5 or go back to `setFormat`'s answer. Only for sets no station holds, since a Wii learns best-of when it starts a set. Overrides are `bestof` events in the audit log and replay at startup.
 - Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, the preview-set warning, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
 
 ## Error handling

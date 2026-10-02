@@ -442,6 +442,7 @@ test('sync-card warns when kiosk sources are newer than the module, and when the
 const ENV = {
   STARTGG_TOKEN: 'tok-1234567',
   RELAY_SECRET: 'venue-secret1',
+  ADMIN_PASSWORD: 'to-pass-9876',
   TOURNAMENT: 'lazyto-weekly',
   WEEKLY_NAME_PREFIX: 'LazyTO Weekly #',
   EVENT_NAME: 'Melee Singles',
@@ -460,6 +461,7 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
     streamName: 'LazyTOStream',
     weeklyNamePrefix: 'LazyTO Weekly #',
     secret: 'venue-secret1',
+    adminPassword: 'to-pass-9876',
     streamStation: 1,
     setFormat: 'startgg',
     tcpPort: 29470,
@@ -490,6 +492,14 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
   throwsTool(
     () => relayConfigFromEnv({ ...ENV, RELAY_SECRET: 'bad secret!' }, PO),
     /RELAY_SECRET in \.env must be 8-16 letters/,
+  );
+  throwsTool(
+    () => relayConfigFromEnv({ ...ENV, ADMIN_PASSWORD: '' }, PO),
+    /ADMIN_PASSWORD missing from \.env/,
+  );
+  throwsTool(
+    () => relayConfigFromEnv({ ...ENV, ADMIN_PASSWORD: ENV.RELAY_SECRET }, PO),
+    /ADMIN_PASSWORD in \.env must differ from RELAY_SECRET/,
   );
   throwsTool(
     () => relayConfigFromEnv({ ...ENV, EVENT_NAME: '' }, PO),

@@ -14,6 +14,7 @@ const VALID = {
   streamName: 'LazyTOStream',
   weeklyNamePrefix: '',
   secret: 'abcd-EFGH_1234xy',
+  adminPassword: 'to-pass-9876',
   streamStation: 1,
   setFormat: 'top8q',
   tcpPort: 29470,
@@ -84,6 +85,7 @@ test('every missing field is reported at once', () => {
     'missing field "eventName"',
     'missing field "streamName"',
     'missing field "secret"',
+    'missing field "adminPassword"',
     'missing field "streamStation"',
     'missing field "setFormat"',
     'missing field "tcpPort"',
@@ -187,6 +189,19 @@ test('eventName and streamName must be non-empty', () => {
   );
 });
 
+test('adminPassword: printable, 8-64, not the secret', () => {
+  for (const bad of ['short', 'has space in it', 'x'.repeat(65), 5]) {
+    expectProblems(
+      JSON.stringify({ ...VALID, adminPassword: bad }),
+      'adminPassword must be 8-64 printable characters, no spaces',
+    );
+  }
+  expectProblems(
+    JSON.stringify({ ...VALID, adminPassword: VALID.secret }),
+    'adminPassword must differ from secret (the secret is on every SD card)',
+  );
+});
+
 test('setFormat must be a known format', () => {
   expectProblems(
     JSON.stringify({ ...VALID, setFormat: 'bo5' }),
@@ -240,6 +255,7 @@ test('scripts/push.ts writes exactly the validated fields', () => {
     {
       STARTGG_TOKEN: 't',
       RELAY_SECRET: 'abcdefgh',
+      ADMIN_PASSWORD: 'to-pass-9876',
       TOURNAMENT: 'x',
       EVENT_NAME: 'e',
       STREAM_NAME: 's',
