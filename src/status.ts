@@ -252,6 +252,18 @@ export class StatusServer {
   form { display: inline; }
   pre { margin: 0 0 0.3em; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
   button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111827; color: #e5e7eb; }
+    td, th { border-bottom-color: #374151; }
+    .warn { color: #fbbf24; }
+    .muted { color: #9ca3af; }
+    a { color: #93c5fd; }
+    button {
+      color: #f9fafb;
+      background: #1f2937;
+      border: 1px solid #4b5563;
+    }
+  }
   @media (max-width: 600px) {
     body { font-size: 14px; margin: 0.5em; }
     td, th { padding: 0.3em 0.4em; }
