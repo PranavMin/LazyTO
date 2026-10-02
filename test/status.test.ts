@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { connect, type Socket } from 'node:net';
 import { StatusServer, STALE_CACHE_MS } from '../src/status.js';
 import { SetCache } from '../src/cache.js';
 import { StationState } from '../src/state.js';
@@ -243,3 +244,57 @@ test('status page', async (t) => {
     assert.doesNotMatch(status.render(), /cache is stale/);
   });
 });
+
+/** A raw client socket, connected, with a promise for when the relay drops it. */
+async function openSocket(port: number): Promise<{ socket: Socket; dropped: Promise<void> }> {
+  const socket = connect(port, '127.0.0.1');
+  socket.on('error', () => {});
+  const dropped = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+  await new Promise((resolve) => socket.once('connect', resolve));
+  return { socket, dropped };
+}
+
+// Before close() dropped them, these connections held it open forever and
+// systemd had to kill the relay on every restart (timeout here instead).
+test(
+  'close() drops open browser connections instead of waiting for them',
+  { timeout: 5000 },
+  async () => {
+    const fake = makeFake();
+    await fake.start();
+    const startgg = new StartggClient({ endpoint: fake.url, token: FIXTURE_TOKEN });
+    const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
+    await cache.refresh();
+    const status = new StatusServer({
+      state: new StationState(),
+      cache,
+      startgg,
+      streamStation: 1,
+      eventLabel: 'LazyTO Test Tournament',
+      beacon: { status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }) },
+      tcp: { refused: () => null },
+      telemetry: new StationTelemetry({ secret: TEST_SECRET }),
+    });
+    await status.listen(0, '127.0.0.1');
+    const port = status.address().port;
+
+    // A phone between meta refreshes: one keep-alive socket that has fetched the
+    // page, one its browser opened ahead for the next refresh, and one cut off
+    // part way through its request headers.
+    const keptAlive = await openSocket(port);
+    let page = '';
+    keptAlive.socket.on('data', (chunk: Buffer) => (page += chunk.toString('utf8')));
+    keptAlive.socket.write('GET / HTTP/1.1\r\nHost: relay\r\nConnection: keep-alive\r\n\r\n');
+    while (!page.includes('</html>')) await new Promise((resolve) => setTimeout(resolve, 10));
+    const preconnected = await openSocket(port);
+    const halfSent = await openSocket(port);
+    halfSent.socket.write('GET / HTTP/1.1\r\nHost: relay\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const start = Date.now();
+    await status.close();
+    assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
+    await Promise.all([keptAlive.dropped, preconnected.dropped, halfSent.dropped]);
+    await fake.close();
+  },
+);

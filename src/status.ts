@@ -215,10 +215,20 @@ export class StatusServer {
     return this.server.address() as AddressInfo;
   }
 
+  /**
+   * Stop listening and drop every open connection. server.close() alone waits
+   * for a connection that has not sent a whole request yet, and nothing ever
+   * times it out once the server is closing: a phone's browser holds such a
+   * socket open between meta refreshes, so a restart hung until systemd killed
+   * the relay. Pages are rebuilt on every refresh, so a dropped one costs
+   * nothing.
+   */
   async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) =>
+    const closed = new Promise<void>((resolve, reject) =>
       this.server.close((e) => (e ? reject(e) : resolve())),
     );
+    this.server.closeAllConnections();
+    await closed;
   }
 
   render(done: string | null = null, error: string | null = null): string {

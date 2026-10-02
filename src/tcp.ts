@@ -74,6 +74,8 @@ export class RelayTcpServer {
   private readonly server: Server;
   private readonly expectedSecret: Buffer; // SECRET_LEN bytes, NUL-padded, as relay_auth carries it
   private refusals: RefusedStatus | null = null;
+  /** Connections that have not sent a whole request yet; close() drops them. */
+  private readonly waiting = new Set<Socket>();
 
   constructor(private readonly deps: RelayDeps) {
     this.expectedSecret = Buffer.alloc(SECRET_LEN);
@@ -100,10 +102,16 @@ export class RelayTcpServer {
     return this.server.address() as AddressInfo;
   }
 
+  /**
+   * Stop listening, drop connections still waiting for their request, and let
+   * a request already received send its reply (SOCKET_TIMEOUT_MS bounds it).
+   */
   async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) =>
+    const closed = new Promise<void>((resolve, reject) =>
       this.server.close((e) => (e ? reject(e) : resolve())),
     );
+    for (const socket of this.waiting) socket.destroy();
+    await closed;
   }
 
   // ---- framing ----
@@ -116,6 +124,8 @@ export class RelayTcpServer {
     const chunks: Buffer[] = [];
     let received = 0;
     let handled = false;
+    this.waiting.add(socket);
+    socket.on('close', () => this.waiting.delete(socket));
     socket.setTimeout(SOCKET_TIMEOUT_MS, () => socket.destroy());
     socket.on('error', () => socket.destroy());
     socket.on('data', (chunk: Buffer) => {
@@ -143,6 +153,7 @@ export class RelayTcpServer {
       if (received < payloadOff + hdr.len) return;
 
       handled = true;
+      this.waiting.delete(socket);
       const secretOk =
         authed && timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
       const pending: Promise<Reply> = secretOk

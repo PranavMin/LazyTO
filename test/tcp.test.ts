@@ -545,3 +545,15 @@ test('the right secret goes through (every other test here uses it)', async () =
     await env.close();
   }
 });
+
+test('close() drops a connection that never sends its request', { timeout: 5000 }, async () => {
+  const env = await setup();
+  const socket = connect(env.port, '127.0.0.1');
+  socket.on('error', () => {});
+  const dropped = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+  await new Promise((resolve) => socket.once('connect', resolve));
+  const start = Date.now();
+  await env.close();
+  assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
+  await dropped;
+});
