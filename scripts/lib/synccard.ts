@@ -1,14 +1,20 @@
 // sync-card, as a function: everything scripts/sync-card.ts does, with the
 // system touch points (command runner, output) passed in, so the test runs
 // it against a folder standing in for the card and a fake gh.
-import { copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fail, green, yellow, type Runner } from './cli.js';
 import { ejectCard, findCard, type Volume } from './card.js';
-import { copyFlat, findFile, md5File } from './fsx.js';
+import { copyFlat, findFile, md5File, mtimeMs } from './fsx.js';
 import { describeLoaderBuild, loaderAppDir, LOADER_APP_NAME, newestLoaderBuild } from './loader.js';
 import { describeLoaderConfig, patchLoaderConfig, type LoaderConfigPatch } from './nincfg.js';
-import { checkDevSwitches, sourcesNewerThan } from './switches.js';
 import {
   formatTournamentCfg,
   parseTournamentCfg,
@@ -68,12 +74,14 @@ export function syncCard(o: SyncCardOptions, d: SyncCardDeps): SyncCardResult {
   const dstApp = join(card.root, 'apps', LOADER_APP_NAME);
   const loaderFiles = copyFlat(srcApp, dstApp);
 
-  // ---- 3. the module, refused if a dev switch is on
+  // ---- 3. the module, refused if it is a --demo build (its version text ends in DEMO)
   if (!existsSync(o.module))
     fail(`module not found: ${o.module} (build it: python kiosk/tools/build_module.py)`);
-  const head = readFileSync(o.module).subarray(0, 4).toString('latin1');
-  if (head !== 'TMOD') fail(`${o.module} is not a TMOD module`);
-  checkDevSwitches(o.meleeSrc);
+  const moduleBytes = readFileSync(o.module);
+  if (moduleBytes.subarray(0, 4).toString('latin1') !== 'TMOD')
+    fail(`${o.module} is not a TMOD module`);
+  if (moduleBytes.includes(Buffer.from(' DEMO\0', 'latin1')))
+    fail(`${o.module} is a --demo build: rebuild it without --demo before writing a card`);
   const newer = sourcesNewerThan(o.meleeSrc, statSync(o.module).mtimeMs);
   if (newer.length > 0)
     d.out(
@@ -151,4 +159,15 @@ export function syncCard(o: SyncCardOptions, d: SyncCardDeps): SyncCardResult {
 
 function red(s: string): string {
   return process.stdout.isTTY ? `\x1b[31m${s}\x1b[0m` : s;
+}
+
+/** Kiosk sources (lb/*.c and mn/mntourney.c) edited after the module was built; names only. */
+function sourcesNewerThan(meleeSrc: string, moduleMtime: number): string[] {
+  const files = readdirSync(join(meleeSrc, 'lb'))
+    .filter((n) => n.endsWith('.c'))
+    .map((n) => join(meleeSrc, 'lb', n));
+  files.push(join(meleeSrc, 'mn', 'mntourney.c'));
+  return files
+    .filter((p) => existsSync(p) && mtimeMs(p) > moduleMtime)
+    .map((p) => p.split(/[\\/]/).pop() as string);
 }

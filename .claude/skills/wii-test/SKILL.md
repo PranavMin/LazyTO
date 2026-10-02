@@ -10,8 +10,8 @@ changes so one card carries them.
 
 ## Before the test
 
-1. Build the module with the `kiosk-build` skill. All developer flags must be `0`;
-   `sync-card` refuses the card otherwise.
+1. Build the module with the `kiosk-build` skill, without `--demo`; `sync-card` refuses a
+   `DEMO` module.
 2. If the kernel or loader changed, start a CI loader build. A locally built loader fails on
    hardware at "Preparing IOS58 Kernel".
    ```bash

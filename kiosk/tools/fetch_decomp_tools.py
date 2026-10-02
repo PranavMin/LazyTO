@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Fetch the three things from the Melee decomp that the kiosk build uses --
-the GameCube compilers (MWCC/MWLD), binutils (powerpc-eabi-nm) and sjiswrap --
-into melee/build/, without a main.dol.
+"""Fetch what the kiosk build uses from the Melee decomp -- the GameCube
+compilers (MWCC/MWLD) and sjiswrap -- into melee/build/, without a main.dol.
 
 The decomp's usual setup, `python -m ninja` in melee/, first regenerates
 build.ninja, and that splits the DOL, so it cannot run without one. This
 script runs `configure.py` and then only the download commands build.ninja
-lists for those three outputs (`ninja -t commands` does not regenerate the
+lists for those outputs (`ninja -t commands` does not regenerate the
 manifest). Already-present tools are kept. Used by developers and by
 .github/workflows/kiosk.yml.
 
@@ -24,7 +23,6 @@ BUILD = DECOMP / "build"
 NEEDED = {
     "build/compilers": [BUILD / "compilers" / "GC" / "1.2.5n" / "mwcceppc.exe",
                         BUILD / "compilers" / "GC" / "1.3.2" / "mwldeppc.exe"],
-    "build/binutils": [BUILD / "binutils" / "powerpc-eabi-nm.exe"],
     "build/tools/sjiswrap.exe": [BUILD / "tools" / "sjiswrap.exe"],
 }
 

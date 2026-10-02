@@ -22,9 +22,9 @@ Actions: `start [-Wait 30]`, `shot` (prints the PNG path; read it with the Read 
 
 ## Loop
 
-1. Build with the `kiosk-build` skill. For a headless run with no controller, set a developer
-   flag first (`docs/kiosk.md`): `TM_DEMO_AUTOSTART 1` to reach CSS, `LB_TOURNEY_DEMO_CLAIM 1`
-   for a port claim. Set them back to `0` afterwards.
+1. Build with the `kiosk-build` skill. For a headless run with no controller, build with
+   `python kiosk/tools/build_module.py --demo` (`docs/kiosk.md`): it confirms the first set to
+   reach CSS and fakes a port claim. Rebuild without `--demo` before a card.
 2. Run a relay on fake data, never the live one:
    `npx tsx scripts/preview-status.ts --network --secret=<SlippiRelaySecret>`. It serves the
    beacon, telemetry and TCP 29470 like a real relay, with the status page on port 29480.

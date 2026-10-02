@@ -7,7 +7,7 @@ name: kiosk
 # takes the stock 1.02 facts it checks (DOL sections, guard word) from the
 # decomp (docs/kiosk.md).
 #
-# The decomp's compilers, binutils and sjiswrap come from
+# The decomp's compilers and sjiswrap come from
 # kiosk/tools/fetch_decomp_tools.py, the same script developers run.
 
 on:
@@ -43,11 +43,13 @@ jobs:
         with:
           path: |
             melee/build/compilers
-            melee/build/binutils
             melee/build/tools
           key: kiosk-melee-tools-v2-${{ runner.os }}-${{ steps.melee.outputs.sha }}
-      - name: Fetch the compilers, binutils and sjiswrap (kept from the cache when present)
+      - name: Fetch the compilers and sjiswrap (kept from the cache when present)
         run: python kiosk/tools/fetch_decomp_tools.py
+      - name: Developer switches are off in the sources (build_module.py --demo sets them)
+        shell: bash
+        run: "! grep -rnE '#define (TM_DEMO_AUTOSTART|LB_TOURNEY_DEMO_CLAIM)[[:space:]]+[1-9]' kiosk/src"
       - name: Build the module
         run: python kiosk/tools/build_module.py
       - uses: actions/upload-artifact@v4

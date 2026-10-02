@@ -133,10 +133,10 @@ enum mnTourney_State {
  * translucent navy panels with a thin light-blue rim and a light fill, plus
  * a drop shadow under every text line (chosen 2026-09-25 among five trial
  * looks). */
-/* Dev flag (docs/kiosk.md): with 1 the list auto-confirms and starts its
+/* Dev switch (docs/kiosk.md): with 1 the list auto-confirms and starts its
  * first set two seconds after it is up, so the CSS overlay can be captured
  * in a Dolphin run that has no controller; with 2 it only opens the confirm
- * pane. Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
+ * pane. build_module.py --demo sets it; the source keeps 0. */
 #ifndef TM_DEMO_AUTOSTART
 #define TM_DEMO_AUTOSTART 0
 #endif
@@ -662,10 +662,10 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
         /* Bar inside the panel's rim; the yellow edge 7 px in, so it does
          * not read as part of the rim. */
         f32 in = 3.0f;
-        lbButton_Box(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
-                     L_BAR_H, c_bar);
-        lbButton_Box(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
-                     muted ? c_muted : c_yel);
+        lbButton_Rect(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
+                      L_BAR_H, LB_SHAPE_BLOCK, c_bar);
+        lbButton_Rect(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
+                      LB_SHAPE_BLOCK, muted ? c_muted : c_yel);
     }
     rightAt(L_TAG_L_R, y, s, c, p1);
     lineC(L_AXIS_X, y, L_VS_S, vs, "VS");

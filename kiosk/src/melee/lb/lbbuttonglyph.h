@@ -10,12 +10,9 @@
 enum lbButton_Shape {
     LB_SHAPE_DISC,
     LB_SHAPE_RSQ,
-    LB_SHAPE_PILL,
-    LB_SHAPE_CROSS,
     LB_SHAPE_BLOCK, /* solid cell: stretched into bars and scrims */
     LB_SHAPE_TRI_UP,
     LB_SHAPE_TRI_DN,
-    LB_SHAPE_TRI_RT,
     LB_SHAPE_QD_TL, /* quarter discs: rounded-panel corners */
     LB_SHAPE_QD_TR,
     LB_SHAPE_QD_BL,
@@ -31,9 +28,6 @@ enum lbButton_Shape {
  *
  * fmt is ASCII (what HSD_SisLib_803A6B98 accepts) plus icon markers:
  *   #A #B #X #Y #Z #L #R      the buttons
- *   #S                        Start (pill with "ST")
- *   #C                        C-stick (yellow disc with "C")
- *   #D                        D-pad (grey cross)
  * and the ASCII punctuation the SIS encoder cannot map on its own
  * ( + ( ) / ! ? ) is translated to its Shift-JIS glyph, so callers write
  * plain "#Z+#X FOR HANDWARMER".
@@ -60,9 +54,6 @@ int lbButton_GlyphCode(char c);
 f32 lbButton_Shape(HSD_Text* text, f32 x, f32 y, f32 s, int shape, GXColor c);
 f32 lbButton_ShapeAdvance(f32 s, int shape);
 
-/* A flat rectangle, top-left (x, y), w by h screen pixels: the solid block
- * glyph stretched by per-entry x/y scale. Alpha is the HSD_Text's. */
-void lbButton_Box(HSD_Text* text, f32 x, f32 y, f32 w, f32 h, GXColor c);
 /* A rounded panel of corner radius r: three blocks and four quarter discs
  * that never overlap (a translucent fill stays even) into fill_text, and,
  * when rim_text is not NULL, a rim 6/32 of r thick into it (edges from

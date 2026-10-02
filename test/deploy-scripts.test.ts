@@ -22,7 +22,6 @@ import {
   patchLoaderConfig,
 } from '../scripts/lib/nincfg.js';
 import { MAIN_BUILD_URL, pushRelay, remoteInstallCommand } from '../scripts/lib/pushrelay.js';
-import { checkDevSwitches } from '../scripts/lib/switches.js';
 import { syncCard } from '../scripts/lib/synccard.js';
 import {
   formatTournamentCfg,
@@ -110,35 +109,15 @@ test('tournament.cfg: parse, defaults from the card, format, verify', () => {
   assert.ok(!tournamentCfgMatches(text, { station: 2, stream: 0, secret: 'kioskdev2026' }));
 });
 
-// ---------- dev switches
-function fakeMeleeSrc(root: string, values: Record<string, string> = {}): string {
+// ---------- the kiosk sources sync-card compares the module's age with
+function fakeMeleeSrc(root: string): string {
   const src = join(root, 'melee');
   mkdirSync(join(src, 'lb'), { recursive: true });
   mkdirSync(join(src, 'mn'), { recursive: true });
-  writeFileSync(
-    join(src, 'mn', 'mntourney.c'),
-    `#define TM_DEMO_AUTOSTART ${values.TM_DEMO_AUTOSTART ?? '0'}\n`,
-  );
-  writeFileSync(
-    join(src, 'lb', 'lbtourney.c'),
-    `#define LB_TOURNEY_DEMO_CLAIM ${values.LB_TOURNEY_DEMO_CLAIM ?? '0'}\n#define LB_TOURNEY_TRIGGER_READOUT ${values.LB_TOURNEY_TRIGGER_READOUT ?? '0'}\n`,
-  );
+  writeFileSync(join(src, 'mn', 'mntourney.c'), '// mntourney\n');
+  writeFileSync(join(src, 'lb', 'lbtourney.c'), '// lbtourney\n');
   return src;
 }
-
-test('checkDevSwitches: all zero passes, any non-zero or missing define refuses', () => {
-  const d = tmp();
-  assert.doesNotThrow(() => checkDevSwitches(fakeMeleeSrc(d)));
-  throwsTool(
-    () => checkDevSwitches(fakeMeleeSrc(tmp(), { LB_TOURNEY_DEMO_CLAIM: '1' })),
-    /LB_TOURNEY_DEMO_CLAIM is 1 in lb\/lbtourney.c: set it to 0/,
-  );
-  const e = tmp();
-  fakeMeleeSrc(e);
-  writeFileSync(join(e, 'melee', 'mn', 'mntourney.c'), '// nothing\n');
-  throwsTool(() => checkDevSwitches(join(e, 'melee')), /could not find #define TM_DEMO_AUTOSTART/);
-  throwsTool(() => checkDevSwitches(join(e, 'nowhere')), /could not find mn\/mntourney.c/);
-});
 
 // ---------- card finders (parsers only)
 test('card parsers: Windows Get-Volume JSON (one object or an array), lsblk, diskutil', () => {
@@ -369,7 +348,7 @@ test('sync-card: a synced card keeps its station/stream; --relay-config supplies
   );
 });
 
-test('sync-card refuses: bad secret, non-TMOD module, missing module, dev switch on, missing drive', () => {
+test('sync-card refuses: bad secret, non-TMOD module, missing module, a --demo module, missing drive', () => {
   const root = tmp();
   fakeCard(root, { cfg: 'station=1\n' });
   const deps = { run: fakeGh(ARTIFACT), out: () => {} };
@@ -383,11 +362,9 @@ test('sync-card refuses: bad secret, non-TMOD module, missing module, dev switch
     () => syncCard(syncOpts(root, { module: join(root, 'missing.bin') }), deps),
     /module not found: .*build it: python kiosk\/tools\/build_module.py/,
   );
-  throwsTool(
-    () =>
-      syncCard(syncOpts(root, { meleeSrc: fakeMeleeSrc(tmp(), { TM_DEMO_AUTOSTART: '1' }) }), deps),
-    /TM_DEMO_AUTOSTART is 1/,
-  );
+  const demo = syncOpts(root);
+  writeFileSync(demo.module, Buffer.from('TMOD....abc1234 2026-10-02 DEMO\0....', 'latin1'));
+  throwsTool(() => syncCard(demo, deps), /is a --demo build: rebuild it without --demo/);
   throwsTool(() => syncCard(syncOpts(root, { drive: join(root, 'nope') }), deps), /is not ready/);
 });
 
