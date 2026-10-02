@@ -140,7 +140,7 @@ Everything in this section is Nintendont's `kernel/gecko/*.bin` applied to the s
 hide, D-pad rumble toggle) - on hardware by the venue's MeleeCodes toggles, in Dolphin by the
 same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbneutralspawn.c`) and the
 `mnstagesel.c`/`ifnametag.c` edits live only on tag `shifted-dol-final`. History of why they existed: `melee fork, docs/history/ucf-investigation.md`,
-`melee fork, docs/history/ucf-readdressing.md`, `melee fork, docs/history/venue-codes-readdressing.md`, decisions.md R11/R12.
+`melee fork, docs/history/ucf-readdressing.md`, `melee fork, docs/history/venue-codes-readdressing.md`, and the changelog's 2026-09-21 and 2026-09-24 entries.
 
 - [ ] **UCF feels right** *(venue code)*: dashback, shield-drop, wiggle-out-of-tumble behave
       like UCF 0.84.

@@ -44,13 +44,31 @@ Retry loops in kernel code produce frozen consoles with no explanation. The only
 
 **The kiosk is `tournament.bin`, a module loaded into stock Melee 1.02 at boot. It is not a rebuilt game executable.**
 
-The earlier build appended a shifted decomp executable to a copy of the disc. Everything that assumes vanilla addresses broke on it: Slippi recording, and every venue codeset, which then had to be ported natively. A module keeps the game stock, so recording, hotswap and the venue's codes work unchanged, and an update is a 26 KB file instead of a 1.4 GB image. (2026-09-24)
+The earlier build appended a shifted decomp executable to a copy of the disc. Everything that assumes vanilla addresses broke on it: Slippi recording, and every venue codeset, which then had to be ported natively. A module keeps the game stock, so recording, hotswap and the venue's codes work unchanged, and an update is a 26 KB file instead of a 1.4 GB image. The native ports of UCF, neutral spawns, striking and audio defaults that the old build needed are retired. The kiosk still asserts tournament rules (4 stocks, 8:00, items off, everything unlocked) at boot, whatever the memory card says. (2026-09-24)
 
 ### Event found by name at startup
 
-**The config names the tournament, event and stream. The relay resolves the ids at startup.**
+**The settings name the tournament, event and stream. The relay resolves the ids at startup.**
 
-Ids change every week; names do not. A short URL that the TO moves weekly means no weekly push. The numbered-weekly fallback (`weeklyNamePrefix`) is a deliberate, opt-in exception to "no fallbacks" for a series whose short URL may not have moved yet. A full slug reaches unpublished tournaments.
+Ids change every week; names do not. A short URL that the TO moves weekly means nothing changes on the relay from week to week. The numbered-weekly fallback (`weeklyNamePrefix`) is a deliberate, opt-in exception to "no fallbacks" for a series whose short URL may not have moved yet. A full slug reaches unpublished tournaments.
+
+### Set up from a browser
+
+**The relay is set up and changed on its own web page. The TO's computer needs nothing beyond a browser and ssh for one install command.** (2026-10-02)
+
+Before, a TO needed git, Node, the GitHub CLI, an ssh key and a hand-written `.env`, and pushed a build to the Pi only to write one settings file. The setup page asks for the token, lists the token's tournaments, events and streams, and checks the result against start.gg before saving. Two exceptions to fail-fast follow: a relay without settings serves only its setup page, and one whose event can't be found keeps its page up with the reason and retries, so the TO can recover from a phone. The first save needs a one-time setup code that the installer prints; later ones need the admin password, and every POST must come from the page itself, addressed to the relay (no DNS rebinding). Settings fields after the first five are optional with defaults, so no update ever finds the file unreadable.
+
+### One bundle, two update channels
+
+**Each commit builds one `lazyto.tgz`: the relay, the loader and `tournament.bin`. A Pi follows published releases by default, or every build of `main`.** (2026-10-02)
+
+The relay and the Wii files can never come from different commits, and the loader is the pinned Nintendont commit built with the fork CI's own image, byte for byte the build proven on a Wii apart from its build time. A TO's Pi moves only when a release is published; a developer's follows `main` to test changes on the fly. Any differing VERSION installs, so switching channel or rolling back is the same step.
+
+### SD cards from the relay
+
+**The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `tournament.cfg` and the loader's settings.** (2026-10-02)
+
+A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader settings file is written as version 0xD because the loader drops the 0xE files it saves itself.
 
 ## Risks and questions (R1-R16)
 
@@ -94,14 +112,6 @@ Ids change every week; names do not. A short URL that the TO moves weekly means 
 
 **A development emulator reports station 0.** Station 0 just must not be a real station number. One fewer config knob.
 
-### R11: Slippi's codes crashed the shifted executable
-
-**Superseded 2026-09-24: the kiosk is now a module in stock Melee; venue codesets apply unmodified.**
-
-### R12: venue codes must keep working
-
-**Superseded 2026-09-24: the kiosk is now a module in stock Melee; venue codesets apply unmodified.** The native ports of UCF, neutral spawns, striking and audio defaults are retired. The kiosk still asserts tournament rules (4 stocks, 8:00, items off, everything unlocked) at boot.
-
 ### R13: per-game characters
 
 **Auto-scored games carry each player's character, stage, stocks and costume from the match standings. Hand-scored games carry the winner only.**
@@ -124,4 +134,4 @@ The Pi is usually on Wi-Fi with no guaranteed address. Alternatives were a DHCP 
 
 **A shared secret, the same on every card, sent by the host before every request and telemetry datagram.**
 
-Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. The status page stays open on the network; its only action, ack, hides a flag.
+Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. Reading the status page needs nothing; its actions, the settings and the SD-card zips need the admin password. A new secret is one tick on the settings page, after which every card needs its zip again.

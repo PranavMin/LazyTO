@@ -60,7 +60,7 @@ The relay's status page during a test run: each station's set, score and last st
 
 | Guide | For |
 |---|---|
-| [docs/pi-setup.md](docs/pi-setup.md) | Setting up the relay on a Pi, and the relay's settings |
+| [docs/pi-setup.md](docs/pi-setup.md) | Setting up the relay on a Pi, updates, and troubleshooting it |
 | [docs/wii-setup.md](docs/wii-setup.md) | Preparing SD cards and Wiis |
 | [docs/night-of.md](docs/night-of.md) | Running a tournament: the checklist, the status page, and troubleshooting |
 | [docs/development.md](docs/development.md) | Building and testing LazyTO from source |

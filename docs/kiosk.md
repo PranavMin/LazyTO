@@ -3,7 +3,7 @@
 Since 2026-09-24 the kiosk is not a rebuilt Melee: the venue Wiis run a **stock
 Melee 1.02 ISO** and our code is a position-fixed blob that the loader copies into RAM at boot
 and wires in with a short list of word patches. Design rationale and history:
-[architecture.md](architecture.md) and [decisions.md](decisions.md) R11/R12. The shifted-DOL line (v1-v39,
+[architecture.md](architecture.md) and [decisions.md](decisions.md) (Stock Melee plus a module). The shifted-DOL line (v1-v39,
 `SmashTournament-vN.iso`) is frozen at tag `shifted-dol-final` in the old melee fork (PranavMin/melee).
 
 ## What is in it
