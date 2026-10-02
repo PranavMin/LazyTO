@@ -70,7 +70,7 @@ Never edit these by hand:
 |---|---|
 | `kiosk/include/relay_proto.h` | `python tools/gen_protocol.py` from `protocol.yaml` (checked by `npm test`) |
 | `kiosk/src/melee/lb/lbbuttonglyph_shapes.inc` | `python kiosk/tools/gen_button_glyphs.py` (the button and UI shapes) |
-| `kiosk/src/melee/lb/lbwordmark_tex.inc` | `python kiosk/tools/gen_wordmark.py` (the LazyTO title texture; needs the Franklin Gothic Medium font) |
+| `kiosk/src/melee/lb/lbwordmark_tex.inc` | the LazyTO title texture, 256x48 GX IA8. Made by a maintainer tool outside the repo (GDI+, Franklin Gothic Medium); the file is checked in and changes only with the artwork |
 | `kiosk/src/melee/lb/lbmodule_version.inc` | written by every build, git-ignored |
 
 ## File format

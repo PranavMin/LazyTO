@@ -83,11 +83,10 @@ Legend: each item is something *you* verify by eye on the running build.
       with FPS 0 and `Memory Empty in "sislib.c"` in Dolphin's log means that hook is
       missing or the screen grew past the pool: cut entries, the `li` immediate cannot
       go above 0x7FFF (0xC000 sign-extends to a negative size and panics at boot).*
-- [ ] **The LazyTO title is the wordmark texture** (renamed from TOURNAMENT 2026-09-30, `python kiosk/tools/gen_wordmark.py`) (bold italic, drop shadow) in the
+- [ ] **The LazyTO title is the wordmark texture** (renamed from TOURNAMENT 2026-09-30) (bold italic, drop shadow) in the
       panel's top-left title tab, not SIS text; it survives redraws and disappears on B-back
-      to the main menu. *`lbwordmark.c` + `lbwordmark_tex.inc` (regenerate with
-      `python kiosk/tools/gen_wordmark.py`, needs the Franklin Gothic Medium font on the PC that
-      builds). Invisible wordmark = one of the two `lb_800138EC` traps: its camera priority
+      to the main menu. *`lbwordmark.c` + `lbwordmark_tex.inc` (the texture is checked in; the
+      generator is a maintainer tool outside the repo, docs/kiosk.md). Invisible wordmark = one of the two `lb_800138EC` traps: its camera priority
       must be above the text context's 0x13 (we use 0x14) and its alpha argument is inverted
       (0 = opaque; 0xFF drew nothing for an hour on 2026-09-25). Garbled = IA8 tiling/byte
       order (texel = alpha byte, intensity byte, 4x4 tiles).*

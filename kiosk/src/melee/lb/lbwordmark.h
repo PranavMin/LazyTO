@@ -3,8 +3,8 @@
 
 #include <Runtime/platform.h>
 
-/* The kiosk's "TOURNAMENT" wordmark: a 256x48 IA8 texture carried in the
- * module (lbwordmark_tex.inc, tools/gen_wordmark.py) and drawn as a
+/* The kiosk's "LazyTO" wordmark: a 256x48 IA8 texture carried in the
+ * module (lbwordmark_tex.inc, checked in; made by a maintainer tool) and drawn as a
  * screen-space sprite by the vanilla sprite helper lb_800138EC - its own
  * ortho camera GObj on the last GX link, so it lands on top of the SIS text.
  * One instance at a time. Hide frees the sprite (B-back to the main menu
