@@ -57,10 +57,16 @@ export function sendWiiload(
       sock.destroy();
       reject(new Error(`no answer from ${host}:${opts.port ?? WIILOAD_PORT} (timeout)`));
     });
-    sock.once('error', (e) => reject(e));
+    // The Homebrew Channel launches the file as soon as the last byte is in
+    // and tears the socket down without a FIN, so a reset AFTER the whole
+    // frame was handed to the kernel is success, like the reference tool
+    // (which never reads back). A reset before that is a real failure.
+    let sent = false;
+    const allWritten = (): boolean => sent || sock.writableFinished || (off === frame.length && sock.writableLength === 0);
+    sock.once('error', (e) => (allWritten() ? resolve() : reject(e)));
+    let off = 0;
     sock.once('connect', () => {
       // 4 KB writes like the reference tool; Node coalesces anyway.
-      let off = 0;
       const step = (): void => {
         while (off < frame.length) {
           const end = Math.min(off + 4096, frame.length);
@@ -71,10 +77,12 @@ export function sendWiiload(
             return;
           }
         }
-        sock.end();
+        sock.end(() => {
+          sent = true;
+        });
       };
       step();
     });
-    sock.once('close', (hadError) => (hadError ? undefined : resolve()));
+    sock.once('close', () => (sent ? resolve() : undefined));
   });
 }
