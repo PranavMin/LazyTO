@@ -369,8 +369,6 @@ Everything a Pi runs comes from one bundle per commit, `lazyto.tgz` (`.github/wo
 | `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure. |
 | `deploy/uninstall.sh` | Removes what install.sh added, settings included; audit logs are kept unless `--purge`. |
 | `deploy/add-wifi.sh` | Saves another Wi-Fi network. |
-| `scripts/push.ts` (`npm run push`) | Development: this clone's relay inside the newest `main-build` bundle, installed with `install.sh --bundle`, which turns updates off. |
-| `scripts/smoke.ts` | One LIST_SETS and a status page fetch against a running relay. |
 
 Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
@@ -387,7 +385,6 @@ The checklist for each tournament night is in [night-of.md](night-of.md).
 - **Protocol first.** Change `protocol.yaml` and run `python tools/gen_protocol.py`, which writes `generated/wire.ts` and both header copies. `tools/check_protocol.py` regenerates them in memory and fails on any difference; the generator itself refuses implicit padding and any size that disagrees with `protocol.yaml`.
 - **Relay tests.** `npm test`: codec round-trips, the character and stage tables, and integration tests against `test/fake-startgg.ts` covering every row of the error table. Tests never touch the real API.
 - **Load.** `scripts/sim-wii.ts` drives 12 fake stations through list, start, score and end for 10 minutes and checks the upstream call rate.
-- **Real API.** Only `scripts/probe.ts` (read-only) and `scripts/reset-bracket.ts` (the test event only) touch start.gg, using `.env`.
 - **Kiosk.** A development setup can load `tournament.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
 - **CI.** `test.yml` (format, shellcheck, `npm test`, build) and `kiosk.yml` (the module, when kiosk files change) run on pull requests. `release.yml` runs on every push to main and every `v*` tag: the tests, the module, the loader, the bundle, then `main-build` or a draft release.
 

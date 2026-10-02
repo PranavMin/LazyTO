@@ -1,6 +1,6 @@
 // fake-startgg.ts -- in-process fake of api.start.gg/gql/alpha for
 // integration tests (architecture.md "Development and testing"). Response shapes mirror what
-// scripts/probe.ts recorded on 2026-09-19 against the real test tournament
+// a read-only probe recorded on 2026-09-19 against the real test tournament
 // (event 1613010): mutations answer with the set's {id state ...} selection,
 // semantic failures are HTTP 200 with a GraphQL "errors" array, and the Game
 // OUTPUT type has orderNum, not gameNum -- a query selecting gameNum on games

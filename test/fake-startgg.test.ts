@@ -1,4 +1,4 @@
-// Pins the fake's semantics to what scripts/probe.ts recorded from the real
+// Pins the fake's semantics to what a read-only probe recorded from the real
 // API, so later tests against the fake are testing the right behavior.
 
 import { test } from 'node:test';

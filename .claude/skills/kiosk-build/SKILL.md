@@ -24,7 +24,7 @@ Full reference: `docs/kiosk.md`. Per-build QA: `docs/kiosk-checklist.md`.
    sjiswrap rejects em dashes and smart quotes. Use the Grep tool with pattern `[^\x00-\x7F]`
    on `kiosk/src` and `kiosk/include`. Fix every hit.
 2. Never set the developer flags in the sources: build with `--demo` for a headless Dolphin
-   run instead (`docs/kiosk.md`, the `dolphin-test` skill). CI fails on a non-zero default,
+   run instead (`docs/kiosk.md`). CI fails on a non-zero default,
    and the version text of a `--demo` module ends in `DEMO`.
 3. Do not write C source through a Bash heredoc on this machine: backslash escapes collapse
    (`\x81` becomes a raw byte). Use the Edit or Write tool.
@@ -74,7 +74,7 @@ Delete `kiosk/build/obj/` and rebuild. A stale object once rendered mixed old an
 ## After the build
 
 - Version text on the set list ends in `+` when the tree is dirty.
-- Test in Dolphin with the `dolphin-test` skill, then on hardware with the `wii-test` skill.
+- Test in Dolphin, then on a Wii ([docs/development.md](../../../docs/development.md) "Testing on a Wii").
 - When a new build bug is found and fixed, add a row to `docs/kiosk-checklist.md` with the
   symptom and the usual cause.
 - A crash address from a Wii log resolves with `python kiosk/tools/resolve_crash.py <address>`.

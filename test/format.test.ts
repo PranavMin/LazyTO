@@ -14,7 +14,7 @@ function bo5Names(sets: readonly Named[]) {
     .map(([, , name]) => name);
 }
 
-// The real 16-entrant test event as one phase (scripts/probe.ts --rounds=1613010,
+// The real 16-entrant test event as one phase (read from the real API, event 1613010,
 // 2026-10-01): winners 1..5 (Grand Final and its reset both 5), losers -3..-8.
 const SIXTEEN: Named[] = [
   [1, 2, 'Winners Round 1'],
