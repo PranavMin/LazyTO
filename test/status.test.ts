@@ -148,6 +148,12 @@ test('status page', async (t) => {
       'the only client-side behaviour is the meta refresh',
     );
     assert.doesNotMatch(html, /<script/, 'no client JS');
+    assert.match(
+      html,
+      /@media \(prefers-color-scheme: dark\)/,
+      'status page follows the system dark-mode preference',
+    );
+    assert.match(html, /--warn: #fbbf24;/, 'warnings remain readable in dark mode');
     assert.match(html, /--card:/, 'the page carries the shared card stylesheet (PAGE_CSS)');
   });
 
