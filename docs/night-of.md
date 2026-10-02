@@ -54,7 +54,7 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | `✗ last refresh failed: ... Invalid authentication token` | The token was revoked or expired | Make a new token and paste it on the settings page (Replace the token). |
 | `✗ discovery beacon: ...` | The relay can't announce itself | The Pi has lost its network. Check its Wi-Fi. |
 | `no station has connected yet` with Wiis booted | No Wii can reach the relay | Wiis and Pi on different networks, or a guest network isolating them. See the Wii's own message. |
-| `no Wii has reported yet` | No Wii log reached the relay | Same causes as above, or the loader's Network setting is off: copy `slippi_nincfg.bin` from the station's zip onto the card again. |
+| `no Wii has reported yet` | No Wii log reached the relay | Same causes as above, or the loader's Network setting is off: turn it on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the station's zip onto the card again. |
 | Wii consoles: `(silent)` | That Wii stopped sending its log | It is off, rebooting, or lost the Wi-Fi. |
 | Wii consoles: `✗ crashed` | That Wii's game crashed | Power cycle it. Note the crash line for a bug report. |
 | Wii consoles: module not loaded, with a reason | The kiosk didn't start on that Wii | Unzip the station's zip onto the card again. |

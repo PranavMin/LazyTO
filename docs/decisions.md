@@ -68,7 +68,7 @@ The relay and the Wii files can never come from different commits, and the loade
 
 **The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `tournament.cfg` and the loader's settings.** (2026-10-02)
 
-A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader settings file is written as version 0xD because the loader drops the 0xE files it saves itself.
+A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 
 ## Risks and questions (R1-R16)
 

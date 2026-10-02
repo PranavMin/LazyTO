@@ -8,9 +8,10 @@
 //   tournament.bin     the kiosk module
 // Made here:
 //   tournament.cfg     station=, stream= (1 on the stream station), secret=
-//   slippi_nincfg.bin  the loader's settings, fresh: Network and Auto Boot on,
-//                      the game at games/GALE01/game.iso, Melee's codes at
-//                      their defaults (UCF on)
+//   lazyto_nincfg.bin  the loader's own settings, fresh: Network and Auto Boot
+//                      on, the game at games/GALE01/game.iso, Melee's codes at
+//                      their defaults (UCF on). A venue's Slippi Nintendont
+//                      keeps its own slippi_nincfg.bin; neither reads the other's.
 //   README.txt and games/GALE01/README.txt
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -20,16 +21,16 @@ import type { Config } from './config.js';
 import { escapeHtml, page, requirePassword, sendHtml, sendText } from './web.js';
 import { buildZip, type ZipEntry } from './zip.js';
 
-// The loader's settings file, NIN_CFG in Nintendont common/include/CommonConfig.h.
+// The loader's settings file: NIN_CFG and NIN_CFG_FILE in Nintendont
+// common/include/CommonConfig.h.
+export const LOADER_SETTINGS_FILE = 'lazyto_nincfg.bin';
 export const NIN_CFG_MAGIC = 0x01070cf6;
 export const NIN_CFG_LOG = 1 << 8;
 export const NIN_CFG_AUTO_BOOT = 1 << 10;
 export const NIN_CFG_NETWORK = 1 << 13;
 export const NIN_CFG_SIZE = 324;
-// Version 0xD, not the loader's own 0xE: its LoadNinCFG has no case for 0xE,
-// so a file the loader saves itself is dropped at the next boot, while a 0xD
-// file loads and is upgraded to 0xE on the way in (UpdateNinCFG).
-const NIN_CFG_FILE_VERSION = 0xd;
+// NIN_CFG_VERSION: the version the loader writes itself.
+const NIN_CFG_VERSION = 0xe;
 const NIN_LAN_AUTO = 0xffffffff;
 const GAME_PATH = '/games/GALE01/game.iso';
 const GAME_ID = 0x47414c45; // "GALE", Melee NTSC
@@ -38,11 +39,11 @@ const GAME_ID = 0x47414c45; // "GALE", Melee NTSC
 // frozen stages, gameplay, screen and safety all at their first option.
 const MELEE_CODES = [2, 1, 2, 1, 1, 1, 1, 1];
 
-/** A fresh slippi_nincfg.bin: what the loader would save after picking the game and turning on Network and Auto Boot. */
+/** A fresh lazyto_nincfg.bin: what the loader would save after picking the game and turning on Network and Auto Boot. */
 export function loaderSettings(): Buffer {
   const b = Buffer.alloc(NIN_CFG_SIZE);
   b.writeUInt32BE(NIN_CFG_MAGIC, 0x00);
-  b.writeUInt32BE(NIN_CFG_FILE_VERSION, 0x04);
+  b.writeUInt32BE(NIN_CFG_VERSION, 0x04);
   b.writeUInt32BE(NIN_CFG_NETWORK | NIN_CFG_AUTO_BOOT, 0x08); // Config; Log off
   // 0x0c VideoMode 0: auto
   b.writeUInt32BE(NIN_LAN_AUTO, 0x10); // Language
@@ -77,9 +78,9 @@ What is on the card:
   apps/LazyTO/       the LazyTO loader (Slippi Nintendont with the tournament kiosk)
   tournament.bin     the kiosk module
   tournament.cfg     this card's station number and the relay's Wii secret
-  slippi_nincfg.bin  the loader's settings: Network and Auto Boot on, UCF on, the
+  lazyto_nincfg.bin  the loader's settings: Network and Auto Boot on, UCF on, the
                      game at games/GALE01/game.iso. A venue's own Slippi Nintendont
-                     on the same card uses this file too.
+                     on the same card keeps its own slippi_nincfg.bin.
 
 Keep the card like a password: tournament.cfg carries the Wii secret.
 Made by the LazyTO ${version} relay.
@@ -119,7 +120,7 @@ export function stationZip(o: CardOptions): Buffer {
         formatTournamentCfg({ station: o.station, stream: stream ? 1 : 0, secret: o.secret }),
       ),
     },
-    { name: 'slippi_nincfg.bin', data: loaderSettings() },
+    { name: LOADER_SETTINGS_FILE, data: loaderSettings() },
     { name: 'games/GALE01/README.txt', data: Buffer.from(GAME_README) },
     { name: 'README.txt', data: Buffer.from(cardReadme(o.station, stream, o.version)) },
   ];
@@ -196,6 +197,6 @@ function renderCards(v: CardsView): string {
 <p class="muted small">The number on the station's label at the venue. ${escapeHtml(streamNote)}</p>
 <div class="acts"><button class="primary">Download the zip</button><a class="btnlink" href="/">back</a></div>
 </form>
-<p class="muted small">Each zip holds the Wii secret: keep the cards like a password. Its <code>slippi_nincfg.bin</code>, the loader's settings, replaces the one on the card, which a venue's own Slippi Nintendont uses too. The zips carry the Wii files of this relay's version, LazyTO ${escapeHtml(v.version)}.</p>`,
+<p class="muted small">Each zip holds the Wii secret: keep the cards like a password. The loader's settings are its own <code>lazyto_nincfg.bin</code>, so a venue's Slippi Nintendont on the same card keeps its settings. The zips carry the Wii files of this relay's version, LazyTO ${escapeHtml(v.version)}.</p>`,
   );
 }
