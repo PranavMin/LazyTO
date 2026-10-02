@@ -46,7 +46,7 @@ const WEEKLY_WINDOW_DAYS = 30;
 export interface ResolveInput {
   tournament: string; // short URL (e.g. "mybar") or full slug ("tournament/<slug>")
   eventName: string; // matched case-insensitively as a substring, e.g. "Melee Singles"
-  streamName: string; // matched case-insensitively and exactly
+  streamName: string; // matched case-insensitively and exactly; "" = no stream
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
 }
 
@@ -57,8 +57,9 @@ export interface Resolved {
   tournamentSlug: string;
   eventId: number;
   eventName: string;
-  streamId: number;
-  streamName: string;
+  /** null when no stream is configured. */
+  streamId: number | null;
+  streamName: string | null;
 }
 
 export class ResolveError extends Error {
@@ -179,14 +180,14 @@ export async function resolveEvent(
     : await findTournamentSlug(client, input.tournament, input.weeklyNamePrefix, nowSec);
   const t = await client.getTournament(found.slug);
   const event = pickEvent(t, input.eventName);
-  const stream = pickStream(t, input.streamName);
+  const stream = input.streamName === '' ? null : pickStream(t, input.streamName);
   return {
     foundBy: found.foundBy,
     tournamentName: t.name,
     tournamentSlug: t.slug,
     eventId: Number(event.id),
     eventName: event.name,
-    streamId: Number(stream.id),
-    streamName: stream.streamName,
+    streamId: stream ? Number(stream.id) : null,
+    streamName: stream ? stream.streamName : null,
   };
 }

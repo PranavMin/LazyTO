@@ -47,7 +47,7 @@ secret=<your RELAY_SECRET>
 | Key | Value |
 |---|---|
 | `station` | the number on this Wii's station label |
-| `stream` | `1` on the one Wii that is on stream, `0` on every other. The stream Wii's station number must match the relay's `STREAM_STATION`. |
+| `stream` | `1` on the Wii that is on stream, `0` on every other. The relay decides the stream by station number (`STREAM_STATION`), so this value is informational, but the line must be there. |
 | `secret` | the relay's secret, exactly as in `.env` |
 
 There is no relay address. The Wii finds the relay by itself.

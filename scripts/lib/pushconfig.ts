@@ -50,7 +50,7 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
   if (adminPassword === env.RELAY_SECRET)
     fail('ADMIN_PASSWORD in .env must differ from RELAY_SECRET (the secret is on every SD card)');
   const eventName = need('EVENT_NAME');
-  const streamName = need('STREAM_NAME');
+  const streamName = env.STREAM_NAME ?? ''; // "" = no stream
   const streamStation = env.STREAM_STATION ? Number.parseInt(env.STREAM_STATION, 10) : 1;
   if (!Number.isInteger(streamStation) || streamStation < 1)
     fail(`STREAM_STATION in .env must be a station number, not '${env.STREAM_STATION}'`);
@@ -87,7 +87,7 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
 
 /** The summary line push prints (token shown as its first 4 characters only). */
 export function describeRelayConfig(c: RelayConfig, opts: PushOptions): string {
-  return `config: ${c.tournament} (${opts.test ? 'TEST' : 'production'}), event ~ '${c.eventName}', stream '${c.streamName}', stream station ${c.streamStation}, format ${c.setFormat}, tcp ${c.tcpPort}, http ${c.httpPort}, token ${c.token.slice(0, 4)}...`;
+  return `config: ${c.tournament} (${opts.test ? 'TEST' : 'production'}), event ~ '${c.eventName}', ${c.streamName ? `stream '${c.streamName}' on station ${c.streamStation}` : 'no stream'}, format ${c.setFormat}, tcp ${c.tcpPort}, http ${c.httpPort}, token ${c.token.slice(0, 4)}...`;
 }
 
 /** dist/, deploy/, package.json ("type": "module", needed beside dist/), README.md and config.json into stageDir (recreated). */

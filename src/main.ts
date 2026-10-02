@@ -24,7 +24,10 @@ async function main(): Promise<void> {
   const resolved = await resolveEvent(startgg, config); // fail fast: unknown short URL / event / stream dies here
   console.log(
     `resolved "${config.tournament}" by ${resolved.foundBy}: ${resolved.tournamentName} (${resolved.tournamentSlug}), ` +
-      `event "${resolved.eventName}" ${resolved.eventId}, stream "${resolved.streamName}" ${resolved.streamId}`,
+      `event "${resolved.eventName}" ${resolved.eventId}, ` +
+      (resolved.streamId === null
+        ? 'no stream'
+        : `stream "${resolved.streamName}" ${resolved.streamId} on station ${config.streamStation}`),
   );
 
   const ev = await startEvent({
@@ -32,8 +35,10 @@ async function main(): Promise<void> {
     eventId: resolved.eventId,
     setFormat: config.setFormat,
     secret: config.secret,
-    streamStation: config.streamStation,
-    streamId: resolved.streamId,
+    stream:
+      resolved.streamId === null
+        ? null
+        : { station: config.streamStation, streamId: resolved.streamId },
     dataDir: config.auditDir,
     tcpPort: config.tcpPort,
   });
@@ -42,7 +47,7 @@ async function main(): Promise<void> {
     state: ev.state,
     cache: ev.cache,
     startgg,
-    streamStation: config.streamStation,
+    streamStation: resolved.streamId === null ? null : config.streamStation,
     eventLabel: `${resolved.tournamentName} · ${resolved.eventName} (${resolved.eventId})`,
     beacon,
     tcp: ev.tcp,

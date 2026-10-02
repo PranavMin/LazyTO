@@ -39,6 +39,8 @@ export interface HarnessOptions {
   network?: boolean;
   tcpPort?: number;
   secret?: string;
+  /** false: no stream tonight. Default: station STREAM_STATION streams to the fixture's stream. */
+  stream?: false;
 }
 
 export interface Harness {
@@ -73,8 +75,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     eventId: FIXTURE_EVENT_ID,
     setFormat: opts.setFormat ?? 'startgg',
     secret: opts.secret ?? TEST_SECRET,
-    streamStation: STREAM_STATION,
-    streamId: FIXTURE_STREAM_ID,
+    stream: opts.stream === false ? null : { station: STREAM_STATION, streamId: FIXTURE_STREAM_ID },
     dataDir,
     tcpPort: opts.tcpPort ?? 0,
     host: opts.network ? '0.0.0.0' : '127.0.0.1',
@@ -84,7 +85,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     state: ev.state,
     cache: ev.cache,
     startgg,
-    streamStation: STREAM_STATION,
+    streamStation: opts.stream === false ? null : STREAM_STATION,
     eventLabel:
       opts.eventLabel ??
       `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`,

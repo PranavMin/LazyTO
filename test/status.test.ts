@@ -6,7 +6,11 @@ import { STALE_CACHE_MS } from '../src/status.js';
 import { WiiClient, game } from './wii-client.js';
 import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
-import { startHarness } from './harness.js';
+import { startHarness, TEST_PASSWORD } from './harness.js';
+
+function basic(password: string): string {
+  return `Basic ${Buffer.from(`to:${password}`).toString('base64')}`;
+}
 
 test('status page', async (t) => {
   const h = await startHarness();
@@ -166,14 +170,25 @@ test('status page', async (t) => {
     const before = state.flags().length;
     assert.ok(before >= 3);
     const id = state.flags()[0]!.id;
-    const res = await fetch(`${statusUrl}/ack?id=${id}`, { method: 'POST', redirect: 'manual' });
+    const anon = await fetch(`${statusUrl}/ack?id=${id}`, { method: 'POST', redirect: 'manual' });
+    assert.equal(anon.status, 401, 'ack needs the TO password like the other actions');
+    assert.equal(state.flags().length, before);
+    const res = await fetch(`${statusUrl}/ack?id=${id}`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { authorization: basic(TEST_PASSWORD) },
+    });
     assert.equal(res.status, 303);
     assert.equal(state.flags().length, before - 1);
     assert.ok(!(await (await fetch(statusUrl)).text()).includes('HTTP 503 after 3 attempts'));
   });
 
   await t.test('acking an unknown flag is a 404', async () => {
-    const res = await fetch(`${statusUrl}/ack?id=999`, { method: 'POST', redirect: 'manual' });
+    const res = await fetch(`${statusUrl}/ack?id=999`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { authorization: basic(TEST_PASSWORD) },
+    });
     assert.equal(res.status, 404);
   });
 

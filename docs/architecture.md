@@ -222,7 +222,7 @@ UDP messages (not on the TCP wire):
 | `ST_BAD_VERSION` | Protocol version mismatch |
 | `ST_SET_NOT_FOUND` | Not in the cache |
 | `ST_SET_TAKEN` | Claimed by another station, or started by hand on start.gg |
-| `ST_NOT_STREAM` | Stream flag from a station that is not the stream station |
+| `ST_NOT_STREAM` | Not sent any more: the relay decides the stream by station (kept in the protocol) |
 | `ST_STARTGG_ERROR` | start.gg refused or failed; see the status page |
 | `ST_RATE_LIMITED` | No rate-limit token within 2 s |
 | `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no tournament.cfg") |

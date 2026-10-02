@@ -193,21 +193,31 @@ test('full set lifecycle on a non-stream station', async (t) => {
   });
 });
 
-test('stream station rules', async (t) => {
+test('the stream is decided by station, not by the card', async (t) => {
   const env = await setup();
   t.after(env.close);
 
-  await t.test('stream flag from a non-stream station is refused (ST_NOT_STREAM)', async () => {
-    const r = await env.wii(4).startSet(SET, 1);
-    assert.equal(r.resp.status, RelayStatus.ST_NOT_STREAM);
-    assert.equal(env.fake.getSet(SET).state, 1, 'nothing went upstream');
+  await t.test('stream=1 on another station starts the set, off stream', async () => {
+    const r = await env.wii(4, 1).startSet(SET, 1);
+    assert.equal(r.resp.status, RelayStatus.ST_OK);
+    assert.equal(env.fake.getSet(SET).state, 2);
+    assert.equal(env.fake.getSet(SET).stream, null);
   });
 
-  await t.test('stream station start assigns the configured stream', async () => {
-    const r = await env.wii(STREAM_STATION, 1).startSet(SET, 1);
+  await t.test('the stream station goes on stream even with stream=0 on its card', async () => {
+    const r = await env.wii(STREAM_STATION, 0).startSet(107949995, 0);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(SET).stream!.id, STREAM_ID);
+    assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);
   });
+});
+
+test('with no stream configured, nothing is put on stream', async (t) => {
+  const env = await startHarness({ stream: false });
+  t.after(env.close);
+  const r = await env.wii(STREAM_STATION, 1).startSet(SET, 1);
+  assert.equal(r.resp.status, RelayStatus.ST_OK);
+  assert.equal(env.fake.callsFor('assignStream').length, 0);
+  assert.match(await (await fetch(env.statusUrl)).text(), /no stream · refreshes/);
 });
 
 test('assignStream fails after markSetInProgress', async (t) => {

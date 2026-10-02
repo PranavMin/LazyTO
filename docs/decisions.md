@@ -20,7 +20,7 @@ A rebooted Wii asks the relay, which offers its set first. No persistence code i
 
 **`sd:/tournament.cfg` has `station`, `stream` and `secret`. Nothing else.**
 
-Every card is identical apart from the station number and the one `stream=1`. The relay refuses a stream START_SET from the wrong station, so a mis-copied card cannot take over the stream.
+Every card is identical apart from the station number. The relay decides which sets go on stream by station (`streamStation`), not by the card's `stream=` value, so a card and the relay can never disagree about the stream. The kernel still requires the `stream=` line.
 
 ### Fixed-size big-endian structs
 

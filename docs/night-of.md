@@ -58,7 +58,6 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | Station: `✗ ... start.gg HTTP 5xx after 3 attempts` | start.gg had an outage. The relay already retried twice. | The player tries again later. Each report overwrites the last, so nothing is lost. |
 | Last action `ST_RATE_LIMITED` | More than 70 start.gg calls in a minute | Wait a minute. If it repeats, something is looping: check the log. |
 | Last action `ST_SET_TAKEN` | Two stations picked the same set, or it was started by hand | Nothing to do. The players pick another set. |
-| Last action `ST_NOT_STREAM` | A card that isn't the stream station has `stream=1` | Fix that card. |
 | Set shows as `set 12345` | The set left start.gg's pending list mid-set | The station clears on its next refresh. Check start.gg if the players didn't finish. |
 | A Wii died or froze mid-set and its station still shows the set | The set is in progress on start.gg, so no other Wii can take it | Tap **free** on that station. The page shows the set and the score it will discard; confirm. The set goes back on every Wii's list at 0-0. Your password is `ADMIN_PASSWORD`. |
 | A set needs a different best-of | The format rule is wrong for this set, or start.gg won't take a short set | Under **Waiting sets**, tap Bo3 or Bo5. **auto** goes back to the rule. A set already on a station can't change; free it first if you must. |

@@ -21,7 +21,7 @@ export interface Config {
   token: string;
   tournament: string; // start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")
   eventName: string; // e.g. "Melee Singles"
-  streamName: string; // the stream's name in the tournament's stream settings
+  streamName: string; // the stream's name in the tournament's stream settings; "" = no stream
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
   secret: string; // shared with every station's relay_auth (decisions.md R16)
   adminPassword: string; // the TO's password for the status page's actions (admin.ts); never the secret
@@ -139,13 +139,11 @@ export function loadConfig(path: string): Config {
   ) {
     problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
   }
-  for (const [name, v] of [
-    ['eventName', eventName],
-    ['streamName', streamName],
-  ] as const) {
-    if (name in obj && (typeof v !== 'string' || v.trim().length === 0)) {
-      problems.push(`${name} must be a non-empty string`);
-    }
+  if ('eventName' in obj && (typeof eventName !== 'string' || eventName.trim().length === 0)) {
+    problems.push('eventName must be a non-empty string');
+  }
+  if ('streamName' in obj && typeof streamName !== 'string') {
+    problems.push('streamName must be a string ("" for no stream)');
   }
   // Letters, digits, - and _ only: it is typed onto every SD card as
   // secret=<value> and must survive the kernel's key=value parser. 8 to

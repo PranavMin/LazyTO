@@ -483,8 +483,11 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
   );
   assert.equal(
     describeRelayConfig(t, { ...PO, test: true }),
-    "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream', stream station 3, format top8q, tcp 29470, http 29473, token tok-...",
+    "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream' on station 3, format top8q, tcp 29470, http 29473, token tok-...",
   );
+  const noStream = relayConfigFromEnv({ ...ENV, STREAM_NAME: '' }, PO);
+  assert.equal(noStream.streamName, '', 'STREAM_NAME is optional: no stream');
+  assert.match(describeRelayConfig(noStream, PO), /, no stream, /);
   throwsTool(
     () => relayConfigFromEnv({ ...ENV, STARTGG_TOKEN: '' }, PO),
     /STARTGG_TOKEN missing from \.env/,

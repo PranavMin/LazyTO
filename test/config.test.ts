@@ -178,14 +178,18 @@ test('secret is 8-16 letters, digits, - or _', () => {
   }
 });
 
-test('eventName and streamName must be non-empty', () => {
+test('eventName must be non-empty; streamName may be "" for no stream', () => {
   expectProblems(
     JSON.stringify({ ...VALID, eventName: '  ' }),
     'eventName must be a non-empty string',
   );
   expectProblems(
     JSON.stringify({ ...VALID, streamName: 1358079 }),
-    'streamName must be a non-empty string',
+    'streamName must be a string ("" for no stream)',
+  );
+  assert.equal(
+    loadConfig(writeConfig(JSON.stringify({ ...VALID, streamName: '' }))).streamName,
+    '',
   );
 });
 

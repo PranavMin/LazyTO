@@ -42,7 +42,8 @@ export interface StatusDeps {
   state: StationState;
   cache: SetCache;
   startgg: StartggClient;
-  streamStation: number;
+  /** null = no stream tonight. */
+  streamStation: number | null;
   /** Tonight's tournament and event as resolve.ts found them, shown in the header so the TO can see it is the right week. */
   eventLabel: string;
   /** Discovery beacon (decisions.md R15): where it is announcing the relay, and any send error. */
@@ -171,13 +172,7 @@ export class StatusServer {
   constructor(private readonly deps: StatusDeps) {
     this.server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://relay');
-      if (req.method === 'POST' && url.pathname === '/ack') {
-        const ok = this.deps.state.ack(Number(url.searchParams.get('id')));
-        res.writeHead(ok ? 303 : 404, { location: '/' });
-        res.end();
-        return;
-      }
-      if (url.pathname === '/free' || url.pathname === '/bestof') {
+      if (url.pathname === '/ack' || url.pathname === '/free' || url.pathname === '/bestof') {
         void this.adminRoute(req, res, url);
         return;
       }
@@ -367,7 +362,7 @@ export class StatusServer {
 <title>LazyTO</title>
 <style>${PAGE_CSS}</style></head><body>
 <h1>LazyTO</h1>
-${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>stream station ${streamStation} ★ · refreshes every 5 s</p>
+${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>${streamStation === null ? 'no stream' : `stream station ${streamStation} ★`} · refreshes every 5 s</p>
 <h2>Stations</h2>
 ${cards.join('\n')}
 ${waiting}
@@ -431,6 +426,12 @@ ${items.join('\n')}
       return;
     }
 
+    if (url.pathname === '/ack' && req.method === 'POST') {
+      const ok = this.deps.state.ack(Number(url.searchParams.get('id')));
+      res.writeHead(ok ? 303 : 404, { location: '/' });
+      res.end();
+      return;
+    }
     const station = Number(url.searchParams.get('station'));
     if (url.pathname === '/free' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });

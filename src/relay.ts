@@ -26,8 +26,8 @@ export interface EventOptions {
   setFormat: SetFormat;
   /** Shared secret every Wii request and telemetry datagram carries (decisions.md R16). */
   secret: string;
-  streamStation: number;
-  streamId: number;
+  /** The stream setup's station and its start.gg stream; null = no stream. */
+  stream: { station: number; streamId: number } | null;
   /** Where the audit log (<eventId>.jsonl) and the per-station Wii logs go. */
   dataDir: string;
   tcpPort: number;
@@ -80,8 +80,7 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
     state,
     startgg: o.startgg,
     audit,
-    streamStation: o.streamStation,
-    streamId: o.streamId,
+    stream: o.stream,
     secret: o.secret,
   });
   await tcp.listen(o.tcpPort, host);

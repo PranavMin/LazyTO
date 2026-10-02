@@ -84,7 +84,7 @@ In the repo folder, copy `.env.example` to `.env` and fill it in. `.env` is neve
 | `ADMIN_PASSWORD` | your password for the status page's buttons (free a station, change a set's best-of): 8 to 64 characters, no spaces, not the same as `RELAY_SECRET`. The browser asks once; the user name can be anything. |
 | `TOURNAMENT` | your tournament's start.gg short URL, the part after `start.gg/`. For one fixed tournament you can instead give its full slug, `tournament/<slug>`. |
 | `EVENT_NAME` | text that appears in your Melee singles event's name, for example `Melee Singles`. It must match exactly one singles event. |
-| `STREAM_NAME` | your stream's name exactly as in the tournament's stream settings |
+| `STREAM_NAME` | optional. Your stream's name exactly as in the tournament's stream settings. Leave it empty for no stream: nothing is put on stream. |
 | `STREAM_STATION` | optional. The station number of the Wii on stream. Default 1. |
 | `SET_FORMAT` | optional. `startgg` (default): each set's best-of as start.gg has it. `top8q`: Bo3, then Bo5 from the top-8 qualifiers onward. start.gg lets an in-person event set only one best-of, so a venue that plays Bo3 into Bo5 wants `top8q`. |
 | `WEEKLY_NAME_PREFIX` | optional, for a numbered weekly. See below. |
@@ -186,7 +186,7 @@ stops the relay with a list of everything wrong.
 | `token` | start.gg API token | `STARTGG_TOKEN` |
 | `tournament` | short URL, or `tournament/<slug>` | `TOURNAMENT`, or `TEST_TOURNAMENT` with `--test` |
 | `eventName` | picks the one Melee singles event whose name contains it | `EVENT_NAME` |
-| `streamName` | picks the stream with exactly this name | `STREAM_NAME` |
+| `streamName` | picks the stream with exactly this name; `""` for no stream | `STREAM_NAME` |
 | `weeklyNamePrefix` | the weekly backup described above. Empty turns it off. | `WEEKLY_NAME_PREFIX` |
 | `secret` | the shared secret every Wii must send | `RELAY_SECRET` |
 | `adminPassword` | the password for the status page's buttons | `ADMIN_PASSWORD` |
