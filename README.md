@@ -13,14 +13,13 @@ It has not run a full night at a venue yet.
 
 1. **Get LazyTO.** On a PC with Node 22, clone this repo with a plain
    `git clone https://github.com/PranavMin/LazyTO.git` and run `npm ci`. You don't need the
-   submodules; they are only for building the kiosk and the loader yourself. Get the kiosk
-   module, `tournament.bin`, from [GitHub Releases](https://github.com/PranavMin/LazyTO/releases)
-   once the first `v*` release is out. Until then, download the `tournament-bin` artifact from the
-   newest successful run of the [kiosk workflow](https://github.com/PranavMin/LazyTO/actions/workflows/kiosk.yml)
-   on `main`.
-2. **Set up the Pi.** Flash Raspberry Pi OS, fill in `.env` with your start.gg token, secret,
-   tournament, event and stream, then run `npm run push -- --test` against a test tournament.
-   When it works, `npm run push` goes live. See [docs/pi-setup.md](docs/pi-setup.md).
+   submodules; they are only for building the kiosk and the loader yourself. The kiosk module,
+   `tournament.bin`, is in the `wii/` folder of `lazyto.tgz` on the newest
+   [release](https://github.com/PranavMin/LazyTO/releases), or on the `main-build` prerelease
+   until the first release is out.
+2. **Set up the Pi.** Flash Raspberry Pi OS Lite, log in over ssh and run the one install
+   command. It prints the address of the setup page, where you enter your start.gg token and
+   pick your tournament, event and stream. See [docs/pi-setup.md](docs/pi-setup.md).
 3. **Prepare each Wii's SD card.** With the card in the PC, run
    `npm run sync-card -- --station N` (add `--stream 1` on the stream Wii). It needs the GitHub
    CLI `gh`, logged in, to fetch the loader, and `--module <file>` pointing at the

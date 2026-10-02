@@ -20,6 +20,6 @@ Only the newest beta and `main` get fixes.
   meant for a venue LAN. The shared secret stops a stray device from reporting sets; it does not
   protect against someone who can watch the network. Don't expose these ports to the internet.
 - **The Pi updates itself.** At every relay start, `deploy/update.sh` downloads the newest
-  `latest` prerelease from this repository and checks it against its `.sha256`. The checksum
-  catches a broken download, not a compromised repository. `npm run push -- --no-auto-update`
-  turns updates off.
+  build of its update channel from this repository's releases (the newest full release by
+  default) and checks it against its `.sha256`. The checksum catches a broken download, not a
+  compromised repository. Updates can be turned off on the settings page.

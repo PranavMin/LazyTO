@@ -40,7 +40,8 @@ Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
 The build uses no `main.dol`: hook addresses are checked against `splits.txt` and the guard
 word is the constant `GUARD_WORD`. CI's `kiosk` workflow runs the same build and uploads
-`tournament.bin` as the `tournament-bin` artifact.
+`tournament.bin` as the `tournament-bin` artifact; on every push to `main`, `release.yml` puts
+it in the `main-build` bundle.
 
 Read the tail of the output:
 

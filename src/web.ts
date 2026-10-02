@@ -198,7 +198,7 @@ export const PAGE_CSS = `
   label { display: block; margin: 10px 0 4px; font-weight: 600; }
   label.choice { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin: 0; padding: 8px 0; border-top: 1px solid var(--line); }
   label.choice:first-of-type { border-top: 0; }
-  input[type=radio] { width: 20px; height: 20px; margin: 2px 0 0; flex: none; }
+  input[type=radio], input[type=checkbox] { width: 20px; height: 20px; margin: 2px 0 0; flex: none; }
   input[type=text], input[type=password], input[type=number], input[type=url] {
     font: inherit; width: 100%; min-height: 44px; padding: 0 10px; color: var(--fg);
     background: var(--card); border: 1px solid var(--btnline); border-radius: 8px;

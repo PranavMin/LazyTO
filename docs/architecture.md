@@ -357,16 +357,19 @@ secret=<the relay's secret>
 
 A Raspberry Pi (5, 4 or Zero 2 W) on Raspberry Pi OS Lite 64-bit, on the venue Wi-Fi (Ethernet works the same). Step by step: [pi-setup.md](pi-setup.md).
 
+Everything a Pi runs comes from one bundle per commit, `lazyto.tgz` (`.github/workflows/release.yml`): the relay (`dist/`, `deploy/`) and the Wii files (`wii/apps/LazyTO/`, the loader built from the pinned Nintendont commit, and `wii/tournament.bin`). Every push to `main` republishes it on the moving prerelease `main-build`; a `v*` tag drafts a release with it. Each Pi follows one update channel, `/var/lib/lazyto/update-channel`: `release` (the newest full release, the default), `main` (`main-build`) or `off`.
+
 | File | Role |
 |------|------|
-| `scripts/push.ts` (`npm run push`) | Run from a clone on any OS with Node 22 and ssh: builds, writes `config.json` from `.env`, copies the bundle, runs the installer over ssh. Only needed to change the config or push a dev build; code updates itself (deploy/update.sh). |
-| `deploy/install.sh` | On the Pi: pinned Node 22 in `/opt/node`, Wi-Fi power saving off, system user `relay`, code in `/opt/lazyto`, config in `/etc/lazyto/config.json`, installs and restarts the unit. Idempotent. |
-| `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure, waits for time sync. |
-| `deploy/uninstall.sh` | Removes what install.sh added; audit logs are kept unless `--purge`. |
+| `deploy/install.sh` | The install command, also a release asset: pinned Node 22 in `/opt/node`, Wi-Fi power saving off, system user `relay`, the update channel (`--channel`), the bundle into `/opt/lazyto` (downloaded, or `--bundle <file>`), then starts the unit and prints the setup page's address and setup code. Running it again keeps the settings. |
+| `deploy/update.sh` | Before every relay start: the channel's bundle when its VERSION differs from the installed one, verified by SHA-256 and checked against the settings by the new build's `check-config.js`, then swapped in. `--from <dir>` is the swap alone, which install.sh uses. |
+| `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure. |
+| `deploy/uninstall.sh` | Removes what install.sh added, settings included; audit logs are kept unless `--purge`. |
 | `deploy/add-wifi.sh` | Saves another Wi-Fi network. |
+| `scripts/push.ts` (`npm run push`) | Development: this clone's relay inside the newest `main-build` bundle, installed with `install.sh --bundle`, which turns updates off. |
 | `scripts/smoke.ts` | One LIST_SETS and a status page fetch against a running relay. |
 
-Logs go to journald. Audit logs go to `/var/lib/lazyto/<eventId>.jsonl`.
+Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
 ### Network
 
