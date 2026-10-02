@@ -1,7 +1,7 @@
 # systemd unit for the LazyTO relay (architecture.md Deployment).
 # Installed to /etc/systemd/system by deploy/install.sh. Node lives at
-# /opt/node (a pinned official tarball), the compiled relay at
-# /opt/lazyto/dist, its settings and logs in /var/lib/lazyto.
+# /opt/node (a pinned official tarball), the release bundle at /opt/lazyto,
+# the relay's settings and logs in /var/lib/lazyto.
 
 [Unit]
 Description=LazyTO relay (Wii <-> start.gg)
@@ -18,11 +18,11 @@ Type=simple
 User=relay
 Group=relay
 WorkingDirectory=/opt/lazyto
-# Auto-update before every start (deploy/update.sh): fetch the relay bundle
-# built from the newest main, verify it, check it accepts the relay's
-# settings (/var/lib/lazyto/config.json), swap it in. The "+" runs it as root outside the sandbox below;
-# it logs one line and lets the installed version start on any failure, so a
-# Pi without internet starts as before. /etc/lazyto/no-auto-update disables it.
+# Update before every start (deploy/update.sh): the newest build of the
+# channel in /var/lib/lazyto/update-channel (release, main or off), verified
+# and checked against the relay's settings, then swapped in. The "+" runs it
+# as root outside the sandbox below. On any failure it logs one line and the
+# installed version starts, so a Pi without internet starts as before.
 ExecStartPre=+/opt/lazyto/deploy/update.sh
 ExecStart=/opt/node/bin/node /opt/lazyto/dist/main.js
 # The relay exits non-zero only if its web server cannot start (port 29473

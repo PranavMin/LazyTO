@@ -11,7 +11,6 @@ import {
   weeklyPrefixFrom,
   type Config,
 } from '../src/config.js';
-import { relayConfigFromEnv } from '../scripts/lib/pushconfig.js';
 
 const VALID: Config = {
   token: 'tok-abc',
@@ -229,23 +228,4 @@ test('weeklyPrefixFrom strips the trailing number', () => {
   assert.equal(weeklyPrefixFrom('Smash Weekly 42'), 'Smash Weekly ');
   assert.equal(weeklyPrefixFrom('GENESIS: BLACK'), '');
   assert.equal(weeklyPrefixFrom('2026'), '');
-});
-
-// scripts/push.ts (relayConfigFromEnv) writes the settings file on a Pi it
-// installs a development build on. What it writes must load.
-test('scripts/push.ts writes a settings file the relay accepts', () => {
-  const written = relayConfigFromEnv(
-    {
-      STARTGG_TOKEN: 't',
-      RELAY_SECRET: 'abcdefgh',
-      ADMIN_PASSWORD: 'to-pass-9876',
-      TOURNAMENT: 'x',
-      EVENT_NAME: 'e',
-      STREAM_NAME: 's',
-    },
-    { test: false },
-  );
-  const r = parseConfig(written);
-  assert.ok(r.ok, JSON.stringify(r));
-  assert.deepEqual(r.ignored, [], 'push writes no field the relay does not know');
 });

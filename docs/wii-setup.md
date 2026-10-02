@@ -8,17 +8,18 @@ stock Melee image. Every card is the same except for its config file.
 - Wiis with the Homebrew Channel. Any Wii that runs Slippi Nintendont is ready.
 - One SD card per Wii, formatted FAT32.
 - A stock NTSC 1.02 Melee image (`GALE01`).
-- The LazyTO loader (the `apps/LazyTO` folder) and the kiosk module (`tournament.bin`). Until
-  the first release is published, `npm run sync-card` fetches the loader from the newest
-  successful CI build of the [Nintendont fork](https://github.com/PranavMin/Nintendont), and you
-  download `tournament.bin` as the `tournament-bin` artifact of the newest successful
-  [kiosk workflow](https://github.com/PranavMin/LazyTO/actions/workflows/kiosk.yml) run on
-  `main`, then pass it with `--module`. Never use a loader you built yourself: it fails on a
-  real Wii.
+- The LazyTO loader (the `apps/LazyTO` folder) and the kiosk module (`tournament.bin`). Both
+  are in the `wii/` folder of `lazyto.tgz` on the newest
+  [release](https://github.com/PranavMin/LazyTO/releases), or on the `main-build` prerelease
+  until the first release. `npm run sync-card` fetches the loader from the newest successful CI
+  build of the [Nintendont fork](https://github.com/PranavMin/Nintendont); pass the bundle's
+  `tournament.bin` with `--module`. Never use a loader you built yourself: it fails on a real
+  Wii.
 - For `npm run sync-card`: a clone of this repo with Node 22, and the GitHub CLI
   ([`gh`](https://cli.github.com/)) installed and logged in (`gh auth login`). It uses `gh` to
   download the loader.
-- Your relay's secret, `RELAY_SECRET` in the `.env` you set up in [pi-setup.md](pi-setup.md).
+- Your relay's Wii secret, shown on its settings page (the **settings** link at the top of the
+  status page). `npm run sync-card` reads it from `RELAY_SECRET` in `.env`.
 
 ## 1. The SD card
 
@@ -41,14 +42,14 @@ From a clone of the repo, one command writes all of this except the game image a
 ```
 station=3
 stream=0
-secret=<your RELAY_SECRET>
+secret=<the relay's Wii secret>
 ```
 
 | Key | Value |
 |---|---|
 | `station` | the number on this Wii's station label |
 | `stream` | `1` on the Wii that is on stream, `0` on every other. The relay decides the stream by station number (`STREAM_STATION`), so this value is informational, but the line must be there. |
-| `secret` | the relay's secret, exactly as in `.env` |
+| `secret` | the relay's Wii secret, exactly as on its settings page |
 
 There is no relay address. The Wii finds the relay by itself.
 
@@ -106,7 +107,7 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | `NETWORK IS OFF IN THE LOADER` | The loader's Network setting is off | Turn it on. |
 | `THIS CARD IS NOT SET UP` | `tournament.cfg` is missing, or has no `secret=` | Fix the card. |
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
-| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's | Copy `RELAY_SECRET` from `.env` exactly. |
+| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's | Copy the Wii secret from the relay's settings page exactly. |
 | `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
 | `no tournament.cfg` on every action | The card isn't being read | Boot the game from the SD card. Check `station=`, `stream=` and `secret=` are all present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |

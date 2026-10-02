@@ -1,17 +1,17 @@
 name: release
 
-# A tag v* creates a DRAFT release with the two bundles below and
-# tournament.bin, built by kiosk.yml on Windows from the same commit. Attach
-# the loader's apps/LazyTO folder by hand (it comes from the Nintendo repo's
-# CI), then publish the draft. Run by hand (workflow_dispatch) it only
-# uploads the bundles as artifacts.
+# Builds LazyTO's one bundle, lazyto.tgz, from one commit: the relay (dist/,
+# deploy/, package.json) and the Wii files (wii/apps/LazyTO/, the loader
+# built from the pinned Nintendont commit, and wii/tournament.bin, the kiosk
+# module from kiosk.yml). Its assets keep the same names everywhere:
+# lazyto.tgz, lazyto.tgz.sha256, VERSION and install.sh.
 #
-# Every push to main also runs the tests (test.yml) and republishes the relay bundle as
-# lazyto-relay-main.tgz (+ VERSION, .sha256) on the moving prerelease tag
-# `latest`. The Pi's deploy/update.sh fetches it at every relay start, so a
-# push to main reaches a venue Pi at its next boot or service restart with no
-# npm run push. Only the relay: the Wii side still ships by hand. Dev clones see
-# the tag move on fetch; that is expected.
+# - Every push to main republishes the moving prerelease main-build, which
+#   Pis on the main update channel follow (deploy/update.sh).
+# - A v* tag makes a DRAFT release with the same assets. Publish it as a full
+#   release (not a pre-release): Pis on the default release channel, and the
+#   install line in the README, follow the newest full release.
+# - Run by hand, it builds the bundle as an artifact and publishes nothing.
 
 on:
   push:
@@ -19,15 +19,65 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A newer push to main replaces an older one still building; tags never cancel.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   test:
     uses: ./.github/workflows/test.yml
 
-  bundles:
-    needs: test
+  module:
+    uses: ./.github/workflows/kiosk.yml
+
+  loader:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    env:
+      # The build image the Nintendont fork's own CI uses (its build.yml),
+      # pinned to tag 7, which :latest pointed at on 2025-09-14.
+      IMAGE: nikhilnarayana/devkitpro-slippi:7@sha256:098e03383069609f68cbb950368ac3de18b855b473b7474a0ac9cf830ef43c78
+    steps:
+      - uses: actions/checkout@v4
+      - run: git submodule update --init --depth 1 Nintendont
+      - name: Pinned Nintendont commit
+        id: nin
+        run: echo "sha=$(git rev-parse --short=7 HEAD:Nintendont)" >> "$GITHUB_OUTPUT"
+      # One build per pinned commit (and per edit of this file).
+      - name: Loader already built
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: out/apps
+          key: loader-${{ steps.nin.outputs.sha }}-${{ hashFiles('.github/workflows/release.yml') }}
+      # GIT_VERSION empty, as in the fork's CI, where git refuses the mounted
+      # repo ("dubious ownership"): the same bytes as the loader proven on a
+      # Wii. meta.xml carries the commit.
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          docker run --rm -v "$PWD/Nintendont:/work" -w /work "$IMAGE" \
+            make -j"$(nproc)" GIT_VERSION=
+      - name: Package apps/LazyTO as the fork's CI does
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          d=out/apps/LazyTO
+          mkdir -p "$d"
+          cp Nintendont/loader/loader.dol "$d/boot.dol"
+          cp Nintendont/nintendont/icon.png Nintendont/nintendont/meta.xml "$d/"
+          ver=$(grep NIN_VERSION Nintendont/common/include/NintendontVersion.h | cut -d ' ' -f 3 | cut -d '"' -f 2)
+          sed -i -e "s|<version>|<version>$ver|" \
+            -e "s|<release_date>|<release_date>$(date +%Y%m%d000000)|" \
+            -e "s|<git_hash>|<git_hash>${{ steps.nin.outputs.sha }}|" "$d/meta.xml"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loader
+          path: out/apps
+          if-no-files-found: error
+
+  bundle:
+    needs: [test, module, loader]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,76 +86,80 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Version
-        id: v
+      - uses: actions/download-artifact@v4
+        with:
+          name: tournament-bin
+          path: out/bundle/wii
+      - uses: actions/download-artifact@v4
+        with:
+          name: loader
+          path: out/bundle/wii/apps
+      - name: lazyto.tgz
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then echo "ver=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT";
-          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then echo "ver=main" >> "$GITHUB_OUTPUT";
-          else echo "ver=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"; fi
-      - name: Relay bundle (what npm run push sends to the Pi, minus config.json)
-        run: |
-          mkdir -p out/relay
-          cp -r dist deploy package.json package-lock.json README.md LICENSE out/relay/
-          # VERSION: what deploy/update.sh compares; one token, the commit it was built from.
-          echo "$(git rev-parse --short HEAD)" > out/relay/VERSION
-          cp out/relay/VERSION out/VERSION
-          tar -czf "out/lazyto-relay-${{ steps.v.outputs.ver }}.tgz" -C out/relay .
-          (cd out && sha256sum "lazyto-relay-${{ steps.v.outputs.ver }}.tgz" > "lazyto-relay-${{ steps.v.outputs.ver }}.tgz.sha256")
-      - name: Wii kit (everything for the SD cards except the two built files)
-        run: |
-          mkdir -p out/wii
-          cp deploy/tournament.cfg.example docs/kiosk-poster.html docs/wii-setup.md docs/night-of.md LICENSE out/wii/
-          cat > out/wii/README.txt <<'EOF'
-          LazyTO Wii kit. Each SD card needs:
-            apps/LazyTO/        the loader (attached to the release as a zip)
-            tournament.bin      the kiosk module (attached to the release)
-            tournament.cfg      from tournament.cfg.example: station number, stream=1 on the stream Wii only, the relay's secret
-            games/GALE01/game.iso   your own stock Melee 1.02 image
-          See wii-setup.md. `npm run sync-card` does all of it from a clone of the repo (Windows, macOS, Linux).
-          EOF
-          (cd out/wii && zip -qr "../lazyto-wii-kit-${{ steps.v.outputs.ver }}.zip" .)
+          # VERSION: what deploy/update.sh compares, and the status page shows.
+          case "$GITHUB_REF" in
+            refs/tags/v*) version=${GITHUB_REF#refs/tags/} ;;
+            refs/heads/main) version=main-$(git rev-parse --short=7 HEAD) ;;
+            *) version=dev-$(git rev-parse --short=7 HEAD) ;;
+          esac
+          cp -r dist deploy package.json README.md LICENSE out/bundle/
+          echo "$version" > out/bundle/VERSION
+          tar -czf out/lazyto.tgz -C out/bundle .
+          (cd out && sha256sum lazyto.tgz > lazyto.tgz.sha256)
+          cp out/bundle/VERSION deploy/install.sh out/
+          tar -tzvf out/lazyto.tgz | grep -v '/$' | awk '{print $3, $6}'
       - uses: actions/upload-artifact@v4
         with:
-          name: bundles-${{ steps.v.outputs.ver }}
+          name: lazyto
           path: |
-            out/*.tgz
-            out/*.zip
-      - name: Publish main to the `latest` prerelease (deploy/update.sh reads it)
-        if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Recreate so the tag follows main; a Pi that checks during the gap
-          # gets no VERSION and keeps what it has (update.sh treats that as offline).
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest --prerelease --target "$GITHUB_SHA" \
-            --title "latest (main $(git rev-parse --short HEAD))" \
-            --notes "Moving prerelease: the relay bundle built from the newest main for Pi auto-update (deploy/update.sh). Not a release; see the v* releases." \
-            out/lazyto-relay-main.tgz out/lazyto-relay-main.tgz.sha256 out/VERSION
+            out/lazyto.tgz
+            out/lazyto.tgz.sha256
+            out/VERSION
+            out/install.sh
+          if-no-files-found: error
 
-  module:
-    if: startsWith(github.ref, 'refs/tags/')
-    uses: ./.github/workflows/kiosk.yml
-
-  draft:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [bundles, module]
+  publish-main:
+    if: github.ref == 'refs/heads/main'
+    needs: bundle
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: bundles-${{ github.ref_name }}
+          name: lazyto
           path: out
+      - name: Republish main-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # Recreated so its tag follows main. A Pi that checks in the gap finds
+          # no VERSION and keeps what it has. VERSION goes up last, so a Pi that
+          # sees it can download the rest.
+          gh release delete main-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create main-build --prerelease --target "$GITHUB_SHA" \
+            --title "main-build ($(cat out/VERSION))" \
+            --notes "The newest build of main, for Pis on the main update channel and for testing: curl -fsSL https://github.com/$GH_REPO/releases/download/main-build/install.sh | sudo bash -s -- --channel main. Not a release." \
+            out/lazyto.tgz out/lazyto.tgz.sha256 out/install.sh
+          gh release upload main-build out/VERSION
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - uses: actions/download-artifact@v4
         with:
-          name: tournament-bin
+          name: lazyto
           path: out
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --draft --title "LazyTO ${{ github.ref_name }}" \
-            --notes "Draft. Before publishing, attach apps-LazyTO.zip (the loader from the Nintendont repo's CI build for the matching commit), then edit these notes. tournament.bin is built by CI from this tag." \
-            out/*.tgz out/*.zip out/tournament.bin
+          gh release create "$GITHUB_REF_NAME" --draft --title "LazyTO $GITHUB_REF_NAME" \
+            --notes "Draft: write the notes, then publish it as a full release, not a pre-release. Pis on the release channel follow the newest full release." \
+            out/lazyto.tgz out/lazyto.tgz.sha256 out/VERSION out/install.sh

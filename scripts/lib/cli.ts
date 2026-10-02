@@ -1,9 +1,8 @@
 // Shared bits for the operator scripts (sync-card, push, wiiload): coloured
-// one-line failures, .env reading, a child-process runner. Plain Node, no
+// one-line failures and a child-process runner. Plain Node, no
 // dependencies, so they run wherever the relay's own toolchain does
 // (Windows, macOS, Linux). The PowerShell files in deploy/ are shims onto these.
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
 
 const tty = process.stdout.isTTY === true;
 export const red = (s: string): string => (tty ? `\x1b[31m${s}\x1b[0m` : s);
@@ -28,20 +27,6 @@ export async function runMain(tool: string, main: () => Promise<void> | void): P
     }
     throw e;
   }
-}
-
-/** KEY=value lines; surrounding double quotes dropped, blank and other lines ignored. Missing file = {}. */
-export function loadDotEnv(path: string): Record<string, string> {
-  const env: Record<string, string> = {};
-  if (!existsSync(path)) return env;
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const m = /^\s*([A-Z_]+)=(.*)$/.exec(line);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    env[m[1]] = v;
-  }
-  return env;
 }
 
 export interface RunResult {

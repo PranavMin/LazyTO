@@ -81,7 +81,8 @@ function systemClockSynced(): boolean {
 export class App {
   readonly web: WebServer;
   readonly version: string;
-  private mode: Mode = { kind: 'setup', problems: [] };
+  // Until apply() has read the settings: "starting", never a setup page by mistake.
+  private mode: Mode = { kind: 'starting' };
   private settings: Config | null = null;
   private generation = 0;
   private attempt = 0;

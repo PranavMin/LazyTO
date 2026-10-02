@@ -23,5 +23,7 @@ jobs:
       - run: pip install pyyaml
       - run: npm ci
       - run: npm run format:check
+      # The Pi's installer and updater (shellcheck ships on GitHub's Ubuntu images).
+      - run: shellcheck deploy/*.sh
       - run: npm test
       - run: npm run build

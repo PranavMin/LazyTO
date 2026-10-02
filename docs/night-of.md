@@ -45,14 +45,14 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | `Cache: 0 sets` | No set has both players yet | Start the bracket. |
 | `⚠ N preview-id set(s) dropped` | A pool or phase isn't started | Start it. The warning clears within 20 seconds. |
 | `⚠ cache is stale` or `✗ last refresh failed: start.gg unreachable` | The venue internet is down | Fix the uplink. Wiis keep the last set list, but every action fails until it is back. The relay recovers by itself. |
-| `✗ last refresh failed: ... Invalid authentication token` | The token was revoked or expired | Make a new token, put it in `.env`, and push. |
+| `✗ last refresh failed: ... Invalid authentication token` | The token was revoked or expired | Make a new token and paste it on the settings page (Replace the token). |
 | `✗ discovery beacon: ...` | The relay can't announce itself | The Pi has lost its network. Check its Wi-Fi. |
 | `no station has connected yet` with Wiis booted | No Wii can reach the relay | Wiis and Pi on different networks, or a guest network isolating them. See the Wii's own message. |
 | `no Wii has reported yet` | No Wii log reached the relay | Same causes as above, or the loader's Network setting is off. |
 | Wii consoles: `(silent)` | That Wii stopped sending its log | It is off, rebooting, or lost the Wi-Fi. |
 | Wii consoles: `✗ crashed` | That Wii's game crashed | Power cycle it. Note the crash line for a bug report. |
 | Wii consoles: module not loaded, with a reason | The kiosk didn't start on that Wii | Check `tournament.bin` is on the card and current. |
-| `✗ N request(s) refused: wrong relay secret` or `✗ N Wii report(s) dropped for a wrong relay secret` | A card has the wrong `secret=`, or something else on the network is trying the relay. Nothing reached start.gg. | Fix that card's secret. If it is not one of your Wiis, change `RELAY_SECRET`, push, and update the cards. |
+| `✗ N request(s) refused: wrong relay secret` or `✗ N Wii report(s) dropped for a wrong relay secret` | A card has the wrong `secret=`, or something else on the network is trying the relay. Nothing reached start.gg. | Fix that card's secret. If it is not one of your Wiis, tick "Make a new Wii secret" on the settings page, save, and update the cards. |
 | Station: `✗ assignStream failed` | The set started on start.gg but is not on stream | Assign it to the stream on start.gg, then ack. |
 | Station: `✗ reportBracketSet failed: start.gg rejected` | start.gg refused the score, usually because the set was changed by hand | Sort it out on start.gg, then ack. The station clears on its next refresh. |
 | Station: `✗ ... start.gg HTTP 5xx after 3 attempts` | start.gg had an outage. The relay already retried twice. | The player tries again later. Each report overwrites the last, so nothing is lost. |

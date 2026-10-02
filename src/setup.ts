@@ -13,8 +13,9 @@
 // Saving checks everything the relay will check at start (config.ts), then
 // does the same lookup the relay does (resolve.ts), then app.save() writes the
 // file and starts the event with it. The Wii secret is generated on the first
-// save and kept after. The saved token is never written into a page: a blank
-// token field means "keep the saved one".
+// save and kept after, unless the settings page is asked for a new one; the
+// settings page shows it, for the SD cards. The saved token is never written
+// into a page: a blank token field means "keep the saved one".
 //
 // First run: every POST needs the setup code. After that: the admin password.
 
@@ -336,7 +337,7 @@ ${hidden(carry)}<input type="hidden" name="step" value="save">
 <label for="password2">Again</label>
 <input type="password" id="password2" name="password2" autocomplete="new-password"${firstRun ? ' required' : ''}>
 <p class="muted small">For these settings and the status page's buttons. 8 or more characters, no spaces. Your browser asks for it; the user name can be anything.</p>
-${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
+${saved ? `<h2>Wii secret</h2>\n<p><code>${escapeHtml(saved.secret)}</code></p>\n<p class="muted small">On every SD card, as <code>secret=</code> in tournament.cfg.</p>\n<label class="choice"><input type="checkbox" name="newSecret"><span>Make a new Wii secret, for a lost card or a stranger on the network. Every card then needs the new one.</span></label>\n` : ''}${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
 <div class="acts"><button class="primary">Save</button>${firstRun ? '' : '<a class="btnlink" href="/">cancel</a>'}</div>
 </form>
 ${firstRun ? '' : `<form method="post" action="/setup" class="block"><input type="hidden" name="step" value="token"><div class="acts"><button>Change tournament</button></div></form>`}`,
@@ -378,7 +379,7 @@ async function save(
     token,
     tournament: choice.tournament,
     eventName: prefill.eventName ?? '',
-    secret: saved?.secret ?? newSecret(),
+    secret: saved && form.get('newSecret') !== 'on' ? saved.secret : newSecret(),
     adminPassword: password || saved?.adminPassword,
     weeklyNamePrefix: choice.weekly,
     streamName: prefill.streamName,

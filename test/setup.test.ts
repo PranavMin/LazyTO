@@ -148,6 +148,7 @@ test('after setup: settings need the password, keep what is left blank, and neve
   const html = await settings.text();
   assert.match(html, /LazyTO Test Tournament/);
   assert.ok(!html.includes(FIXTURE_TOKEN), 'the saved token is never written into a page');
+  assert.ok(html.includes(before.config.secret), 'the Wii secret is shown, for the SD cards');
   assert.match(html, /checked required><span>Melee Singles! \(7:30 Start\)/);
 
   // No new token, no new password, no stream now.
@@ -164,6 +165,14 @@ test('after setup: settings need the password, keep what is left blank, and neve
   assert.equal(after.config.secret, before.config.secret, 'the Wii secret never changes on a save');
   assert.equal(after.config.streamName, '');
   assert.match(await (await fetch(env.url)).text(), /no stream · refreshes/);
+
+  // A new Wii secret only when asked for.
+  const blank = { ...SAVE, stream: '', password: '', password2: '', channel: 'release' };
+  assert.equal((await env.post({ ...blank, newSecret: 'on' }, auth)).status, 303);
+  const rotated = loadConfig(configPath(env.dir));
+  assert.equal(rotated.kind, 'ok');
+  if (rotated.kind !== 'ok') return;
+  assert.notEqual(rotated.config.secret, before.config.secret, 'a new Wii secret on request');
 });
 
 test('a token start.gg refuses goes back to step 1 with the reason', async (t) => {

@@ -45,8 +45,8 @@ which pins that DOL by SHA-1 (`melee/config/GALE01/build.sha1`):
   them out (alignment padding excluded);
 - the guard word is the constant `GUARD_WORD` (`0x7C0802A6`) in `build_module.py`.
 
-So CI (`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, keeps it as
-the `tournament-bin` artifact, and a `v*` tag attaches it to the draft release. A CI module
+So CI (`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, and
+`release.yml` puts it in every bundle, as `wii/tournament.bin` in `lazyto.tgz`. A CI module
 and a local one from the same commit differ only in the version text (hash and build date).
 
 ## Developer flags
