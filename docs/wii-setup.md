@@ -105,7 +105,7 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | `THIS CARD IS NOT SET UP` | `tournament.cfg` is missing, or has no `secret=` | Fix the card. |
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
 | `RELAY SECRET MISMATCH` | The card's secret differs from the relay's | Copy `RELAY_SECRET` from `.env` exactly. |
-| `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A firewall between them is blocking TCP 29470. |
+| `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
 | `no tournament.cfg` on every action | The card isn't being read | Boot the game from the SD card. Check `station=`, `stream=` and `secret=` are all present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
 | Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the CI loader that `npm run sync-card` downloads. A loader you build yourself fails here. |
