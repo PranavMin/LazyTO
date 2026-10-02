@@ -32,6 +32,7 @@ check.
 | `CONFIG=<config.json> npm start` | Runs the relay from source with a config file. The fields are in [pi-setup.md](pi-setup.md#relay-settings-reference). |
 | `npm run fake -- --port=18081` | Serves the fake start.gg on its own: token `test-token`, 400 pending sets. |
 | `npm run sim` | Load test: 12 simulated Wiis play sets for 10 minutes against an in-process relay and fake start.gg. Fails on any error or on 70 or more start.gg calls in a minute. For a shorter run: `npx tsx scripts/sim-wii.ts --duration=60`. |
+| `npx tsx scripts/preview-status.ts` | The status page on fake data at `http://127.0.0.1:29480/` (three Wiis, a flagged station, telemetry), for checking its layout at phone width. TO password `preview-pass`. |
 | `npx tsx scripts/smoke.ts <host>` | Lists sets from a running relay over the Wii protocol and fetches its status page. |
 | `npx tsx scripts/probe.ts --mine` | Read-only lookups on the real start.gg API with the token in `.env`: `--mine` lists your tournaments and short URLs, `--tournament=<slug>` lists a tournament's events and streams (to pick `EVENT_NAME` and `STREAM_NAME`), `--resolve=<tournament>` shows what the relay would pick at startup, `--weekly` shows the weekly fallback's pick. |
 | `npx tsx scripts/reset-bracket.ts` | Lists every set of the event `EVENT_ID` in `.env`; with `--yes` resets them all on start.gg so a test bracket can be played again. Only ever point it at a test event. |

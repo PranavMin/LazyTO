@@ -10,7 +10,8 @@ import { loadConfig } from './config.js';
 import { StartggClient } from './startgg.js';
 import { SetCache } from './cache.js';
 import { StationState } from './state.js';
-import { AuditLog, auditPath, replayClaims } from './audit.js';
+import { AuditLog, auditPath, replayBestOf, replayClaims } from './audit.js';
+import { Admin } from './admin.js';
 import { RelayTcpServer } from './tcp.js';
 import { StatusServer } from './status.js';
 import { resolveEvent } from './resolve.js';
@@ -41,6 +42,8 @@ async function main(): Promise<void> {
   await cache.refresh(); // fail fast: bad token / event id dies here
 
   const state = new StationState();
+  // The TO's best-of overrides from the status page (admin.ts) outlive restarts.
+  for (const [setId, bestOf] of replayBestOf(audit.path)) cache.setBestOfOverride(setId, bestOf);
   for (const [station, claim] of replayClaims(audit.path)) {
     if (cache.get(claim.setId)) {
       state.claim(station, claim);
@@ -89,6 +92,10 @@ async function main(): Promise<void> {
     beacon,
     tcp,
     telemetry,
+    admin: {
+      actions: new Admin({ state, cache, startgg, audit }),
+      password: config.adminPassword,
+    },
   });
   await status.listen(config.httpPort);
 

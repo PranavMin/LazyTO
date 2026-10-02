@@ -143,7 +143,7 @@ test('status page', async (t) => {
     assert.match(html, /<meta name="viewport"/, 'phone-readable');
     assert.match(
       html,
-      /<meta http-equiv="refresh" content="5">/,
+      /<meta http-equiv="refresh" content="5;url=\/">/,
       'the only client-side behaviour is the meta refresh',
     );
     assert.doesNotMatch(html, /<script/, 'no client JS');
@@ -181,7 +181,10 @@ test('status page', async (t) => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /✗ REPORT_SCORE \d+s ago — ST_STARTGG_ERROR: start\.gg error - retry/);
     // Station 1's last action succeeded: no marker.
-    assert.match(html, /<td>1 ★<\/td>.*<td>REPORT_SCORE \d+s ago<\/td>/);
+    assert.match(
+      html,
+      /<span class="st">1 ★<\/span>.*<div class="line">REPORT_SCORE \d+s ago<\/div>/,
+    );
   });
 
   await t.test('a rejected (4xx) call shows the start.gg message verbatim', async () => {
