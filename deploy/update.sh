@@ -109,7 +109,7 @@ if [[ ! -f "$tmp/bundle/dist/src/check-config.js" ]]; then
 fi
 reason=$(cd "$tmp/bundle" && CONFIG="$CONF_DIR/config.json" /opt/node/bin/node dist/src/check-config.js 2>&1 >/dev/null | paste -sd' ' | cut -c1-300)
 if [[ -n "$reason" ]]; then
-  log "bundle $bundle_ver rejects $CONF_DIR/config.json ($reason); keeping $installed. Push the config with push.ps1, or wait for main to move on"
+  log "bundle $bundle_ver rejects $CONF_DIR/config.json ($reason); keeping $installed. Push the config with npm run push, or wait for main to move on"
   echo "$bundle_ver" > "$BAD"
   exit 0
 fi
