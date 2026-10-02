@@ -172,7 +172,9 @@ export function renderStatus(
     );
   });
   if (cards.length === 0) {
-    cards.push('<p class="muted">no station has connected yet</p>');
+    cards.push(
+      '<p class="muted">no station has connected yet. Each Wii needs its SD card: <a href="/cards">SD cards</a>.</p>',
+    );
   }
 
   const cs = cache.status();
@@ -257,7 +259,7 @@ export function renderStatus(
       : '';
 
   return page(
-    `${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>${streamStation === null ? 'no stream' : `stream station ${streamStation} ★`} · refreshes every 5 s · <a href="/setup">settings</a></p>
+    `${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>${streamStation === null ? 'no stream' : `stream station ${streamStation} ★`} · refreshes every 5 s · <a href="/setup">settings</a> · <a href="/cards">SD cards</a></p>
 <h2>Stations</h2>
 ${cards.join('\n')}
 ${renderWaiting(v)}

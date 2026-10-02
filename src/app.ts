@@ -27,6 +27,7 @@ import { STARTGG_ENDPOINT, configPath, loadConfig, saveConfig, type Config } fro
 import { startEvent, type RunningEvent } from './relay.js';
 import { resolveEvent, type Resolved } from './resolve.js';
 import { StartggClient, type StartggClientOptions } from './startgg.js';
+import { serveCards } from './cards.js';
 import { renderStatus, serveAction, serveLog, type StatusView } from './status.js';
 import { serveSetup } from './setup.js';
 import { WebServer, age, escapeHtml, page, redirect, sendHtml, sendText } from './web.js';
@@ -43,6 +44,8 @@ export type Mode =
 export interface AppOptions {
   /** Settings, setup code, update channel, audit logs and Wii logs. */
   dataDir: string;
+  /** The bundle's wii/ folder, for the SD-card zips (cards.ts); absent when run from a clone. */
+  wiiDir?: string;
   httpPort: number;
   tcpPort: number;
   /** Where the web server and TCP listen; default all interfaces. */
@@ -332,6 +335,27 @@ export class App {
       this.retryNow();
       redirect(res, '/');
       return;
+    }
+    // SD cards need only the settings, so they work before tonight's event resolves.
+    if (url.pathname === '/cards' || url.pathname === '/cards/zip') {
+      if (!this.settings) return redirect(res, '/setup');
+      const m = this.mode;
+      return serveCards(
+        {
+          wiiDir: this.opts.wiiDir ?? null,
+          config: this.settings,
+          streamStation:
+            m.kind === 'running'
+              ? m.view.streamStation
+              : this.settings.streamName
+                ? this.settings.streamStation
+                : null,
+          version: this.version,
+        },
+        req,
+        res,
+        url,
+      );
     }
     const m = this.mode;
     if (m.kind === 'running') {
