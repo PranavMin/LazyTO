@@ -1,70 +1,44 @@
-// main.ts -- process entry point (architecture.md (Relay, Deployment)). Reads the
-// config path from the CONFIG environment variable (the systemd unit sets
-// it), validates everything, resolves the configured tournament short URL,
-// event name and stream name to tonight's ids (resolve.ts), starts the
-// night's relay (relay.ts: one cache refresh, so a bad token, a short URL
-// nobody moved yet or an ambiguous event name kills the process before a Wii
-// ever connects; audit replay; TCP, beacon, telemetry), then the status page.
+// main.ts -- process entry point (architecture.md (Relay, Deployment)). Starts
+// the relay app (app.ts): the web server first, then tonight's event from the
+// settings in the data directory -- or the setup page if there are none yet.
+// Exits non-zero only if the web server can't start (port 29473 taken).
 
-import { loadConfig } from './config.js';
-import { StartggClient } from './startgg.js';
-import { StatusServer } from './status.js';
-import { resolveEvent } from './resolve.js';
-import { startEvent } from './relay.js';
-import { BEACON_PORT, BEACON_INTERVAL_MS } from '../generated/wire.js';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { App } from './app.js';
+import { DATA_DIR, HTTP_PORT, TCP_PORT } from './config.js';
+
+/**
+ * The root of the release bundle (/opt/lazyto), two levels above the built
+ * dist/src/main.js; null when run from source, which has no bundle.
+ */
+const BUNDLE = import.meta.filename.endsWith('.js')
+  ? resolve(import.meta.dirname, '..', '..')
+  : null;
+
+/** The bundle's VERSION; "dev" from source. */
+function version(): string {
+  if (BUNDLE === null) return 'dev';
+  try {
+    return readFileSync(join(BUNDLE, 'VERSION'), 'utf8').trim() || 'dev';
+  } catch {
+    return 'dev';
+  }
+}
 
 async function main(): Promise<void> {
-  const configPath = process.env.CONFIG;
-  if (!configPath) {
-    throw new Error('CONFIG environment variable not set (path to config.json)');
-  }
-  const config = loadConfig(configPath);
-
-  const startgg = new StartggClient({ endpoint: config.startggEndpoint, token: config.token });
-  const resolved = await resolveEvent(startgg, config); // fail fast: unknown short URL / event / stream dies here
-  console.log(
-    `resolved "${config.tournament}" by ${resolved.foundBy}: ${resolved.tournamentName} (${resolved.tournamentSlug}), ` +
-      `event "${resolved.eventName}" ${resolved.eventId}, stream "${resolved.streamName}" ${resolved.streamId}`,
-  );
-
-  const ev = await startEvent({
-    startgg,
-    eventId: resolved.eventId,
-    setFormat: config.setFormat,
-    secret: config.secret,
-    streamStation: config.streamStation,
-    streamId: resolved.streamId,
-    dataDir: config.auditDir,
-    tcpPort: config.tcpPort,
+  const app = new App({
+    dataDir: DATA_DIR,
+    httpPort: HTTP_PORT,
+    tcpPort: TCP_PORT,
+    version: version(),
+    wiiDir: BUNDLE === null ? undefined : join(BUNDLE, 'wii'),
   });
-  const beacon = ev.beacon!; // started with the network side on
-  const status = new StatusServer({
-    state: ev.state,
-    cache: ev.cache,
-    startgg,
-    streamStation: config.streamStation,
-    eventLabel: `${resolved.tournamentName} · ${resolved.eventName} (${resolved.eventId})`,
-    beacon,
-    tcp: ev.tcp,
-    telemetry: ev.telemetry,
-    admin: { actions: ev.admin, password: config.adminPassword },
-  });
-  await status.listen(config.httpPort);
-
-  ev.audit.record({ type: 'startup', ...resolved, sets: ev.cache.status().count });
-  console.log(
-    `relay up: event ${resolved.eventId}, ${ev.cache.status().count} sets cached, ` +
-      `tcp :${config.tcpPort}, status http://localhost:${config.httpPort}`,
-  );
-  console.log(
-    `beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`,
-  );
-  console.log(`telemetry: udp :${ev.telemetry.address().port} (Wii kernel logs and module status)`);
+  await app.start();
 
   const shutdown = async (signal: string) => {
     console.log(`${signal}: shutting down`);
-    ev.audit.record({ type: 'shutdown', signal });
-    await Promise.all([ev.stop(), status.close()]);
+    await app.stop();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

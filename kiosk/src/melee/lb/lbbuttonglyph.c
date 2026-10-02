@@ -23,16 +23,14 @@
 #define TM_FONT 4
 #define SH_DISC LB_SHAPE_DISC
 #define SH_RSQ LB_SHAPE_RSQ
-#define SH_PILL LB_SHAPE_PILL
-#define SH_CROSS LB_SHAPE_CROSS
 #define SH_COUNT LB_SHAPE_COUNT
 static const u8 shape_tex[SH_COUNT][512] ATTRIBUTE_ALIGN(32) = {
 #include "lbbuttonglyph_shapes.inc"
 };
 /* {left, right} blank columns of each shape (tools/gen_button_glyphs.py). */
 static const u8 shape_kern[SH_COUNT][2] = {
-    { 2, 2 }, { 3, 3 }, { 1, 1 }, { 2, 2 }, /* DISC RSQ PILL CROSS */
-    { 0, 0 }, { 4, 4 }, { 4, 4 }, { 7, 5 }, /* BLOCK TRI_UP TRI_DN TRI_RT */
+    { 2, 2 }, { 3, 3 },           /* DISC RSQ */
+    { 0, 0 }, { 4, 4 }, { 4, 4 }, /* BLOCK TRI_UP TRI_DN */
     { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, /* QD_TL QD_TR QD_BL QD_BR */
     { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, /* QR_TL QR_TR QR_BL QR_BR */
 };
@@ -70,7 +68,7 @@ struct lbButton_Def {
     GXColor ink;
 };
 
-/* GameCube controller colours. X/Y/C are light, so their letter is dark. */
+/* GameCube controller colours. X/Y are light, so their letter is dark. */
 /* Macros, not const objects: MWCC (C89) wants literal aggregates here. */
 #define WHITE { 255, 255, 255, 255 }
 #define DARK { 30, 30, 40, 255 }
@@ -82,9 +80,6 @@ static const struct lbButton_Def defs[] = {
     { 'Z', SH_RSQ, "Z", { 90, 82, 184, 255 }, WHITE },
     { 'L', SH_RSQ, "L", { 138, 140, 153, 255 }, WHITE },
     { 'R', SH_RSQ, "R", { 138, 140, 153, 255 }, WHITE },
-    { 'S', SH_PILL, "ST", { 138, 140, 153, 255 }, WHITE },
-    { 'C', SH_DISC, "C", { 231, 195, 58, 255 }, DARK },
-    { 'D', SH_CROSS, "", { 138, 140, 153, 255 }, WHITE },
 };
 
 /* Glyph index of an ASCII char exactly as the SIS encoder maps it
@@ -306,20 +301,10 @@ f32 lbButton_Shape(HSD_Text* text, f32 x, f32 y, f32 s, int shape, GXColor c)
 void lbButton_Rect(HSD_Text* text, f32 x, f32 y, f32 w, f32 h, int shape,
                    GXColor c)
 {
-    f32 sx = w / CELL;
-    f32 sy = h / CELL;
-    f32 drop = sy < 1.0f ? CELL * (1.0f - sy) : 0.0f;
-    int entry = shapeEntry(text, x - sx, y - drop, shape);
-    HSD_SisLib_803A7548(text, entry, sx, sy);
-    HSD_SisLib_803A74F0(text, entry, &c);
-}
-
-void lbButton_Box(HSD_Text* text, f32 x, f32 y, f32 w, f32 h, GXColor c)
-{
     /* Per-entry scale is 8.8 fixed point, so a 32-unit cell stretches to any
-     * size up to 8191 px in 1/8 px steps. The block has no blank columns
-     * (left = 0), so its quad starts at pen + 1*sx (hsd_3A76.c:838-842). A
-     * line is measured at least 32 units tall and a glyph is bottom-aligned
+     * size up to 8191 px in 1/8 px steps. A full-cell shape has no blank
+     * columns (left = 0), so its quad starts at pen + 1*sx (hsd_3A76.c:838-842).
+     * A line is measured at least 32 units tall and a glyph is bottom-aligned
      * to it, so a glyph shorter than that (sy < 1) is drawn 32*(1-sy) below
      * its entry's y, and a taller one (sy >= 1) starts right at y (seen
      * 2026-09-25: a 262 px scrim landed 230 px low with the short-glyph
@@ -327,7 +312,7 @@ void lbButton_Box(HSD_Text* text, f32 x, f32 y, f32 w, f32 h, GXColor c)
     f32 sx = w / CELL;
     f32 sy = h / CELL;
     f32 drop = sy < 1.0f ? CELL * (1.0f - sy) : 0.0f;
-    int entry = shapeEntry(text, x - sx, y - drop, LB_SHAPE_BLOCK);
+    int entry = shapeEntry(text, x - sx, y - drop, shape);
     HSD_SisLib_803A7548(text, entry, sx, sy);
     HSD_SisLib_803A74F0(text, entry, &c);
 }

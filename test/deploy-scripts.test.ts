@@ -1,7 +1,8 @@
 // The operator scripts (scripts/sync-card.ts, push.ts, wiiload.ts) through
 // their libraries: pure parts directly, sync-card end to end against a folder
-// standing in for the card with a fake gh, push through --dry-run, wiiload
-// against a fake Homebrew Channel socket. No network, no real card.
+// standing in for the card with a fake gh, push through --dry-run with a fake
+// curl and tar, wiiload against a fake Homebrew Channel socket. No network, no
+// real card.
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -10,7 +11,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
 import { parseDiskutilInfo, parseLsblk, parseWindowsVolumes } from '../scripts/lib/card.js';
-import { loadDotEnv, ToolError, type Runner } from '../scripts/lib/cli.js';
+import { ToolError, type Runner } from '../scripts/lib/cli.js';
 import { newestLoaderBuild } from '../scripts/lib/loader.js';
 import {
   describeLoaderConfig,
@@ -20,13 +21,7 @@ import {
   NIN_CFG_NETWORK,
   patchLoaderConfig,
 } from '../scripts/lib/nincfg.js';
-import {
-  describeRelayConfig,
-  relayConfigFromEnv,
-  remoteInstallCommand,
-} from '../scripts/lib/pushconfig.js';
-import { pushRelay } from '../scripts/lib/pushrelay.js';
-import { checkDevSwitches } from '../scripts/lib/switches.js';
+import { MAIN_BUILD_URL, pushRelay, remoteInstallCommand } from '../scripts/lib/pushrelay.js';
 import { syncCard } from '../scripts/lib/synccard.js';
 import {
   formatTournamentCfg,
@@ -45,21 +40,6 @@ const be32 = (n: number): number[] => [
 ];
 const throwsTool = (fn: () => unknown, re: RegExp): void =>
   assert.throws(fn, (e: unknown) => e instanceof ToolError && re.test(e.message));
-
-// ---------- .env
-test('loadDotEnv: KEY=value, quotes dropped, other lines ignored, missing file is empty', () => {
-  const d = tmp();
-  writeFileSync(
-    join(d, '.env'),
-    '# c\nSTARTGG_TOKEN=abc \nRELAY_SECRET="s3cret-ok"\nlower=no\n\nTOURNAMENT=lazyto-weekly\n',
-  );
-  assert.deepEqual(loadDotEnv(join(d, '.env')), {
-    STARTGG_TOKEN: 'abc',
-    RELAY_SECRET: 's3cret-ok',
-    TOURNAMENT: 'lazyto-weekly',
-  });
-  assert.deepEqual(loadDotEnv(join(d, 'none')), {});
-});
 
 // ---------- slippi_nincfg.bin
 test('patchLoaderConfig ORs Network, Auto Boot and (unless asked) Log into the big-endian Config word only', () => {
@@ -129,35 +109,15 @@ test('tournament.cfg: parse, defaults from the card, format, verify', () => {
   assert.ok(!tournamentCfgMatches(text, { station: 2, stream: 0, secret: 'kioskdev2026' }));
 });
 
-// ---------- dev switches
-function fakeMeleeSrc(root: string, values: Record<string, string> = {}): string {
+// ---------- the kiosk sources sync-card compares the module's age with
+function fakeMeleeSrc(root: string): string {
   const src = join(root, 'melee');
   mkdirSync(join(src, 'lb'), { recursive: true });
   mkdirSync(join(src, 'mn'), { recursive: true });
-  writeFileSync(
-    join(src, 'mn', 'mntourney.c'),
-    `#define TM_DEMO_AUTOSTART ${values.TM_DEMO_AUTOSTART ?? '0'}\n`,
-  );
-  writeFileSync(
-    join(src, 'lb', 'lbtourney.c'),
-    `#define LB_TOURNEY_DEMO_CLAIM ${values.LB_TOURNEY_DEMO_CLAIM ?? '0'}\n#define LB_TOURNEY_TRIGGER_READOUT ${values.LB_TOURNEY_TRIGGER_READOUT ?? '0'}\n`,
-  );
+  writeFileSync(join(src, 'mn', 'mntourney.c'), '// mntourney\n');
+  writeFileSync(join(src, 'lb', 'lbtourney.c'), '// lbtourney\n');
   return src;
 }
-
-test('checkDevSwitches: all zero passes, any non-zero or missing define refuses', () => {
-  const d = tmp();
-  assert.doesNotThrow(() => checkDevSwitches(fakeMeleeSrc(d)));
-  throwsTool(
-    () => checkDevSwitches(fakeMeleeSrc(tmp(), { LB_TOURNEY_DEMO_CLAIM: '1' })),
-    /LB_TOURNEY_DEMO_CLAIM is 1 in lb\/lbtourney.c: set it to 0/,
-  );
-  const e = tmp();
-  fakeMeleeSrc(e);
-  writeFileSync(join(e, 'melee', 'mn', 'mntourney.c'), '// nothing\n');
-  throwsTool(() => checkDevSwitches(join(e, 'melee')), /could not find #define TM_DEMO_AUTOSTART/);
-  throwsTool(() => checkDevSwitches(join(e, 'nowhere')), /could not find mn\/mntourney.c/);
-});
 
 // ---------- card finders (parsers only)
 test('card parsers: Windows Get-Volume JSON (one object or an array), lsblk, diskutil', () => {
@@ -388,7 +348,7 @@ test('sync-card: a synced card keeps its station/stream; --relay-config supplies
   );
 });
 
-test('sync-card refuses: bad secret, non-TMOD module, missing module, dev switch on, missing drive', () => {
+test('sync-card refuses: bad secret, non-TMOD module, missing module, a --demo module, missing drive', () => {
   const root = tmp();
   fakeCard(root, { cfg: 'station=1\n' });
   const deps = { run: fakeGh(ARTIFACT), out: () => {} };
@@ -402,11 +362,9 @@ test('sync-card refuses: bad secret, non-TMOD module, missing module, dev switch
     () => syncCard(syncOpts(root, { module: join(root, 'missing.bin') }), deps),
     /module not found: .*build it: python kiosk\/tools\/build_module.py/,
   );
-  throwsTool(
-    () =>
-      syncCard(syncOpts(root, { meleeSrc: fakeMeleeSrc(tmp(), { TM_DEMO_AUTOSTART: '1' }) }), deps),
-    /TM_DEMO_AUTOSTART is 1/,
-  );
+  const demo = syncOpts(root);
+  writeFileSync(demo.module, Buffer.from('TMOD....abc1234 2026-10-02 DEMO\0....', 'latin1'));
+  throwsTool(() => syncCard(demo, deps), /is a --demo build: rebuild it without --demo/);
   throwsTool(() => syncCard(syncOpts(root, { drive: join(root, 'nope') }), deps), /is not ready/);
 });
 
@@ -438,188 +396,111 @@ test('sync-card warns when kiosk sources are newer than the module, and when the
   );
 });
 
-// ---------- push: config from .env and the dry run
-const ENV = {
-  STARTGG_TOKEN: 'tok-1234567',
-  RELAY_SECRET: 'venue-secret1',
-  ADMIN_PASSWORD: 'to-pass-9876',
-  TOURNAMENT: 'lazyto-weekly',
-  WEEKLY_NAME_PREFIX: 'LazyTO Weekly #',
-  EVENT_NAME: 'Melee Singles',
-  STREAM_NAME: 'LazyTOStream',
-  TEST_TOURNAMENT: 'tournament/lazyto-test',
-};
-const PO = { test: false, tcpPort: 29470, httpPort: 29473 };
-
-test('relayConfigFromEnv: production vs --test, defaults, and the same errors push.ps1 gave', () => {
-  const prod = relayConfigFromEnv(ENV, PO);
-  assert.deepEqual(prod, {
-    startggEndpoint: 'https://api.start.gg/gql/alpha',
-    token: 'tok-1234567',
-    tournament: 'lazyto-weekly',
-    eventName: 'Melee Singles',
-    streamName: 'LazyTOStream',
-    weeklyNamePrefix: 'LazyTO Weekly #',
-    secret: 'venue-secret1',
-    adminPassword: 'to-pass-9876',
-    streamStation: 1,
-    setFormat: 'startgg',
-    tcpPort: 29470,
-    httpPort: 29473,
-    auditDir: '/var/lib/lazyto',
-  });
-  const t = relayConfigFromEnv(
-    { ...ENV, STREAM_STATION: '3', SET_FORMAT: 'top8q' },
-    { ...PO, test: true },
-  );
-  assert.equal(t.tournament, 'tournament/lazyto-test');
-  assert.equal(t.weeklyNamePrefix, '', 'no weekly fallback for a test slug');
-  assert.equal(t.streamStation, 3);
-  assert.equal(t.setFormat, 'top8q');
-  assert.equal(
-    relayConfigFromEnv({ ...ENV, TOURNAMENT: 'tournament/full-slug' }, PO).weeklyNamePrefix,
-    '',
-    'a full slug needs no prefix',
-  );
-  assert.equal(
-    describeRelayConfig(t, { ...PO, test: true }),
-    "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream', stream station 3, format top8q, tcp 29470, http 29473, token tok-...",
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, STARTGG_TOKEN: '' }, PO),
-    /STARTGG_TOKEN missing from \.env/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, RELAY_SECRET: 'bad secret!' }, PO),
-    /RELAY_SECRET in \.env must be 8-16 letters/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, ADMIN_PASSWORD: '' }, PO),
-    /ADMIN_PASSWORD missing from \.env/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, ADMIN_PASSWORD: ENV.RELAY_SECRET }, PO),
-    /ADMIN_PASSWORD in \.env must differ from RELAY_SECRET/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, EVENT_NAME: '' }, PO),
-    /EVENT_NAME missing from \.env \(see \.env\.example\)/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, SET_FORMAT: 'bo5' }, PO),
-    /SET_FORMAT in \.env must be startgg or top8q, not 'bo5'/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, TEST_TOURNAMENT: 'lazyto-test' }, { ...PO, test: true }),
-    /TEST_TOURNAMENT must be a full slug/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, TOURNAMENT: '' }, PO),
-    /TOURNAMENT missing from \.env/,
-  );
-  throwsTool(
-    () => relayConfigFromEnv({ ...ENV, STREAM_STATION: 'x' }, PO),
-    /STREAM_STATION in \.env must be a station number/,
-  );
-});
-
-test('remoteInstallCommand: install.sh then the auto-update marker', () => {
+// ---------- push: this clone's relay in the main build, installed with --bundle
+test('remoteInstallCommand: unpacks the bundle and runs its installer on it, then cleans up', () => {
+  const c = remoteInstallCommand();
+  assert.match(c, /tar -xzf \/tmp\/lazyto\.tgz -C \/tmp\/lazyto-push /);
   assert.match(
-    remoteInstallCommand(false),
-    /sudo bash \/tmp\/tr\/deploy\/install.sh \/tmp\/tr && sudo rm -f \/etc\/lazyto\/no-auto-update && rm -rf/,
+    c,
+    /&& sudo bash \/tmp\/lazyto-push\/deploy\/install\.sh --bundle \/tmp\/lazyto\.tgz;/,
   );
-  assert.match(remoteInstallCommand(true), /&& sudo touch \/etc\/lazyto\/no-auto-update &&/);
+  assert.match(c, /rm -rf \/tmp\/lazyto-push \/tmp\/lazyto\.tgz; exit \$s$/);
 });
 
-test('push --dry-run stages dist, deploy (no .cache), package.json, README and config.json, tars it, never calls ssh', () => {
+/** A clone with a built dist/, and a fake curl/tar that "downloads" a main build with Wii files. */
+function pushFixture(): { repo: string; out: string; calls: string[][]; run: Runner } {
   const repo = tmp();
   mkdirSync(join(repo, 'dist', 'src'), { recursive: true });
   writeFileSync(join(repo, 'dist', 'main.js'), 'main');
   writeFileSync(join(repo, 'dist', 'src', 'x.js'), 'x');
   mkdirSync(join(repo, 'deploy', '.cache', 'loader-abc'), { recursive: true });
-  writeFileSync(join(repo, 'deploy', 'install.sh'), 'sh');
+  writeFileSync(join(repo, 'deploy', 'install.sh'), 'local sh');
   writeFileSync(join(repo, 'deploy', '.cache', 'loader-abc', 'big'), 'no');
   writeFileSync(join(repo, 'package.json'), '{"type":"module"}');
-  writeFileSync(join(repo, 'README.md'), 'r');
+  const out = tmp();
   const calls: string[][] = [];
   const run: Runner = (cmd, args, opts) => {
     calls.push([cmd, ...args]);
+    const cwd = opts?.cwd ?? '.';
+    if (cmd === 'curl') {
+      assert.equal(args.at(-1), MAIN_BUILD_URL);
+      writeFileSync(join(cwd, 'main-build.tgz'), 'tgz');
+      return { status: 0, stdout: '', stderr: '' };
+    }
+    if (cmd === 'tar' && args[0] === '-xzf') {
+      const into = join(cwd, args[3]);
+      mkdirSync(join(into, 'wii', 'apps', 'LazyTO'), { recursive: true });
+      writeFileSync(join(into, 'wii', 'tournament.bin'), 'TMOD');
+      writeFileSync(join(into, 'wii', 'apps', 'LazyTO', 'boot.dol'), 'dol');
+      mkdirSync(join(into, 'dist'));
+      writeFileSync(join(into, 'dist', 'old.js'), 'old');
+      mkdirSync(join(into, 'deploy'));
+      writeFileSync(join(into, 'deploy', 'install.sh'), 'main sh');
+      writeFileSync(join(into, 'VERSION'), 'main-abc1234\n');
+      return { status: 0, stdout: '', stderr: '' };
+    }
     if (cmd === 'tar') {
       assert.ok(
         !/^[A-Za-z]:/.test(args[1]),
         'tar gets a relative archive path (GNU tar reads C: as a host)',
       );
-      writeFileSync(join(opts?.cwd ?? '.', args[1]), 'tgz');
+      writeFileSync(join(cwd, args[1]), 'tgz');
       return { status: 0, stdout: '', stderr: '' };
     }
-    return { status: 1, stdout: '', stderr: 'not expected' };
+    return { status: 0, stdout: '', stderr: '' };
   };
+  return { repo, out, calls, run };
+}
+
+test('push --dry-run: the main build with this clone dist/, deploy/ (no .cache) and a local VERSION; never ssh', () => {
+  const f = pushFixture();
   const lines: string[] = [];
-  const out = tmp();
   const r = pushRelay(
-    repo,
-    ENV,
-    {
-      ...PO,
-      piHost: 'relay.local',
-      user: 'pi',
-      dryRun: true,
-      noAutoUpdate: false,
-      skipBuild: true,
-    },
-    { run, out: (l) => lines.push(l), tmp: out },
+    f.repo,
+    { piHost: 'relay.local', user: 'pi', dryRun: true, skipBuild: true },
+    { run: f.run, out: (l) => lines.push(l), tmp: f.out, now: new Date('2026-10-02T21:05:09Z') },
   );
-  assert.equal(r.stage, join(out, 'lazyto-bundle'));
+  assert.equal(r.stage, join(f.out, 'lazyto-bundle'));
   assert.equal(readFileSync(join(r.stage, 'dist', 'src', 'x.js'), 'utf8'), 'x');
-  assert.equal(readFileSync(join(r.stage, 'deploy', 'install.sh'), 'utf8'), 'sh');
+  assert.throws(
+    () => readFileSync(join(r.stage, 'dist', 'old.js')),
+    'the main build relay is replaced',
+  );
+  assert.equal(readFileSync(join(r.stage, 'deploy', 'install.sh'), 'utf8'), 'local sh');
   assert.throws(
     () => readFileSync(join(r.stage, 'deploy', '.cache', 'loader-abc', 'big')),
     'the loader cache is not shipped',
   );
-  const cfg = JSON.parse(readFileSync(join(r.stage, 'config.json'), 'utf8'));
-  assert.equal(cfg.token, 'tok-1234567');
-  assert.equal(cfg.setFormat, 'startgg');
+  assert.equal(
+    readFileSync(join(r.stage, 'wii', 'tournament.bin'), 'utf8'),
+    'TMOD',
+    'Wii files kept',
+  );
+  assert.equal(readFileSync(join(r.stage, 'VERSION'), 'utf8'), 'local-20261002-210509\n');
   assert.deepEqual(
-    calls.map((c) => c[0]),
-    ['tar'],
-    'dry run: tar only, no scp/ssh/npm',
+    f.calls.map((c) => `${c[0]} ${c[1]}`),
+    ['curl -fsSL', 'tar -xzf', 'tar -czf'],
+    'dry run: no npm, scp or ssh',
   );
   assert.ok(lines.includes('dry run: not pushing'));
-  assert.ok(
-    lines.some((l) => l.startsWith("config: lazyto-weekly (production), event ~ 'Melee Singles'")),
-  );
-  assert.ok(!lines.some((l) => l.includes('tok-1234567')), 'full token never printed');
 });
 
-test('push: a failing scp or ssh is a clear error and the bundle is not deleted silently', () => {
-  const repo = tmp();
-  mkdirSync(join(repo, 'dist'));
-  writeFileSync(join(repo, 'dist', 'main.js'), 'main');
-  mkdirSync(join(repo, 'deploy'));
-  writeFileSync(join(repo, 'package.json'), '{}');
-  const run: Runner = (cmd) =>
-    cmd === 'tar'
-      ? { status: 0, stdout: '', stderr: '' }
-      : cmd === 'scp'
-        ? { status: 1, stdout: '', stderr: '' }
-        : { status: 0, stdout: '', stderr: '' };
-  throwsTool(
-    () =>
-      pushRelay(
-        repo,
-        ENV,
-        {
-          ...PO,
-          piHost: 'relay.local',
-          user: 'pi',
-          dryRun: false,
-          noAutoUpdate: false,
-          skipBuild: true,
-        },
-        { run, out: () => {}, tmp: tmp() },
-      ),
-    /scp to pi@relay.local failed/,
-  );
+test('push: a failing download, scp or ssh is a clear error', () => {
+  const f = pushFixture();
+  const pushWithFailing = (bad: string): unknown =>
+    pushRelay(
+      f.repo,
+      { piHost: 'relay.local', user: 'pi', dryRun: false, skipBuild: true },
+      {
+        run: (cmd, args, opts) =>
+          cmd === bad ? { status: 1, stdout: '', stderr: 'boom' } : f.run(cmd, args, opts),
+        out: () => {},
+        tmp: tmp(),
+      },
+    );
+  throwsTool(() => pushWithFailing('curl'), /downloading .*main-build\/lazyto\.tgz failed: boom/);
+  throwsTool(() => pushWithFailing('scp'), /scp to pi@relay\.local failed/);
+  throwsTool(() => pushWithFailing('ssh'), /install on the Pi failed/);
 });
 
 // ---------- wiiload

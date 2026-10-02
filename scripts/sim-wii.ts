@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     contention: 0,
     errors: [],
   };
-  const h = await startHarness({ sets: loadFixture(400), eventLabel: 'sim fixture' });
+  const h = await startHarness({ sets: loadFixture(400) });
   console.log(`status page: ${h.statusUrl}/`);
   console.log(`audit log:   ${h.ev.audit.path}`);
 

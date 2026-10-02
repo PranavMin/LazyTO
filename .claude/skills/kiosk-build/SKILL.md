@@ -23,10 +23,9 @@ Full reference: `docs/kiosk.md`. Per-build QA: `docs/kiosk-checklist.md`.
 1. Scan edited C and header files for non-ASCII bytes. MWCC reads source as Shift-JIS and
    sjiswrap rejects em dashes and smart quotes. Use the Grep tool with pattern `[^\x00-\x7F]`
    on `kiosk/src` and `kiosk/include`. Fix every hit.
-2. Check the developer flags. Grep for
-   `#define (TM_DEMO_AUTOSTART|LB_TOURNEY_DEMO_CLAIM|LB_TOURNEY_TRIGGER_READOUT)\s+[1-9]`
-   in `kiosk/src`. A non-zero flag is correct only for a headless Dolphin run (see the
-   `dolphin-test` skill). It must be `0` before a commit or an SD card.
+2. Never set the developer flags in the sources: build with `--demo` for a headless Dolphin
+   run instead (`docs/kiosk.md`, the `dolphin-test` skill). CI fails on a non-zero default,
+   and the version text of a `--demo` module ends in `DEMO`.
 3. Do not write C source through a Bash heredoc on this machine: backslash escapes collapse
    (`\x81` becomes a raw byte). Use the Edit or Write tool.
 
@@ -40,7 +39,8 @@ Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
 The build uses no `main.dol`: hook addresses are checked against `splits.txt` and the guard
 word is the constant `GUARD_WORD`. CI's `kiosk` workflow runs the same build and uploads
-`tournament.bin` as the `tournament-bin` artifact.
+`tournament.bin` as the `tournament-bin` artifact; on every push to `main`, `release.yml` puts
+it in the `main-build` bundle.
 
 Read the tail of the output:
 

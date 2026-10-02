@@ -1,23 +1,27 @@
-// harness.ts -- the relay as main.ts runs it (src/relay.ts startEvent plus
-// the status page), against the in-process fake start.gg. By default on
-// ephemeral localhost ports without the LAN beacon or the telemetry port;
-// `network: true` serves it like a real relay (beacon, telemetry, TCP on all
-// interfaces) so a development Dolphin can play against fake data. One place
-// for the tests, the load test and the status-page preview to build it.
+// harness.ts -- the relay as a Pi runs it (src/app.ts: settings file ->
+// resolve -> relay.ts startEvent -> web server), against the in-process fake
+// start.gg. By default on ephemeral localhost ports without the LAN beacon or
+// the telemetry port; `network: true` serves it like a real relay (beacon,
+// telemetry, TCP on all interfaces) so a development Dolphin can play against
+// fake data. One place for the tests, the load test and the status-page
+// preview to build it.
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startEvent, type RunningEvent } from '../src/relay.js';
-import { StartggClient } from '../src/startgg.js';
-import { StatusServer } from '../src/status.js';
+import { App } from '../src/app.js';
+import { configPath, saveConfig, type Config } from '../src/config.js';
+import type { RunningEvent } from '../src/relay.js';
+import type { StartggClient } from '../src/startgg.js';
+import type { StatusView } from '../src/status.js';
 import type { SetFormat } from '../src/format.js';
 import {
   makeFake,
   FakeStartgg,
-  FIXTURE_EVENT_ID,
-  FIXTURE_STREAM_ID,
+  FIXTURE_EVENT_NAME,
+  FIXTURE_STREAM_NAME,
   FIXTURE_TOKEN,
+  FIXTURE_TOURNAMENT,
   type FakeSet,
 } from './fake-startgg.js';
 import { WiiClient, TEST_SECRET } from './wii-client.js';
@@ -34,18 +38,22 @@ export interface HarnessOptions {
   setFormat?: SetFormat;
   limits?: { capacity: number; refillPerMinute: number; maxWaitMs: number };
   statusPort?: number;
-  eventLabel?: string;
   /** Beacon, telemetry and TCP on all interfaces, like a real relay. */
   network?: boolean;
   tcpPort?: number;
   secret?: string;
+  /** false: no stream tonight. Default: station STREAM_STATION streams to the fixture's stream. */
+  stream?: false;
+  /** The bundle's wii/ folder, for the SD-card zips. */
+  wiiDir?: string;
 }
 
 export interface Harness {
+  app: App;
   fake: FakeStartgg;
   startgg: StartggClient;
   ev: RunningEvent;
-  status: StatusServer;
+  view: StatusView;
   statusUrl: string;
   dataDir: string;
   /** A Wii at this station (stream=1 when it is the stream setup). */
@@ -55,70 +63,66 @@ export interface Harness {
   close(): Promise<void>;
 }
 
+/** The settings the harness writes: the fake's test tournament, its stream, the test secret. */
+export function harnessConfig(opts: HarnessOptions = {}): Config {
+  return {
+    token: FIXTURE_TOKEN,
+    tournament: FIXTURE_TOURNAMENT,
+    eventName: FIXTURE_EVENT_NAME,
+    secret: opts.secret ?? TEST_SECRET,
+    adminPassword: TEST_PASSWORD,
+    weeklyNamePrefix: '',
+    streamName: opts.stream === false ? '' : FIXTURE_STREAM_NAME,
+    streamStation: STREAM_STATION,
+    setFormat: opts.setFormat ?? 'startgg',
+  };
+}
+
 export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const ownFake = opts.fake === undefined;
   const fake = opts.fake ?? makeFake(opts.sets);
   if (ownFake) await fake.start();
   const ownDir = opts.dataDir === undefined;
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), 'lazyto-test-'));
+  mkdirSync(dataDir, { recursive: true });
+  saveConfig(configPath(dataDir), harnessConfig(opts));
 
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-    limits: opts.limits,
-  });
-  const ev = await startEvent({
-    startgg,
-    eventId: FIXTURE_EVENT_ID,
-    setFormat: opts.setFormat ?? 'startgg',
-    secret: opts.secret ?? TEST_SECRET,
-    streamStation: STREAM_STATION,
-    streamId: FIXTURE_STREAM_ID,
+  const app = new App({
     dataDir,
+    httpPort: opts.statusPort ?? 0,
     tcpPort: opts.tcpPort ?? 0,
     host: opts.network ? '0.0.0.0' : '127.0.0.1',
     network: opts.network ?? false,
+    startggEndpoint: fake.url,
+    startggOptions: { retryDelaysMs: [0, 0], limits: opts.limits },
+    clockSynced: () => true,
+    wiiDir: opts.wiiDir,
   });
-  const status = new StatusServer({
-    state: ev.state,
-    cache: ev.cache,
-    startgg,
-    streamStation: STREAM_STATION,
-    eventLabel:
-      opts.eventLabel ??
-      `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`,
-    beacon: ev.beacon ?? {
-      status: () => ({
-        targets: ['192.168.1.255'],
-        sent: 1,
-        lastSentAt: Date.now(),
-        lastError: null,
-      }),
-    },
-    tcp: ev.tcp,
-    telemetry: ev.telemetry,
-    admin: { actions: ev.admin, password: TEST_PASSWORD },
-  });
-  await status.listen(opts.statusPort ?? 0, '127.0.0.1');
-  const port = ev.tcp.address().port;
+  await app.start();
+  const m = app.current();
+  if (m.kind !== 'running') {
+    await app.stop();
+    throw new Error(`harness: the relay did not start: ${JSON.stringify(m)}`);
+  }
+  const port = m.ev.tcp.address().port;
+  const secret = opts.secret ?? TEST_SECRET;
 
   return {
+    app,
     fake,
-    startgg,
-    ev,
-    status,
-    statusUrl: `http://127.0.0.1:${status.address().port}`,
+    startgg: m.view.startgg,
+    ev: m.ev,
+    view: m.view,
+    statusUrl: `http://127.0.0.1:${app.web.address().port}`,
     dataDir,
-    wii: (station, stream = 0) =>
-      new WiiClient(port, station, stream, '127.0.0.1', opts.secret ?? TEST_SECRET),
+    wii: (station, stream = 0) => new WiiClient(port, station, stream, '127.0.0.1', secret),
     auditEvents: () =>
-      readFileSync(ev.audit.path, 'utf8')
+      readFileSync(m.ev.audit.path, 'utf8')
         .split('\n')
         .filter(Boolean)
         .map((l) => JSON.parse(l) as Record<string, unknown>),
     close: async () => {
-      await Promise.all([ev.stop(), status.close()]);
+      await app.stop();
       if (ownFake) await fake.close();
       if (ownDir) rmSync(dataDir, { recursive: true, force: true });
     },

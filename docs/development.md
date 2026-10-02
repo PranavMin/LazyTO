@@ -64,8 +64,8 @@ files by hand. After changing `protocol.yaml`:
 
 The kiosk's source is `kiosk/`. It builds against the decomp in the `melee/` submodule, which
 needs its compilers fetched once (no Melee files needed): `pip install ninja`, then
-`python kiosk/tools/fetch_decomp_tools.py`. Or skip building and download `tournament.bin` from
-the `kiosk` workflow's `tournament-bin` artifact. Then, from the repo root:
+`python kiosk/tools/fetch_decomp_tools.py`. Or skip building and take `tournament.bin` from
+the `wii/` folder of the `main-build` bundle, `lazyto.tgz`. Then, from the repo root:
 
 ```
 python kiosk/tools/build_module.py

@@ -45,8 +45,12 @@ export interface RelayDeps {
   state: StationState;
   startgg: StartggClient;
   audit: AuditSink;
-  streamStation: number;
-  streamId: number;
+  /**
+   * The stream setup: its station's sets go on this start.gg stream. Decided by
+   * station, not by the card's stream= flag, so one setting can't disagree with
+   * another. null = no stream tonight.
+   */
+  stream: { station: number; streamId: number } | null;
   /** Shared secret every request's relay_auth must carry (decisions.md R16). */
   secret: string;
 }
@@ -319,8 +323,10 @@ export class RelayTcpServer {
 
   // ---- CMD_START_SET ----
 
+  // req.stream (the card's stream= flag) is decoded but not used: the stream
+  // setup is the configured station (RelayDeps.stream).
   private async startSet(station: number, req: { set_id: number; stream: number }): Promise<Reply> {
-    const { cache, state, startgg, audit, streamStation, streamId } = this.deps;
+    const { cache, state, startgg, audit, stream } = this.deps;
 
     const claim = state.get(station);
     if (claim?.setId === req.set_id) {
@@ -344,10 +350,6 @@ export class RelayTcpServer {
       // by hand on start.gg. Not ours to take.
       return { status: RelayStatus.ST_SET_TAKEN, msg: 'in progress on start.gg' };
     }
-    if (req.stream === 1 && station !== streamStation) {
-      return { status: RelayStatus.ST_NOT_STREAM, msg: 'not the stream station' };
-    }
-
     const markFailure = await this.upstream(
       station,
       'markSetInProgress',
@@ -360,12 +362,12 @@ export class RelayTcpServer {
     // claim even if the stream assignment below fails.
     this.recordClaim(station, set);
 
-    if (req.stream === 1) {
+    if (stream !== null && station === stream.station) {
       const assignFailure = await this.upstream(
         station,
         'assignStream',
-        { setId: req.set_id, streamId },
-        () => startgg.assignStream(req.set_id, streamId),
+        { setId: req.set_id, streamId: stream.streamId },
+        () => startgg.assignStream(req.set_id, stream.streamId),
       );
       if (assignFailure) {
         return { status: RelayStatus.ST_STARTGG_ERROR, msg: 'stream assign failed - ask TO' };

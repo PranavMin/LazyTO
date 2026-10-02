@@ -1,8 +1,9 @@
 // tournament.cfg on the card: station=N, stream=0|1, secret=... (docs/wii-setup.md).
+// The format and the secret's pattern are the relay's (src/cards.ts, src/config.ts).
 import { fail } from './cli.js';
 
-/** 8-16 of A-Z a-z 0-9 - _ (decisions.md R16; the kernel parses the same). */
-export const SECRET_RE = /^[A-Za-z0-9_-]{8,16}$/;
+export { formatTournamentCfg } from '../../src/cards.js';
+export { SECRET_RE } from '../../src/config.js';
 
 export function parseTournamentCfg(text: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -11,14 +12,6 @@ export function parseTournamentCfg(text: string): Record<string, string> {
     if (m) out[m[1]] = m[2].trim();
   }
   return out;
-}
-
-export function formatTournamentCfg(c: {
-  station: number;
-  stream: number;
-  secret: string;
-}): string {
-  return `station=${c.station}\nstream=${c.stream}\nsecret=${c.secret}\n`;
 }
 
 /**
