@@ -1,13 +1,13 @@
 ---
 name: release
-description: Cut a tagged LazyTO release - version bump, changelog, v* tag, release.yml draft, attaching tournament.bin and the CI loader by hand. Use when the user asks to tag, release or publish a version.
+description: Cut a tagged LazyTO release - version bump, changelog, v* tag, release.yml draft with CI's tournament.bin, attaching the CI loader by hand. Use when the user asks to tag, release or publish a version.
 ---
 
 # Cut a release
 
-`release.yml` drafts a GitHub release on a `v*` tag with the relay bundle and the Wii kit.
-CI cannot build the kiosk (Windows only, needs the vanilla DOL), so the module and the loader
-are attached by hand. This procedure has not been run yet; update this skill after the first
+`release.yml` drafts a GitHub release on a `v*` tag with the relay bundle, the Wii kit and
+`tournament.bin` (built by `kiosk.yml` on Windows CI from the tag, no DOL needed). The loader
+comes from the Nintendont repo's CI and is attached by hand. This procedure has not been run yet; update this skill after the first
 release.
 
 Every push and the tag push are outward-facing: confirm each with the user.
@@ -28,11 +28,12 @@ Every push and the tag push are outward-facing: confirm each with the user.
    git push origin main v0.9.0-beta.1
    ```
 7. Wait for the draft: `gh run list --workflow release.yml --limit 1`.
-8. Build the module at the tag with the `kiosk-build` skill.
+8. Check the draft has `tournament.bin`. Optionally build it locally at the tag and compare: only
+   the version text (hash and date) may differ.
 9. Get the loader from the Nintendont CI build of the commit this tag pins
    (`git -C Nintendont rev-parse HEAD`). Download it with `gh run download -R PranavMin/Nintendont`.
-10. Attach both:
+10. Attach it:
     ```bash
-    gh release upload v0.9.0-beta.1 kiosk/build/tournament.bin apps-LazyTO.zip
+    gh release upload v0.9.0-beta.1 apps-LazyTO.zip
     ```
 11. Edit the draft notes from the changelog section. The user publishes the release.

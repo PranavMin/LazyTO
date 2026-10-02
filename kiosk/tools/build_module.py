@@ -7,16 +7,17 @@ game ISO stays stock Melee; see docs/architecture.md.
 The kiosk's own sources live in kiosk/src and kiosk/include. Everything else
 comes from the unmodified Melee decompilation in the melee/ submodule: its
 headers, its compilers (set up by `python configure.py --non-matching` there
-once), config/GALE01/symbols.txt and the vanilla main.dol in orig/.
+once), config/GALE01/symbols.txt and config/GALE01/splits.txt.
 
     python kiosk/tools/build_module.py          # from the repo root
-    python kiosk/tools/build_module.py --check  # CI: no main.dol, writes no module
 
---check compiles, links and runs every check that does not need main.dol
-(symbols, region, hook targets, gecko collisions). It never opens the DOL, so
-it skips the vanilla-address check of each hook and the guard word, and it
-writes no tournament.bin. It is a mode you ask for: without it a missing DOL
-stops the build.
+No Nintendo file is needed, so CI builds the same tournament.bin
+(.github/workflows/kiosk.yml). The build reads two facts of stock 1.02 from
+the decomp, not from main.dol: every hook address must fall inside a DOL
+section as splits.txt lays them out, and the guard word is the constant
+GUARD_WORD. When the vanilla main.dol is in melee/orig/GALE01/sys/ (a local
+decomp setup), the build also checks both against it and stops on any
+difference; the decomp pins that DOL by SHA-1 (config/GALE01/build.sha1).
 
 Output file format (all big-endian):
     "TMOD" u32 version=1  u32 load_addr  u32 blob_len  u32 n_patches
@@ -63,6 +64,8 @@ OUTPUT = KIOSK / "build" / "tournament.bin"
 LOAD_ADDR = 0x817E0000
 REGION_END = 0x817F8AC0  # FST start on a 1.02 disc; loaders also assert *0x34 >= end
 GUARD_ADDR = 0x8016D800  # gm_Scene_Vs_OnFrame's first instruction (not patched)
+GUARD_WORD = 0x7C0802A6  # mflr r0: that instruction in the stock 1.02 DOL (checked when main.dol is present)
+SPLITS = DECOMP / "config" / "GALE01" / "splits.txt"
 
 TUS = [KIOSK / "src" / "melee" / t for t in (
     "mn/mntourney.c",
@@ -249,6 +252,28 @@ def read_elf(elf):
     return lo, bytes(blob), symbols, parts
 
 
+def dol_sections():
+    """The DOL's loaded sections as the decomp's splits.txt lays them out:
+    {name: (start, end)} over every file, .bss/.sbss excluded (not in the DOL
+    file). The ends stop short of each section's alignment padding, so a hook
+    in padding is refused too."""
+    sections = {}
+    for line in SPLITS.read_text().splitlines():
+        m = re.match(r"\s+(\S+)\s+start:0x([0-9A-Fa-f]+) end:0x([0-9A-Fa-f]+)", line)
+        if not m or m.group(1) in (".bss", ".sbss", ".sbss2"):
+            continue
+        a, b = int(m.group(2), 16), int(m.group(3), 16)
+        lo, hi = sections.get(m.group(1), (a, b))
+        sections[m.group(1)] = (min(lo, a), max(hi, b))
+    if not sections:
+        die(f"no sections read from {SPLITS}")
+    return sections
+
+
+def in_dol_section(addr, sections):
+    return any(lo <= addr and addr + 4 <= hi for lo, hi in sections.values())
+
+
 def dol_word(addr):
     d = DOL.read_bytes()
     offs = struct.unpack(">18I", d[0:0x48])
@@ -292,16 +317,14 @@ def gecko_touches():
 
 def main():
     ap = argparse.ArgumentParser(description="Build kiosk/build/tournament.bin.")
-    ap.add_argument("--check", action="store_true",
-                    help="build-check without main.dol: skip the DOL checks, write no module")
-    check = ap.parse_args().check
+    ap.parse_args()
 
-    needs = (SYMBOLS, MWCC, SJISWRAP, MWLD, NM) if check else (DOL, SYMBOLS, MWCC, SJISWRAP, MWLD, NM)
-    for need in needs:
+    for need in (SYMBOLS, SPLITS, MWCC, SJISWRAP, MWLD, NM):
         if not need.exists():
-            die(f"{need} missing: run `git submodule update --init`, put the vanilla "
-                "main.dol in melee/orig/GALE01/sys/, and run `python configure.py "
-                "--non-matching` and `python -m ninja` in melee/ once")
+            die(f"{need} missing: run `git submodule update --init`, then fetch the "
+                "decomp's compilers and tools in melee/ (docs/kiosk.md)")
+    have_dol = DOL.exists()
+    sections = dol_sections()
     print("module version:", write_version_inc())
     syms = load_symbols()
     hooks = parse_hooks()
@@ -333,8 +356,10 @@ def main():
             patches.append((addr, 0x48000000 | delta))
         else:
             die("bad hook kind " + kind)
-        if not check:
-            dol_word(addr)  # must be a vanilla DOL address
+        if not in_dol_section(addr, sections):
+            die(f"hook address 0x{addr:08X} is not inside a DOL section (splits.txt)")
+        if have_dol:
+            dol_word(addr)  # and inside the real DOL
 
     touched = gecko_touches()
     for addr, _ in patches:
@@ -345,14 +370,12 @@ def main():
         die("gecko codesets write inside the module region: " +
             ", ".join(f"0x{a:08X} {touched[a]}" for a in inside[:5]))
 
-    if check:
-        print(f"check: module 0x{lo:08X}-0x{end:08X} ({len(blob)} bytes, "
-              f"{REGION_END - end} spare), {len(ext)} externals, {len(patches)} patches")
-        print("check: hook addresses and the guard word NOT verified (no main.dol); "
-              "no tournament.bin written")
-        return
-
-    guard_word = dol_word(GUARD_ADDR)
+    if have_dol:
+        actual = dol_word(GUARD_ADDR)
+        if actual != GUARD_WORD:
+            die(f"guard word at 0x{GUARD_ADDR:08X} is 0x{actual:08X} in {DOL}, "
+                f"GUARD_WORD says 0x{GUARD_WORD:08X}: not the stock 1.02 DOL?")
+    guard_word = GUARD_WORD
     out = bytearray(b"TMOD")
     out += struct.pack(">IIIIII", 1, lo, len(blob), len(patches), GUARD_ADDR, guard_word)
     for addr, val in patches:
@@ -369,7 +392,8 @@ def main():
     print(f"patches: {len(patches)}")
     for (kind, addr, target), (_, val) in zip(hooks, patches):
         print(f"  {kind:6s} 0x{addr:08X} = 0x{val:08X}  {target}")
-    print(f"guard: 0x{GUARD_ADDR:08X} == 0x{guard_word:08X}")
+    print(f"guard: 0x{GUARD_ADDR:08X} == 0x{guard_word:08X}"
+          + (" (checked against main.dol)" if have_dol else " (main.dol absent: decomp constants)"))
     print(f"wrote {OUTPUT} ({len(out)} bytes)")
 
 

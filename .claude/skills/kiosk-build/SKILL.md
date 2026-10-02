@@ -38,14 +38,15 @@ python kiosk/tools/build_module.py
 
 Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
 
-`--check` builds without `main.dol` (what CI's `kiosk` workflow runs): same compile, link and
-checks, minus the DOL address and guard checks, and no `tournament.bin`. Never use it for a
-module you will test or ship.
+The build needs no `main.dol`: hook addresses are checked against `splits.txt` and the guard
+word is the constant `GUARD_WORD`. With the DOL present it also checks both against the DOL
+(the guard line says "checked against main.dol"). CI's `kiosk` workflow runs the same build and
+uploads `tournament.bin` as the `tournament-bin` artifact.
 
 Read the tail of the output:
 
 - the applied patch list (one line per `module_hooks.txt` entry),
-- `guard: 0x8016D800 == 0x7C0802A6`,
+- `guard: 0x8016D800 == 0x7C0802A6 (checked against main.dol)` locally,
 - the file size. It must stay under 100 KB (load address 0x817E0000, FST at 0x817F8AC0).
 
 A failed external resolution or a gecko overlap stops the build and names the symbol or

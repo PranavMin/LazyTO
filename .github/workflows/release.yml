@@ -1,10 +1,10 @@
 name: release
 
-# A tag v* creates a DRAFT release with the two bundles below. Attach
-# tournament.bin and the loader's apps/LazyTO folder by hand (both are built
-# outside CI: the kiosk build is Windows-only and needs the vanilla main.dol;
-# the loader comes from the Nintendont repo's CI), then publish the draft.
-# Run by hand (workflow_dispatch) it only uploads the bundles as artifacts.
+# A tag v* creates a DRAFT release with the two bundles below and
+# tournament.bin, built by kiosk.yml on Windows from the same commit. Attach
+# the loader's apps/LazyTO folder by hand (it comes from the Nintendo repo's
+# CI), then publish the draft. Run by hand (workflow_dispatch) it only
+# uploads the bundles as artifacts.
 #
 # Every push to main also runs the tests and republishes the relay bundle as
 # lazyto-relay-main.tgz (+ VERSION, .sha256) on the moving prerelease tag
@@ -81,11 +81,30 @@ jobs:
             --title "latest (main $(git rev-parse --short HEAD))" \
             --notes "Moving prerelease: the relay bundle built from the newest main for Pi auto-update (deploy/update.sh). Not a release; see the v* releases." \
             out/lazyto-relay-main.tgz out/lazyto-relay-main.tgz.sha256 out/VERSION
+
+  module:
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/kiosk.yml
+
+  draft:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [bundles, module]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles-${{ github.ref_name }}
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: tournament-bin
+          path: out
       - name: Draft release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.v.outputs.ver }}" --draft --title "LazyTO ${{ steps.v.outputs.ver }}" \
-            --notes "Draft. Before publishing, attach tournament.bin (python kiosk/tools/build_module.py at this tag) and apps-LazyTO.zip (the loader from the Nintendont repo's CI build for the matching commit), then edit these notes." \
-            out/*.tgz out/*.zip
+          gh release create "${{ github.ref_name }}" -R "${{ github.repository }}" --draft --title "LazyTO ${{ github.ref_name }}" \
+            --notes "Draft. Before publishing, attach apps-LazyTO.zip (the loader from the Nintendont repo's CI build for the matching commit), then edit these notes. tournament.bin is built by CI from this tag." \
+            out/*.tgz out/*.zip out/tournament.bin

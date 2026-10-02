@@ -1,10 +1,10 @@
 name: kiosk
 
-# Build-checks the kiosk module so a change that breaks kiosk/ fails the PR.
-# CI has no vanilla main.dol (a Nintendo file), so it runs
-# `build_module.py --check`: compile, link, symbol/region/hook-target/gecko
-# checks, no DOL checks and no tournament.bin. The shippable module is still
-# built by hand with the DOL (docs/kiosk.md).
+# Builds the kiosk module, tournament.bin, so a change that breaks kiosk/
+# fails the PR, and keeps the module as the `tournament-bin` artifact.
+# release.yml calls this workflow to attach the module to a v* draft. No
+# Nintendo file is needed: build_module.py takes the stock 1.02 facts it
+# checks (DOL sections, guard word) from the decomp (docs/kiosk.md).
 #
 # melee/'s `ninja tools` cannot run here: ninja first regenerates build.ninja,
 # which needs `dtk dol split` and so the DOL. The step below instead runs only
@@ -12,6 +12,8 @@ name: kiosk
 # build uses (ninja -t commands does not regenerate the manifest).
 
 on:
+  workflow_call:   # release.yml
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -67,5 +69,10 @@ jobs:
             cmd /c $_
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-      - name: Build-check the module (no main.dol)
-        run: python kiosk/tools/build_module.py --check
+      - name: Build the module
+        run: python kiosk/tools/build_module.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tournament-bin
+          path: kiosk/build/tournament.bin
+          if-no-files-found: error
