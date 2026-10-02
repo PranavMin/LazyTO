@@ -107,8 +107,7 @@ function sameOrigin(req: IncomingMessage): boolean {
 /**
  * One stylesheet for both pages. Phone first: the TO runs the night from a
  * phone, so every block is a full-width card, text wraps instead of
- * scrolling sideways, and buttons are at least 44 px tall. Light and dark
- * follow the system setting.
+ * scrolling sideways, and buttons are at least 44 px tall.
  */
 const PAGE_CSS = `
   :root {
@@ -116,7 +115,6 @@ const PAGE_CSS = `
     --muted: #64748b; --warn: #b45309; --bad: #b91c1c; --ok: #15803d;
     --btn: #f1f5f9; --btnline: #cbd5e1; --link: #1d4ed8;
   }
-
   * { box-sizing: border-box; }
   body {
     margin: 0 auto; padding: 12px 16px 32px; max-width: 56rem;
@@ -361,35 +359,7 @@ export class StatusServer {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5;url=/">
 <title>LazyTO</title>
-<style>
-  body { font-family: monospace; font-size: 16px; margin: 1em; }
-  h1 { font-size: 1.25em; margin: 0 0 0.25em; }
-  h2 { font-size: 1.1em; margin: 1.2em 0 0.4em; }
-  .sub { margin: 0 0 1em; }
-  .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { padding: 0.4em 0.6em; border-bottom: 1px solid #ccc; text-align: left; vertical-align: top; }
-  td:first-child, td:nth-child(3) { white-space: nowrap; }
-  .warn { color: #a40; }
-  .ok { color: #070; }
-  .muted { color: #888; }
-  form { display: inline; }
-  pre { margin: 0 0 0.3em; white-space: pre-wrap; word-break: break-all; font-size: 0.85em; }
-  button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
-
-    .muted { color: #9ca3af; }
-    a { color: #93c5fd; }
-    button {
-      color: #f9fafb;
-      background: #1f2937;
-      border: 1px solid #4b5563;
-    }
-  }
-  @media (max-width: 600px) {
-    body { font-size: 14px; margin: 0.5em; }
-    td, th { padding: 0.3em 0.4em; }
-  }
-</style></head><body>
+<style>${PAGE_CSS}</style></head><body>
 <h1>LazyTO</h1>
 ${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>stream station ${streamStation} ★ · refreshes every 5 s</p>
 <h2>Stations</h2>
@@ -514,15 +484,7 @@ ${items.join('\n')}
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LazyTO</title>
-<style>
-  body { font-family: monospace; font-size: 16px; margin: 1em; }
-  .warn { color: #a40; }
-  form { display: inline; }
-  button { font: inherit; padding: 0.3em 0.9em; min-height: 2.2em; }
-    a { color: #93c5fd; }
-    button { color: #f9fafb; background: #1f2937; border: 1px solid #4b5563; }
-  }
-</style></head><body>
+<style>${PAGE_CSS}</style></head><body>
 <h1>LazyTO</h1>
 ${body}
 </body></html>`;

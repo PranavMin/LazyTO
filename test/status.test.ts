@@ -147,6 +147,7 @@ test('status page', async (t) => {
       'the only client-side behaviour is the meta refresh',
     );
     assert.doesNotMatch(html, /<script/, 'no client JS');
+    assert.match(html, /--card:/, 'the page carries the shared card stylesheet (PAGE_CSS)');
   });
 
   // Drive real traffic: the stream station plays a set to 2-1, another
