@@ -100,7 +100,17 @@ export function nearestWeekly(
   return best;
 }
 
-/** Page through the admin tournaments until one has this short URL; else, with a weekly prefix, the nearest weekly. */
+/** Every tournament the token's user administers (newest first, as start.gg lists them). */
+export async function listAdminTournaments(client: StartggClient): Promise<AdminTournament[]> {
+  const all: AdminTournament[] = [];
+  for (let page = 1; ; page++) {
+    const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
+    all.push(...nodes);
+    if (page >= totalPages || nodes.length === 0) return all;
+  }
+}
+
+/** The admin tournament that has this short URL; else, with a weekly prefix, the nearest weekly. */
 export async function findTournamentSlug(
   client: StartggClient,
   shortSlug: string,
@@ -108,14 +118,9 @@ export async function findTournamentSlug(
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<{ slug: string; foundBy: 'short URL' | 'nearest weekly' }> {
   const want = shortSlug.toLowerCase();
-  const all: AdminTournament[] = [];
-  for (let page = 1; ; page++) {
-    const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
-    all.push(...nodes);
-    const hit = nodes.find((t) => t.shortSlug?.toLowerCase() === want);
-    if (hit) return { slug: hit.slug, foundBy: 'short URL' };
-    if (page >= totalPages || nodes.length === 0) break;
-  }
+  const all = await listAdminTournaments(client);
+  const hit = all.find((t) => t.shortSlug?.toLowerCase() === want);
+  if (hit) return { slug: hit.slug, foundBy: 'short URL' };
   const seen = all.length;
   if (weeklyNamePrefix.length > 0) {
     const weekly = nearestWeekly(all, weeklyNamePrefix, nowSec);
@@ -133,18 +138,20 @@ export async function findTournamentSlug(
   );
 }
 
+/** The tournament's Melee singles events: the only ones the relay can run. */
+export function meleeSinglesEvents(t: TournamentDetail): TournamentDetail['events'] {
+  return t.events.filter(
+    (e) => e.videogame?.id === MELEE_VIDEOGAME_ID && e.type === SINGLES_EVENT_TYPE,
+  );
+}
+
 /** Exactly one Melee singles event whose name contains eventName. */
 export function pickEvent(
   t: TournamentDetail,
   eventName: string,
 ): TournamentDetail['events'][number] {
   const want = eventName.toLowerCase();
-  const matches = t.events.filter(
-    (e) =>
-      e.videogame?.id === MELEE_VIDEOGAME_ID &&
-      e.type === SINGLES_EVENT_TYPE &&
-      e.name.toLowerCase().includes(want),
-  );
+  const matches = meleeSinglesEvents(t).filter((e) => e.name.toLowerCase().includes(want));
   if (matches.length === 1) return matches[0]!;
   const listed = t.events
     .map((e) => `"${e.name}" (id ${e.id}, type ${e.type}, game ${e.videogame?.id ?? '?'})`)

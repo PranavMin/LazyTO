@@ -17,7 +17,7 @@
 #      on every push to main. Same as /opt/lazyto/VERSION: nothing to do.
 #   3. Download lazyto-relay-main.tgz and its .sha256, verify, unpack to a
 #      temp dir, check it is a relay bundle, and run the NEW build's
-#      dist/src/check-config.js against /etc/lazyto/config.json: a build
+#      dist/src/check-config.js against /var/lib/lazyto/config.json: a build
 #      whose config schema does not match the installed config is refused
 #      (and remembered in /var/lib/lazyto/update-bad), because it would
 #      install fine and then die at startup. Config changes travel with
@@ -107,9 +107,9 @@ if [[ ! -f "$tmp/bundle/dist/src/check-config.js" ]]; then
   echo "$bundle_ver" > "$BAD"
   exit 0
 fi
-reason=$(cd "$tmp/bundle" && CONFIG="$CONF_DIR/config.json" /opt/node/bin/node dist/src/check-config.js 2>&1 >/dev/null | paste -sd' ' | cut -c1-300)
+reason=$(cd "$tmp/bundle" && /opt/node/bin/node dist/src/check-config.js "$DATA_DIR/config.json" 2>&1 >/dev/null | paste -sd' ' | cut -c1-300)
 if [[ -n "$reason" ]]; then
-  log "bundle $bundle_ver rejects $CONF_DIR/config.json ($reason); keeping $installed. Push the config with npm run push, or wait for main to move on"
+  log "bundle $bundle_ver rejects $DATA_DIR/config.json ($reason); keeping $installed. Fix the settings on the setup page, or wait for main to move on"
   echo "$bundle_ver" > "$BAD"
   exit 0
 fi

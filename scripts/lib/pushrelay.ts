@@ -75,7 +75,7 @@ export function pushRelay(
       'auto-update OFF on the Pi (this build stays); push again without --no-auto-update to turn it back on',
     );
   d.out(
-    `done. status page: http://${o.piHost}:${o.httpPort}   smoke test: npx tsx scripts/smoke.ts ${o.piHost}`,
+    `done. status page: http://${o.piHost}:29473   smoke test: npx tsx scripts/smoke.ts ${o.piHost}`,
   );
   return { tgz, stage };
 }

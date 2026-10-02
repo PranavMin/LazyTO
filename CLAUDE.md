@@ -1,6 +1,6 @@
 This is the LazyTO relay (docs/architecture.md, section Relay).
 Node 22, TypeScript, no framework. generated/wire.ts is GENERATED from protocol.yaml by tools/gen_protocol.py — import it from src/, never copy or hand-edit it.
-Principles: one path, no fallbacks, fail fast at startup on bad config, no retries except start.gg 5xx (max 2).
+Principles: one path, no fallbacks, no retries except start.gg 5xx (max 2). Two accepted exceptions (src/app.ts): without valid settings the relay serves only its setup page, and a set-up relay whose event can't be resolved keeps its page up with the reason and tries again (30 s, 60 s, then every 2 min). Settings (src/config.ts): a new field must be optional with a default, so an update never stalls a Pi.
 npm test must pass. Integration tests use test/fake-startgg.ts, never the real API.
 The real API is touched only by scripts/probe.ts (read-only lookups) and scripts/reset-bracket.ts (resets the test event named by EVENT_ID), both using .env (gitignored).
 

@@ -1,18 +1,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadConfig, ConfigError } from '../src/config.js';
+import {
+  loadConfig,
+  newSecret,
+  parseConfig,
+  saveConfig,
+  weeklyPrefixFrom,
+  type Config,
+} from '../src/config.js';
 import { relayConfigFromEnv } from '../scripts/lib/pushconfig.js';
 
-const VALID = {
-  startggEndpoint: 'https://api.start.gg/gql/alpha',
+const VALID: Config = {
   token: 'tok-abc',
   tournament: 'tournament/lazyto-test',
   eventName: 'Melee Singles',
-  streamName: 'LazyTOStream',
+  secret: 'abcd-EFGH_1234xy',
+  adminPassword: 'to-pass-9876',
   weeklyNamePrefix: '',
+  streamName: 'LazyTOStream',
+  streamStation: 1,
+  setFormat: 'top8q',
+};
+
+// A settings file as the relay before config v2 wrote it (the shape a Pi set
+// up with npm run push had on 2026-10-02, fake values). Every later build must
+// keep accepting it: auto-update installs a build only if it does.
+const V1_FILE = {
+  startggEndpoint: 'https://api.start.gg/gql/alpha',
+  token: 'tok-abc',
+  tournament: 'lazyto-weekly',
+  eventName: 'Melee Singles',
+  streamName: 'LazyTOStream',
+  weeklyNamePrefix: 'LazyTO Weekly #',
   secret: 'abcd-EFGH_1234xy',
   adminPassword: 'to-pass-9876',
   streamStation: 1,
@@ -37,95 +59,89 @@ function writeConfig(contents: string): string {
   return path;
 }
 
-function expectProblems(contents: string, ...substrings: string[]): void {
-  const path = writeConfig(contents);
-  try {
-    loadConfig(path);
-    assert.fail('expected ConfigError');
-  } catch (e) {
-    assert.ok(e instanceof ConfigError, `expected ConfigError, got ${e}`);
-    for (const s of substrings) {
-      assert.ok(
-        e.problems.some((p) => p.includes(s)),
-        `expected a problem containing "${s}", got: ${JSON.stringify(e.problems)}`,
-      );
-    }
+function problemsOf(value: unknown): string[] {
+  const r = parseConfig(value);
+  assert.ok(!r.ok, `expected problems, got a valid config`);
+  return r.problems;
+}
+
+function expectProblems(value: unknown, ...substrings: string[]): void {
+  const problems = problemsOf(value);
+  for (const s of substrings) {
+    assert.ok(
+      problems.some((p) => p.includes(s)),
+      `expected a problem containing "${s}", got: ${JSON.stringify(problems)}`,
+    );
   }
 }
 
-test('valid config loads with every field intact', () => {
-  const cfg = loadConfig(writeConfig(JSON.stringify(VALID)));
-  assert.deepEqual(cfg, VALID);
+function valid(value: unknown): Config {
+  const r = parseConfig(value);
+  assert.ok(r.ok, `expected valid, got ${JSON.stringify(r)}`);
+  return r.config;
+}
+
+test('a valid file loads with every field intact', () => {
+  const r = loadConfig(writeConfig(JSON.stringify(VALID)));
+  assert.deepEqual(r, { kind: 'ok', config: VALID, ignored: [] });
 });
 
-test('missing file', () => {
-  try {
-    loadConfig(join(dir, 'does-not-exist.json'));
-    assert.fail('expected ConfigError');
-  } catch (e) {
-    assert.ok(e instanceof ConfigError);
-    assert.ok(e.problems[0]!.includes('cannot read'));
-  }
+test('a missing file is "missing", not an error: the relay starts in setup mode', () => {
+  assert.deepEqual(loadConfig(join(dir, 'does-not-exist.json')), { kind: 'missing' });
 });
 
-test('invalid JSON', () => {
-  expectProblems('{ not json', 'not valid JSON');
+test('broken JSON and a non-object are invalid', () => {
+  const broken = loadConfig(writeConfig('{ not json'));
+  assert.equal(broken.kind, 'invalid');
+  assert.match(JSON.stringify(broken), /not valid JSON/);
+  expectProblems([1, 2, 3], 'must hold a JSON object');
 });
 
-test('non-object JSON', () => {
-  expectProblems('[1,2,3]', 'must be a JSON object');
-});
-
-test('every missing field is reported at once', () => {
+test('every missing required field is reported at once', () => {
   expectProblems(
-    '{}',
-    'missing field "startggEndpoint"',
+    {},
     'missing field "token"',
     'missing field "tournament"',
     'missing field "eventName"',
-    'missing field "streamName"',
     'missing field "secret"',
     'missing field "adminPassword"',
-    'missing field "streamStation"',
-    'missing field "setFormat"',
-    'missing field "tcpPort"',
-    'missing field "httpPort"',
-    'missing field "auditDir"',
   );
+  assert.equal(problemsOf({}).length, 5, 'optional fields are never "missing"');
 });
 
-test('unknown field is rejected', () => {
-  expectProblems(JSON.stringify({ ...VALID, extra: 1 }), 'unknown field "extra"');
+test('optional fields take their defaults', () => {
+  const { token, tournament, eventName, secret, adminPassword } = VALID;
+  assert.deepEqual(valid({ token, tournament, eventName, secret, adminPassword }), {
+    token,
+    tournament,
+    eventName,
+    secret,
+    adminPassword,
+    weeklyNamePrefix: '',
+    streamName: '',
+    streamStation: 1,
+    setFormat: 'startgg',
+  });
 });
 
-test('startggEndpoint must be an http(s) URL', () => {
-  expectProblems(
-    JSON.stringify({ ...VALID, startggEndpoint: '' }),
-    'startggEndpoint must be an http(s) URL',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, startggEndpoint: 'api.start.gg/gql/alpha' }),
-    'startggEndpoint must be an http(s) URL',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, startggEndpoint: 'ftp://api.start.gg/gql/alpha' }),
-    'startggEndpoint must be an http(s) URL',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, startggEndpoint: 7 }),
-    'startggEndpoint must be an http(s) URL',
-  );
+test('unknown fields are ignored and reported, never fatal', () => {
+  const r = parseConfig({ ...VALID, extra: 1, another: 'x' });
+  assert.ok(r.ok);
+  assert.deepEqual(r.ignored.sort(), ['another', 'extra']);
+  assert.deepEqual(r.config, VALID);
 });
 
-test('empty token', () => {
-  expectProblems(JSON.stringify({ ...VALID, token: '' }), 'token must be a non-empty string');
+test('a settings file from before config v2 still loads', () => {
+  const r = loadConfig(writeConfig(JSON.stringify(V1_FILE)));
+  assert.equal(r.kind, 'ok');
+  if (r.kind !== 'ok') return;
+  assert.equal(r.config.tournament, 'lazyto-weekly');
+  assert.equal(r.config.weeklyNamePrefix, 'LazyTO Weekly #');
+  assert.deepEqual(r.ignored.sort(), ['auditDir', 'httpPort', 'startggEndpoint', 'tcpPort']);
 });
 
 test('tournament is a short URL or a full tournament slug, nothing else', () => {
-  assert.equal(
-    loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' }))).tournament,
-    'lazyto-weekly',
-  );
+  assert.equal(valid({ ...VALID, tournament: 'lazyto-weekly' }).tournament, 'lazyto-weekly');
   for (const bad of [
     '',
     'https://start.gg/lazyto-weekly',
@@ -133,128 +149,91 @@ test('tournament is a short URL or a full tournament slug, nothing else', () => 
     'start.gg/lazyto-weekly',
     905882,
   ]) {
-    expectProblems(
-      JSON.stringify({ ...VALID, tournament: bad }),
-      'tournament must be a start.gg short URL',
-    );
+    expectProblems({ ...VALID, tournament: bad }, 'tournament must be a start.gg short URL');
   }
 });
 
 test('weeklyNamePrefix: a string, "" for none, and only with a short URL', () => {
   const withShort = { ...VALID, tournament: 'lazyto-weekly', weeklyNamePrefix: 'LazyTO Weekly #' };
-  assert.equal(
-    loadConfig(writeConfig(JSON.stringify(withShort))).weeklyNamePrefix,
-    'LazyTO Weekly #',
-  );
-  assert.equal(
-    loadConfig(writeConfig(JSON.stringify({ ...VALID, tournament: 'lazyto-weekly' })))
-      .weeklyNamePrefix,
-    '',
-  );
+  assert.equal(valid(withShort).weeklyNamePrefix, 'LazyTO Weekly #');
+  expectProblems({ ...VALID, weeklyNamePrefix: 3 }, 'weeklyNamePrefix must be a string');
   expectProblems(
-    JSON.stringify({ ...VALID, weeklyNamePrefix: 3 }),
-    'weeklyNamePrefix must be a string',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, weeklyNamePrefix: 'Weekly #' }),
+    { ...VALID, weeklyNamePrefix: 'Weekly #' },
     'weeklyNamePrefix only applies to a short URL',
   );
 });
 
 test('secret is 8-16 letters, digits, - or _', () => {
-  assert.equal(
-    loadConfig(writeConfig(JSON.stringify({ ...VALID, secret: 'abcdefgh' }))).secret,
-    'abcdefgh',
-  );
+  assert.equal(valid({ ...VALID, secret: 'abcdefgh' }).secret, 'abcdefgh');
   for (const bad of [
     'short',
     'x'.repeat(17),
     'has space here',
     'semi;colon',
     'equals=sign',
-    1234567890,
+    1234,
   ]) {
-    expectProblems(JSON.stringify({ ...VALID, secret: bad }), 'secret must be 8-16 letters');
+    expectProblems({ ...VALID, secret: bad }, 'secret must be 8-16 letters');
   }
 });
 
 test('eventName must be non-empty; streamName may be "" for no stream', () => {
+  expectProblems({ ...VALID, eventName: '  ' }, 'eventName must be a non-empty string');
   expectProblems(
-    JSON.stringify({ ...VALID, eventName: '  ' }),
-    'eventName must be a non-empty string',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, streamName: 1358079 }),
+    { ...VALID, streamName: 1358079 },
     'streamName must be a string ("" for no stream)',
   );
-  assert.equal(
-    loadConfig(writeConfig(JSON.stringify({ ...VALID, streamName: '' }))).streamName,
-    '',
-  );
+  assert.equal(valid({ ...VALID, streamName: '' }).streamName, '');
 });
 
 test('adminPassword: printable, 8-64, not the secret', () => {
   for (const bad of ['short', 'has space in it', 'x'.repeat(65), 5]) {
     expectProblems(
-      JSON.stringify({ ...VALID, adminPassword: bad }),
+      { ...VALID, adminPassword: bad },
       'adminPassword must be 8-64 printable characters, no spaces',
     );
   }
   expectProblems(
-    JSON.stringify({ ...VALID, adminPassword: VALID.secret }),
+    { ...VALID, adminPassword: VALID.secret },
     'adminPassword must differ from secret (the secret is on every SD card)',
   );
 });
 
-test('setFormat must be a known format', () => {
+test('setFormat and streamStation are checked', () => {
+  expectProblems({ ...VALID, setFormat: 'bo5' }, 'setFormat must be one of "startgg", "top8q"');
   expectProblems(
-    JSON.stringify({ ...VALID, setFormat: 'bo5' }),
-    'setFormat must be one of "startgg", "top8q"',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, setFormat: 5 }),
-    'setFormat must be one of "startgg", "top8q"',
-  );
-});
-
-test('streamStation out of u16 range', () => {
-  expectProblems(
-    JSON.stringify({ ...VALID, streamStation: 65536 }),
+    { ...VALID, streamStation: 65536 },
     'streamStation must be an integer in 1..65535',
   );
-  expectProblems(
-    JSON.stringify({ ...VALID, streamStation: 0 }),
-    'streamStation must be an integer in 1..65535',
-  );
+  expectProblems({ ...VALID, streamStation: 0 }, 'streamStation must be an integer in 1..65535');
 });
 
-test('port out of range', () => {
-  expectProblems(
-    JSON.stringify({ ...VALID, tcpPort: 0 }),
-    'tcpPort must be an integer in 1..65535',
-  );
-  expectProblems(
-    JSON.stringify({ ...VALID, httpPort: 70000 }),
-    'httpPort must be an integer in 1..65535',
-  );
+test('saveConfig writes what loadConfig reads, readable by its owner only', () => {
+  const path = join(dir, 'saved.json');
+  saveConfig(path, VALID);
+  assert.deepEqual(loadConfig(path), { kind: 'ok', config: VALID, ignored: [] });
+  assert.ok(readFileSync(path, 'utf8').endsWith('\n'));
+  if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600);
 });
 
-test('tcpPort and httpPort must differ', () => {
-  expectProblems(
-    JSON.stringify({ ...VALID, httpPort: VALID.tcpPort }),
-    'tcpPort and httpPort must differ',
-  );
+test('newSecret fits the secret rule and differs every time', () => {
+  const a = newSecret();
+  assert.match(a, /^[A-Za-z0-9_-]{16}$/);
+  assert.notEqual(a, newSecret());
+  assert.equal(valid({ ...VALID, secret: a }).secret, a);
 });
 
-test('empty auditDir', () => {
-  expectProblems(JSON.stringify({ ...VALID, auditDir: '' }), 'auditDir must be a non-empty string');
+test('weeklyPrefixFrom strips the trailing number', () => {
+  assert.equal(weeklyPrefixFrom('LazyTO Weekly #160'), 'LazyTO Weekly #');
+  assert.equal(weeklyPrefixFrom('Melee @ Abbey Tavern #161'), 'Melee @ Abbey Tavern #');
+  assert.equal(weeklyPrefixFrom('Smash Weekly 42'), 'Smash Weekly ');
+  assert.equal(weeklyPrefixFrom('GENESIS: BLACK'), '');
+  assert.equal(weeklyPrefixFrom('2026'), '');
 });
 
-// scripts/push.ts (relayConfigFromEnv) is what writes /etc/lazyto/config.json
-// on the Pi, from .env. It must produce exactly the fields config.ts
-// validates, or the first push after a config change fails on the Pi instead
-// of here.
-test('scripts/push.ts writes exactly the validated fields', () => {
+// scripts/push.ts (relayConfigFromEnv) writes the settings file on a Pi it
+// installs a development build on. What it writes must load.
+test('scripts/push.ts writes a settings file the relay accepts', () => {
   const written = relayConfigFromEnv(
     {
       STARTGG_TOKEN: 't',
@@ -264,8 +243,9 @@ test('scripts/push.ts writes exactly the validated fields', () => {
       EVENT_NAME: 'e',
       STREAM_NAME: 's',
     },
-    { test: false, tcpPort: 1, httpPort: 2 },
+    { test: false },
   );
-  assert.deepEqual(Object.keys(written).sort(), Object.keys(VALID).sort());
-  assert.doesNotThrow(() => loadConfig(writeConfig(JSON.stringify(written))));
+  const r = parseConfig(written);
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.deepEqual(r.ignored, [], 'push writes no field the relay does not know');
 });

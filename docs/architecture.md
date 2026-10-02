@@ -169,6 +169,10 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 | Module | Responsibility |
 |--------|----------------|
+| `app.ts` | The process: web server first, then the night's event by mode (setup, starting, failed, running) |
+| `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
+| `setup.ts` | Setup wizard and settings page |
+| `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
@@ -178,11 +182,12 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `startgg.ts` | GraphQL client, rate limiter, retry on 5xx only |
 | `state.ts` | In-memory station to set map |
 | `audit.ts` | Append-only JSONL log |
-| `status.ts` | Status page on 29473 |
+| `status.ts` | The status page and the TO's actions on it |
 | `admin.ts` | The status page's TO actions: free a station, per-set best-of |
 | `chars.ts` | Melee character id to start.gg character id |
 | `stages.ts` | Melee stage id to start.gg stage id |
-| `config.ts` | Loads and validates the config |
+| `config.ts` | The settings file: one field table, strict values, optional fields with defaults |
+| `format.ts` | Best-of per set (`setFormat`) |
 
 ## Wire protocol
 
@@ -232,30 +237,36 @@ UDP messages (not on the TCP wire):
 
 ### Startup and event discovery
 
-Startup validates every config field and exits non-zero on any problem. There are no defaults.
+The web server on 29473 starts first and stays up (`src/app.ts`). The relay is then in one of four modes:
+
+| Mode | When | The page shows |
+|------|------|----------------|
+| setup | no valid settings yet | the setup wizard, guarded by a one-time setup code |
+| starting | settings saved | "finding tonight's event" |
+| failed | the event couldn't be found or started: bad token, a short URL on no tournament, start.gg or the internet down, the clock not set yet | the reason, with Retry; it also retries after 30 s, 60 s, then every 2 min |
+| running | the event resolved and the cache loaded | the status page; TCP, beacon and telemetry are up |
+
+The settings live in `/var/lib/lazyto/config.json` (`src/config.ts`), written by the setup page:
 
 | Field | Meaning |
 |-------|---------|
-| `startggEndpoint` | GraphQL URL (the real API, or `test/fake-startgg.ts` in a rehearsal) |
 | `token` | start.gg token with admin rights on the tournament |
 | `tournament` | a start.gg short URL, or a full slug `tournament/<slug>` |
 | `eventName` | matched case-insensitively against the tournament's Melee singles events |
-| `streamName` | the stream to assign the stream station's sets to |
-| `weeklyNamePrefix` | `""` for none; otherwise the numbered-weekly fallback below |
-| `secret` | shared secret, 8 to 16 of `A-Z a-z 0-9 - _` |
-| `adminPassword` | the TO's password for the status page's actions, 8 to 64 printable characters, never the same as `secret` |
-| `streamStation` | the station number of the stream setup |
-| `setFormat` | `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
-| `tcpPort`, `httpPort` | 29470, 29473 |
-| `auditDir` | where audit logs go |
+| `secret` | the Wii secret, 8 to 16 of `A-Z a-z 0-9 - _`, generated on the first save |
+| `adminPassword` | the TO's password for the settings and the status page's actions, 8 to 64 printable characters, never the same as `secret` |
+| `weeklyNamePrefix` | optional, `""`: the numbered-weekly fallback below, derived from the chosen tournament's name |
+| `streamName` | optional, `""` for no stream: the stream the stream station's sets go on |
+| `streamStation` | optional, 1: the station number of the stream setup |
+| `setFormat` | optional, `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
 
-`npm run push` (`scripts/push.ts`) writes the file from `.env`. The relay turns names into ids once at startup, because ids change every week and names do not.
+Values are checked strictly. Every field beyond the first five is optional with a default, and unknown fields are ignored, so a newer or older build always accepts the file and an auto-update never stalls a Pi. The ports (29470, 29473) and paths are fixed. The relay turns names into ids at each start, because ids change every week and names do not.
 
-- **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament needs no weekly push.
+- **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament changes nothing on the relay.
 - **Numbered-weekly fallback:** if `weeklyNamePrefix` is set and no admin tournament carries the short URL, the relay takes the admin tournament named `<prefix><number>` whose start is nearest to now, within 30 days (for example a weekly named "LazyTO Weekly #N"). The startup log says which rule matched.
-- **Full slug:** looked up directly. This is the only way to reach an unpublished tournament.
+- **Full slug:** looked up directly. This is the only way to reach an unpublished tournament; the setup page takes its link.
 
-The event is the one Melee singles event whose name contains `eventName`. The stream is the one named `streamName`. Zero or several matches is a startup failure that lists what was found. A restart re-resolves. The status page header names the tournament and event, so a stale week is visible.
+The event is the one Melee singles event whose name contains `eventName`. The stream is the one named `streamName`. Zero or several matches is a failed start that lists what was found. Saving settings applies them in place: the event stops and starts again, and claims come back from the audit log. The status page header names the tournament and event, so a stale week is visible.
 
 ### Set cache
 

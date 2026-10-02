@@ -32,7 +32,7 @@
 // RELAY_SECRET are read from .env and never leave this machine except over ssh.
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { fail, loadDotEnv, runCommand, runMain } from './lib/cli.js';
+import { loadDotEnv, runCommand, runMain } from './lib/cli.js';
 import { pushRelay, requireEnvFile } from './lib/pushrelay.js';
 
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -43,8 +43,6 @@ await runMain('push', () => {
       'pi-host': { type: 'string', default: 'relay.local' },
       user: { type: 'string', default: 'pi' },
       test: { type: 'boolean', default: false },
-      'tcp-port': { type: 'string', default: '29470' },
-      'http-port': { type: 'string', default: '29473' },
       'dry-run': { type: 'boolean', default: false },
       'no-auto-update': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
@@ -52,16 +50,10 @@ await runMain('push', () => {
   });
   if (values.help) {
     console.log(
-      'usage: npm run push -- [--test] [--dry-run] [--pi-host relay.local] [--user pi] [--tcp-port 29470] [--http-port 29473] [--no-auto-update]',
+      'usage: npm run push -- [--test] [--dry-run] [--pi-host relay.local] [--user pi] [--no-auto-update]',
     );
     return;
   }
-  const port = (name: 'tcp-port' | 'http-port'): number => {
-    const n = Number.parseInt(values[name], 10);
-    if (!Number.isInteger(n) || n < 1 || n > 65535)
-      fail(`--${name} must be a port number, not '${values[name]}'`);
-    return n;
-  };
   const envPath = resolve(repoRoot, '.env');
   requireEnvFile(envPath);
   pushRelay(
@@ -71,8 +63,6 @@ await runMain('push', () => {
       piHost: values['pi-host'],
       user: values.user,
       test: values.test,
-      tcpPort: port('tcp-port'),
-      httpPort: port('http-port'),
       dryRun: values['dry-run'],
       noAutoUpdate: values['no-auto-update'],
     },

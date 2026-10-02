@@ -23,20 +23,28 @@ import {
 
 type Interfaces = Record<string, NetworkInterfaceInfo[] | undefined>;
 
+/** Every non-internal IPv4 interface address of this machine. */
+function ipv4Interfaces(ifaces: Interfaces): NetworkInterfaceInfo[] {
+  return Object.values(ifaces)
+    .flatMap((list) => list ?? [])
+    .filter((a) => a.family === 'IPv4' && !a.internal);
+}
+
 /** Directed broadcast address (addr | ~mask) of every non-internal IPv4 interface, deduplicated. */
 export function directedBroadcasts(ifaces: Interfaces = networkInterfaces()): string[] {
   const out = new Set<string>();
-  for (const list of Object.values(ifaces)) {
-    for (const a of list ?? []) {
-      // Node reports family as 'IPv4' (a number, 4, in 18.0 only).
-      if ((a.family !== 'IPv4' && (a.family as unknown) !== 4) || a.internal) continue;
-      const addr = a.address.split('.').map(Number);
-      const mask = a.netmask.split('.').map(Number);
-      if (addr.length !== 4 || mask.length !== 4) continue;
-      out.add(addr.map((b, i) => (b | (~mask[i]! & 0xff)) & 0xff).join('.'));
-    }
+  for (const a of ipv4Interfaces(ifaces)) {
+    const addr = a.address.split('.').map(Number);
+    const mask = a.netmask.split('.').map(Number);
+    if (addr.length !== 4 || mask.length !== 4) continue;
+    out.add(addr.map((b, i) => (b | (~mask[i]! & 0xff)) & 0xff).join('.'));
   }
   return [...out].sort();
+}
+
+/** This machine's own IPv4 addresses, for pages to show when relay.local does not resolve. */
+export function localAddresses(ifaces: Interfaces = networkInterfaces()): string[] {
+  return [...new Set(ipv4Interfaces(ifaces).map((a) => a.address))].sort();
 }
 
 export interface BeaconOptions {

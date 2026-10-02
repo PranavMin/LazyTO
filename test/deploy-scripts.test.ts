@@ -449,12 +449,11 @@ const ENV = {
   STREAM_NAME: 'LazyTOStream',
   TEST_TOURNAMENT: 'tournament/lazyto-test',
 };
-const PO = { test: false, tcpPort: 29470, httpPort: 29473 };
+const PO = { test: false };
 
 test('relayConfigFromEnv: production vs --test, defaults, and the same errors push.ps1 gave', () => {
   const prod = relayConfigFromEnv(ENV, PO);
   assert.deepEqual(prod, {
-    startggEndpoint: 'https://api.start.gg/gql/alpha',
     token: 'tok-1234567',
     tournament: 'lazyto-weekly',
     eventName: 'Melee Singles',
@@ -464,9 +463,6 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
     adminPassword: 'to-pass-9876',
     streamStation: 1,
     setFormat: 'startgg',
-    tcpPort: 29470,
-    httpPort: 29473,
-    auditDir: '/var/lib/lazyto',
   });
   const t = relayConfigFromEnv(
     { ...ENV, STREAM_STATION: '3', SET_FORMAT: 'top8q' },
@@ -483,7 +479,7 @@ test('relayConfigFromEnv: production vs --test, defaults, and the same errors pu
   );
   assert.equal(
     describeRelayConfig(t, { ...PO, test: true }),
-    "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream' on station 3, format top8q, tcp 29470, http 29473, token tok-...",
+    "config: tournament/lazyto-test (TEST), event ~ 'Melee Singles', stream 'LazyTOStream' on station 3, format top8q, token tok-...",
   );
   const noStream = relayConfigFromEnv({ ...ENV, STREAM_NAME: '' }, PO);
   assert.equal(noStream.streamName, '', 'STREAM_NAME is optional: no stream');

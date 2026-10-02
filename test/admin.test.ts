@@ -3,7 +3,7 @@
 // audit replay that keeps best-of overrides across a restart.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { passwordMatches } from '../src/status.js';
+import { passwordMatches } from '../src/web.js';
 import { replayBestOf } from '../src/audit.js';
 import { RelayStatus } from '../generated/wire.js';
 import { game } from './wii-client.js';

@@ -295,10 +295,10 @@ test('upstream 4xx: set completed by the TO (decisions.md R6)', async (t) => {
 });
 
 test('rate limited request gets ST_RATE_LIMITED', async (t) => {
-  // A 2-token bucket refilling one token a minute: the initial cache
-  // refresh and the first start each take one; the next upstream call
-  // cannot get a token inside the 50 ms budget.
-  const env = await setup({ limits: { capacity: 2, refillPerMinute: 1, maxWaitMs: 50 } });
+  // A 3-token bucket refilling one token a minute: finding the event at
+  // startup, the initial cache refresh and the first start each take one;
+  // the next upstream call cannot get a token inside the 50 ms budget.
+  const env = await setup({ limits: { capacity: 3, refillPerMinute: 1, maxWaitMs: 50 } });
   t.after(env.close);
 
   const first = await env.wii(3).startSet(SET);

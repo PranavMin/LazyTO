@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect, type Socket } from 'node:net';
 import { rmSync } from 'node:fs';
-import { STALE_CACHE_MS } from '../src/status.js';
+import { STALE_CACHE_MS, renderStatus } from '../src/status.js';
 import { WiiClient, game } from './wii-client.js';
 import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
@@ -19,7 +19,7 @@ test('status page', async (t) => {
   const { cache, state } = h.ev;
   const tcp = h.ev.tcp;
   const telemetry = h.ev.telemetry;
-  const status = h.status;
+  const view = h.view;
 
   await t.test('Wii consoles: module status, log tail, full log page', async () => {
     let html = await (await fetch(statusUrl)).text();
@@ -209,10 +209,10 @@ test('status page', async (t) => {
   await t.test('a cache older than STALE_CACHE_MS is flagged', async (tt) => {
     tt.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     tt.mock.timers.tick(STALE_CACHE_MS + 5_000);
-    const html = status.render();
+    const html = renderStatus(view);
     assert.match(html, /⚠ cache is stale \(last refresh \d+s ago/);
     tt.mock.timers.reset();
-    assert.doesNotMatch(status.render(), /cache is stale/);
+    assert.doesNotMatch(renderStatus(view), /cache is stale/);
   });
 });
 
@@ -232,8 +232,8 @@ test(
   { timeout: 5000 },
   async () => {
     const h = await startHarness();
-    const status = h.status;
-    const port = status.address().port;
+    const web = h.app.web;
+    const port = web.address().port;
 
     // A phone between meta refreshes: one keep-alive socket that has fetched the
     // page, one its browser opened ahead for the next refresh, and one cut off
@@ -249,7 +249,7 @@ test(
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const start = Date.now();
-    await status.close();
+    await web.close();
     assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
     await Promise.all([keptAlive.dropped, preconnected.dropped, halfSent.dropped]);
     // The status server is closed above; shut the rest down without closing it twice.

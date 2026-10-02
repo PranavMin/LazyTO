@@ -5,29 +5,15 @@
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SET_FORMATS, type SetFormat } from '../../src/format.js';
+import type { Config } from '../../src/config.js';
 import { fail } from './cli.js';
 import { SECRET_RE } from './tcfg.js';
 
-export interface RelayConfig {
-  startggEndpoint: string;
-  token: string;
-  tournament: string;
-  eventName: string;
-  streamName: string;
-  weeklyNamePrefix: string;
-  secret: string;
-  adminPassword: string;
-  streamStation: number;
-  setFormat: SetFormat;
-  tcpPort: number;
-  httpPort: number;
-  auditDir: string;
-}
+/** The relay's settings file (src/config.ts), written from .env. */
+export type RelayConfig = Config;
 
 export interface PushOptions {
   test: boolean;
-  tcpPort: number;
-  httpPort: number;
 }
 
 /** Same field set and same checks as the relay's loadConfig expects (test/config.test.ts pins the field list). */
@@ -69,7 +55,6 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
     weeklyNamePrefix = tournament.startsWith('tournament/') ? '' : (env.WEEKLY_NAME_PREFIX ?? '');
   }
   return {
-    startggEndpoint: 'https://api.start.gg/gql/alpha',
     token: env.STARTGG_TOKEN,
     tournament,
     eventName,
@@ -79,15 +64,12 @@ export function relayConfigFromEnv(env: Record<string, string>, opts: PushOption
     adminPassword,
     streamStation,
     setFormat,
-    tcpPort: opts.tcpPort,
-    httpPort: opts.httpPort,
-    auditDir: '/var/lib/lazyto',
   };
 }
 
 /** The summary line push prints (token shown as its first 4 characters only). */
 export function describeRelayConfig(c: RelayConfig, opts: PushOptions): string {
-  return `config: ${c.tournament} (${opts.test ? 'TEST' : 'production'}), event ~ '${c.eventName}', ${c.streamName ? `stream '${c.streamName}' on station ${c.streamStation}` : 'no stream'}, format ${c.setFormat}, tcp ${c.tcpPort}, http ${c.httpPort}, token ${c.token.slice(0, 4)}...`;
+  return `config: ${c.tournament} (${opts.test ? 'TEST' : 'production'}), event ~ '${c.eventName}', ${c.streamName ? `stream '${c.streamName}' on station ${c.streamStation}` : 'no stream'}, format ${c.setFormat}, token ${c.token.slice(0, 4)}...`;
 }
 
 /** dist/, deploy/, package.json ("type": "module", needed beside dist/), README.md and config.json into stageDir (recreated). */

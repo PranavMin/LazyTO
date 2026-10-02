@@ -3,7 +3,8 @@
 # Run as root on the Pi from an extracted bundle made by deploy/push.ps1:
 #   sudo bash /tmp/tr/deploy/install.sh /tmp/tr
 # The bundle holds dist/ (compiled relay), package.json ("type": "module",
-# which dist/*.js needs beside it), deploy/ (this dir) and config.json.
+# which dist/*.js needs beside it), deploy/ (this dir) and, from push, the
+# relay's settings as config.json.
 # Idempotent: re-running upgrades the relay and config and restarts it.
 #
 # Runs on a Pi of its own or next to other software on a shared one (the
@@ -57,13 +58,6 @@ CONF
 # Takes effect when a Wi-Fi connection next comes up (at the latest, the next boot).
 systemctl reload NetworkManager
 
-# --- wait for a synced clock before the relay starts: a Pi without a battery
-#     RTC boots with last shutdown's time, and the weekly fallback picks the
-#     weekly nearest to "now" (src/resolve.ts). The unit orders after
-#     time-sync.target; this service is what makes that target wait. ---
-systemctl enable systemd-time-wait-sync.service >/dev/null 2>&1 \
-  || echo "install.sh: note: systemd-time-wait-sync not available; the relay may start before the clock syncs"
-
 # --- service user and directories ---
 if ! id -u relay >/dev/null 2>&1; then
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin relay
@@ -88,8 +82,8 @@ if [[ -f "$BUNDLE/VERSION" ]]; then cp "$BUNDLE/VERSION" "$APP/VERSION"; else ec
 rm -f "$DATA_DIR/update-check" "$DATA_DIR/update-bad"
 chown -R root:root "$APP"
 
-# --- config: holds the start.gg token, so root-owned and readable by relay only ---
-install -o root -g relay -m 0640 "$BUNDLE/config.json" "$CONF_DIR/config.json"
+# --- settings: hold the start.gg token, so readable by relay only ---
+install -o relay -g relay -m 0600 "$BUNDLE/config.json" "$DATA_DIR/config.json"
 
 # --- unit ---
 install -o root -g root -m 0644 "$BUNDLE/deploy/$UNIT.service" "/etc/systemd/system/$UNIT.service"
@@ -107,8 +101,7 @@ done
 echo
 if systemctl is-active --quiet "$UNIT" && up; then
   journalctl -u "$UNIT" --since "-30s" -o cat --no-pager | grep "^relay up:" | tail -1
-  http_port=$(sed -n 's/.*"httpPort": *\([0-9]*\).*/\1/p' "$CONF_DIR/config.json")
-  echo "OK: $UNIT is running. Status page: http://$(hostname).local:${http_port}"
+  echo "OK: $UNIT is running. Status page: http://$(hostname).local:29473"
 else
   echo "FAILED: $UNIT is not up. Last log lines:" >&2
   journalctl -u "$UNIT" --since "-60s" -o cat --no-pager | tail -20 >&2
