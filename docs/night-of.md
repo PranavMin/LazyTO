@@ -60,6 +60,8 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | Last action `ST_SET_TAKEN` | Two stations picked the same set, or it was started by hand | Nothing to do. The players pick another set. |
 | Last action `ST_NOT_STREAM` | A card that isn't the stream station has `stream=1` | Fix that card. |
 | Set shows as `set 12345` | The set left start.gg's pending list mid-set | The station clears on its next refresh. Check start.gg if the players didn't finish. |
+| A Wii died or froze mid-set and its station still shows the set | The set is in progress on start.gg, so no other Wii can take it | Tap **free** on that station. The page shows the set and the score it will discard; confirm. The set goes back on every Wii's list at 0-0. Your password is `ADMIN_PASSWORD`. |
+| A set needs a different best-of | The format rule is wrong for this set, or start.gg won't take a short set | Under **Waiting sets**, tap Bo3 or Bo5. **auto** goes back to the rule. A set already on a station can't change; free it first if you must. |
 | The relay restarted mid-tournament | Fine. Claimed sets come back from the action log. | Nothing to do. A rebooted Wii shows its current set again. |
 
 For problems on a single Wii, see the table in [wii-setup.md](wii-setup.md).

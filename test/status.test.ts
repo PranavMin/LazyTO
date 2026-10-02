@@ -143,7 +143,7 @@ test('status page', async (t) => {
     assert.match(html, /<meta name="viewport"/, 'phone-readable');
     assert.match(
       html,
-      /<meta http-equiv="refresh" content="5">/,
+      /<meta http-equiv="refresh" content="5;url=\/">/,
       'the only client-side behaviour is the meta refresh',
     );
     assert.doesNotMatch(html, /<script/, 'no client JS');
