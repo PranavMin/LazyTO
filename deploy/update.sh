@@ -41,7 +41,7 @@ log() { echo "update: $*"; }
 install_from() {
   local src=$1 f
   for f in VERSION package.json dist/main.js deploy/update.sh "deploy/$UNIT.service" \
-    wii/tournament.bin wii/apps/LazyTO/boot.dol; do
+    wii/lazyto_kiosk.bin wii/apps/LazyTO/boot.dol; do
     if [[ ! -f "$src/$f" ]]; then
       log "the bundle has no $f"
       return 1

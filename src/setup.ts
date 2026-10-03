@@ -337,7 +337,7 @@ ${hidden(carry)}<input type="hidden" name="step" value="save">
 <label for="password2">Again</label>
 <input type="password" id="password2" name="password2" autocomplete="new-password"${firstRun ? ' required' : ''}>
 <p class="muted small">For these settings and the status page's buttons. 8 or more characters, no spaces. Your browser asks for it; the user name can be anything.</p>
-${saved ? `<h2>Wii secret</h2>\n<p><code>${escapeHtml(saved.secret)}</code></p>\n<p class="muted small">On every SD card, as <code>secret=</code> in tournament.cfg.</p>\n<label class="choice"><input type="checkbox" name="newSecret"><span>Make a new Wii secret, for a lost card or a stranger on the network. Every card then needs the new one.</span></label>\n` : ''}${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
+${saved ? `<h2>Wii secret</h2>\n<p><code>${escapeHtml(saved.secret)}</code></p>\n<p class="muted small">On every SD card, as <code>secret=</code> in lazyto_station.txt.</p>\n<label class="choice"><input type="checkbox" name="newSecret"><span>Make a new Wii secret, for a lost card or a stranger on the network. Every card then needs the new one.</span></label>\n` : ''}${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
 <div class="acts"><button class="primary">Save</button>${firstRun ? '' : '<a class="btnlink" href="/">cancel</a>'}</div>
 </form>
 ${firstRun ? '' : `<form method="post" action="/setup" class="block"><input type="hidden" name="step" value="token"><div class="acts"><button>Change tournament</button></div></form>`}`,

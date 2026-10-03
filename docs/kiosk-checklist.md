@@ -1,6 +1,6 @@
 # New-version check-yourself list
 
-Manual checks to run **every time a new `tournament.bin` is built** (the kiosk module
+Manual checks to run **every time a new `lazyto_kiosk.bin` is built** (the kiosk module
 injected into stock Melee 1.02, see `kiosk.md`), each one born from a bug we actually hit. If a check fails,
 the note says the usual cause and where it's documented. **This is a living list - add a row
 whenever a new build issue bites us.** Rows tagged *(venue code)* are behaviours that now come
@@ -17,12 +17,12 @@ Legend: each item is something *you* verify by eye on the running build.
       `python configure.py --non-matching` once). The tail of its output lists every patch
       and ends with `guard: 0x8016D800 == 0x7C0802A6` and the `.bin` size (~26 KB). *A failed
       external resolution or a gecko overlap stops the build with the symbol/address named -
-      never hand-edit `tournament.bin`.*
+      never hand-edit `lazyto_kiosk.bin`.*
 - [ ] **No non-ASCII in edited C files** before building (scan for em-dash U+2014,
       smart quotes, etc.). *MWCC parses source as Shift-JIS and errors on them.*
 - [ ] If any on-screen text looks jammed/wrong after an edit, **delete `kiosk/build/obj/*.o`** and
       rebuild. *A stale `mntourney.o` once rendered "STARTPapa VS Hotel" / wrong confirm text.*
-- [ ] For hardware: copy `tournament.bin` to the SD card root next to `tournament.cfg`; the
+- [ ] For hardware: copy `lazyto_kiosk.bin` to the SD card root next to `lazyto_station.txt`; the
       Nintendont boot log must show the module line *and* `Patch:Apply Slippi core`.
 
 ## 1. Boot & menu flow

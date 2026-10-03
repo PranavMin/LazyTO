@@ -1,4 +1,4 @@
-# The tournament module (`tournament.bin`)
+# The tournament module (`lazyto_kiosk.bin`)
 
 Since 2026-09-24 the kiosk is not a rebuilt Melee: the venue Wiis run a **stock
 Melee 1.02 ISO** and our code is a position-fixed blob that the loader copies into RAM at boot
@@ -25,7 +25,7 @@ external fails the build.
 ## Build
 
 ```
-python kiosk/tools/build_module.py        # -> kiosk/build/tournament.bin (about 81 KB, under 100 KB)
+python kiosk/tools/build_module.py        # -> kiosk/build/lazyto_kiosk.bin (about 81 KB, under 100 KB)
 ```
 
 Prerequisite: the `melee/` submodule (the unmodified decomp) and its compilers and
@@ -46,8 +46,8 @@ which pins that DOL by SHA-1 (`melee/config/GALE01/build.sha1`):
   them out (alignment padding excluded);
 - the guard word is the constant `GUARD_WORD` (`0x7C0802A6`) in `build_module.py`.
 
-So CI (`.github/workflows/kiosk.yml`) builds the same `tournament.bin` as a local build, and
-`release.yml` puts it in every bundle, as `wii/tournament.bin` in `lazyto.tgz`. A CI module
+So CI (`.github/workflows/kiosk.yml`) builds the same `lazyto_kiosk.bin` as a local build, and
+`release.yml` puts it in every bundle, as `wii/lazyto_kiosk.bin` in `lazyto.tgz`. A CI module
 and a local one from the same commit differ only in the version text (hash and build date).
 
 ## Developer flags
@@ -88,7 +88,7 @@ loader must (1) find `guard_word` at `guard_addr` - stock 1.02 in RAM, nothing e
 patched; (2) require `*(0x80000034) >= load_addr + blob_len` (BootInfo arenaHi, which Melee's
 `OSInit` adopts), (3) copy the blob, (4) write the patches, (5) write `load_addr` to
 `0x80000034` so the arena stops below the module, (6) invalidate the icache over both ranges.
-The loader is Nintendont `kernel/Patch.c LoadTournamentModule` (reads `sd:/tournament.bin`
+The loader is Nintendont `kernel/Patch.c LoadTournamentModule` (reads `sd:/lazyto_kiosk.bin`
 in the full-DOL patch pass). A development setup in Dolphin uses an equivalent loader.
 
 ## Patches (`kiosk/tools/module_hooks.txt`)

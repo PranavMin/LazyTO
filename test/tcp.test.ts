@@ -1,6 +1,6 @@
 // Integration tests for the TCP server: every relay-side row of the
 // architecture.md error table, plus the happy paths. The first two rows
-// of that table (no tournament.cfg, relay unreachable) are Wii-side
+// of that table (no lazyto_station.txt, relay unreachable) are Wii-side
 // behaviors with no relay code to test; the closest relay-side property --
 // a connection that is not our protocol gets dropped, not answered -- is
 // covered here. The relay-restart row is covered in audit.test.ts, where
@@ -193,18 +193,18 @@ test('full set lifecycle on a non-stream station', async (t) => {
   });
 });
 
-test('the stream is decided by station, not by the card', async (t) => {
+test('the stream is decided by station, not by start_set_req.stream', async (t) => {
   const env = await setup();
   t.after(env.close);
 
-  await t.test('stream=1 on another station starts the set, off stream', async () => {
+  await t.test('stream 1 from another station starts the set, off stream', async () => {
     const r = await env.wii(4, 1).startSet(SET, 1);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
     assert.equal(env.fake.getSet(SET).state, 2);
     assert.equal(env.fake.getSet(SET).stream, null);
   });
 
-  await t.test('the stream station goes on stream even with stream=0 on its card', async () => {
+  await t.test('the stream station goes on stream even with stream 0', async () => {
     const r = await env.wii(STREAM_STATION, 0).startSet(107949995, 0);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
     assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);

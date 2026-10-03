@@ -138,17 +138,17 @@ export function moduleStateText(s: StationStatus): string {
     case ModuleState.MOD_LOADED:
       return `loaded (${s.module_len} bytes, ${s.module_patches} patches)`;
     case ModuleState.MOD_NOT_FOUND:
-      return 'NOT LOADED: no tournament.bin on the SD card';
+      return 'NOT LOADED: no lazyto_kiosk.bin on the SD card';
     case ModuleState.MOD_BAD_FILE:
-      return 'NOT LOADED: tournament.bin is not a module file';
+      return 'NOT LOADED: lazyto_kiosk.bin is not a module file';
     case ModuleState.MOD_BAD_HEADER:
-      return 'NOT LOADED: tournament.bin header rejected (wrong version or size)';
+      return 'NOT LOADED: lazyto_kiosk.bin header rejected (wrong version or size)';
     case ModuleState.MOD_GUARD:
       return 'NOT LOADED: the disc is not stock Melee 1.02';
     case ModuleState.MOD_ARENA:
       return `NOT LOADED: module overlaps game memory (arena top 0x${s.arena_hi.toString(16)})`;
     case ModuleState.MOD_READ_FAILED:
-      return 'NOT LOADED: reading tournament.bin failed';
+      return 'NOT LOADED: reading lazyto_kiosk.bin failed';
     case ModuleState.MOD_NOT_MELEE:
       return 'NOT LOADED: the game is not Melee NTSC 1.02';
     default:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the tournament module: the kiosk TUs compiled with the decomp's MWCC,
 linked at a fixed address against the VANILLA GALE01 v1.02 symbol map, packed
-with the hook table into kiosk/build/tournament.bin for the LazyTO loader. The
+with the hook table into kiosk/build/lazyto_kiosk.bin for the LazyTO loader. The
 game ISO stays stock Melee; see docs/architecture.md.
 
 The kiosk's own sources live in kiosk/src and kiosk/include. Everything else
@@ -12,7 +12,7 @@ config/GALE01/symbols.txt and config/GALE01/splits.txt.
     python kiosk/tools/fetch_decomp_tools.py    # once
     python kiosk/tools/build_module.py          # from the repo root
 
-No Nintendo file is used, so CI builds the same tournament.bin
+No Nintendo file is used, so CI builds the same lazyto_kiosk.bin
 (.github/workflows/kiosk.yml). The two facts of stock 1.02 the build checks
 come from the decomp, which pins that DOL by SHA-1 (config/GALE01/build.sha1):
 every hook address must fall inside a DOL section as splits.txt lays them out,
@@ -48,7 +48,7 @@ OUT_DIR = KIOSK / "build" / "obj"
 SYMBOLS = DECOMP / "config" / "GALE01" / "symbols.txt"
 HOOKS = KIOSK / "tools" / "module_hooks.txt"
 GECKO_DIR = REPO / "Nintendont" / "kernel" / "gecko"
-OUTPUT = KIOSK / "build" / "tournament.bin"
+OUTPUT = KIOSK / "build" / "lazyto_kiosk.bin"
 
 # Where the module lives: the top of MEM1, carved off the game's arena. The
 # IPL/apploader places the FST at 0x817FFFFF - max_fst_size (0x817F8AC0 on a
@@ -329,7 +329,7 @@ def gecko_touches():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build kiosk/build/tournament.bin.")
+    ap = argparse.ArgumentParser(description="Build kiosk/build/lazyto_kiosk.bin.")
     ap.add_argument("--demo", nargs="?", const="start", choices=sorted(DEMO_FLAGS),
                     help="a module for a headless Dolphin run (docs/kiosk.md): start "
                          "(the default) confirms the first set and fakes a port claim, "

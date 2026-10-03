@@ -146,7 +146,7 @@ test('status datagrams set the module state; texts name the reason', () => {
   assert.equal(s.module_load, 0x817e0000);
   assert.match(
     moduleStateText({ ...s, module_state: ModuleState.MOD_NOT_FOUND }),
-    /no tournament\.bin/,
+    /no lazyto_kiosk\.bin/,
   );
   assert.match(
     moduleStateText({ ...s, module_state: ModuleState.MOD_GUARD }),

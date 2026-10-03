@@ -15,7 +15,7 @@ export const MAX_SETS = 56; // cap on set_entry rows in a LIST_SETS response; 56
 export const MSG_LEN = 30; // human-readable status text in relay_resp
 export const ROUND_LEN = 24; // round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit)
 export const TAG_LEN = 16; // player tag
-export const BEACON_PORT = 29471; // UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address)
+export const BEACON_PORT = 29471; // UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; lazyto_station.txt has no relay address)
 export const BEACON_INTERVAL_MS = 2000; // the relay sends one relay_beacon per interval on every IPv4 interface
 export const SECRET_LEN = 16; // relay shared secret, printable ASCII, NUL-padded (decisions.md R16)
 export const AUTH_MAGIC_0 = 77; // 'M', first byte of relay_auth
@@ -43,7 +43,7 @@ export enum RelayStatus {
   ST_BAD_VERSION = 1,
   ST_SET_NOT_FOUND = 2,
   ST_SET_TAKEN = 3, // started on another station
-  ST_NOT_STREAM = 4, // stream flag from non-stream station
+  ST_NOT_STREAM = 4, // no longer sent: the relay picks the stream station itself
   ST_STARTGG_ERROR = 5, // upstream rejected; see status page
   ST_RATE_LIMITED = 6,
   ST_INTERNAL = 7,
@@ -56,11 +56,11 @@ export enum ExiCmd {
   EXI_RELAY_POLL = 241, // read {state, response buffer}
 }
 
-/** bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg) */
+/** bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, lazyto_station.txt) */
 export enum ExiPollFlags {
   PF_NO_NETWORK = 1, // the host will never have a network: the loader's Network option is off
-  PF_NO_CFG = 2, // no usable sd:/tournament.cfg
-  PF_NO_SECRET = 4, // tournament.cfg has no valid secret=
+  PF_NO_CFG = 2, // no usable sd:/lazyto_station.txt
+  PF_NO_SECRET = 4, // lazyto_station.txt has no valid secret=
   PF_NET_JOINING = 8, // Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it
 }
 
@@ -85,11 +85,11 @@ export enum TelemetryKind {
   TM_CRASH = 3, // one crash_report: the game took an unhandled exception
 }
 
-/** what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
+/** what the host did with sd:/lazyto_kiosk.bin at game boot (Nintendont kernel LoadTournamentModule) */
 export enum ModuleState {
   MOD_PENDING = 0, // no game booted yet
   MOD_LOADED = 1,
-  MOD_NOT_FOUND = 2, // no sd:/tournament.bin
+  MOD_NOT_FOUND = 2, // no sd:/lazyto_kiosk.bin
   MOD_BAD_FILE = 3, // not a TMOD file
   MOD_BAD_HEADER = 4, // unsupported version, size or load address
   MOD_GUARD = 5, // guard word mismatch: the disc is not stock Melee 1.02
@@ -130,7 +130,7 @@ function checkLen(buf: Uint8Array, off: number, need: number, what: string): voi
 export interface ExiPollHdr {
   state: number; // enum exi_poll_state
   flags: number; // exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)
-  station: number; // tournament.cfg station; 0 in Dolphin (decisions.md R10)
+  station: number; // lazyto_station.txt station; 0 in Dolphin (decisions.md R10)
   relay_ip: number; // relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown
   relay_port: number; // relay TCP port; 0 = unknown
   host_opts: number; // exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)
@@ -201,7 +201,7 @@ export function decodeRelayBeacon(buf: Uint8Array, off = 0): RelayBeacon {
 
 // ---- relay_auth (20 bytes) ----
 
-/** Relay shared secret (decisions.md R16). Not part of the game's messages: the host of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder) writes it on the TCP connection before the game's relay_hdr + payload, with the secret from its own config (tournament.cfg secret=, Dolphin SlippiRelaySecret). The relay compares the secret with its config in constant time and answers a missing or wrong one with ST_BAD_SECRET without acting on the request. Responses carry no relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi traffic. */
+/** Relay shared secret (decisions.md R16). Not part of the game's messages: the host of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder) writes it on the TCP connection before the game's relay_hdr + payload, with the secret from its own config (lazyto_station.txt secret=, Dolphin SlippiRelaySecret). The relay compares the secret with its config in constant time and answers a missing or wrong one with ST_BAD_SECRET without acting on the request. Responses carry no relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi traffic. */
 export interface RelayAuth {
   magic: Uint8Array; // AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')
   secret: string; // the shared secret, NUL-padded
@@ -233,7 +233,7 @@ export interface TelemetryHdr {
   magic: Uint8Array; // MAGIC_0, TELEMETRY_MAGIC_1 ('M','L')
   version: number; // PROTO_VERSION
   kind: number; // enum telemetry_kind
-  station: number; // tournament.cfg station
+  station: number; // lazyto_station.txt station
   len: number; // payload bytes after this header
   seq: number;
   uptime_ms: number; // milliseconds since the kernel started
@@ -411,7 +411,7 @@ export interface RelayHdr {
   magic: Uint8Array; // 'M','T'
   version: number; // PROTO_VERSION
   cmd: number; // enum relay_cmd
-  station: number; // from tournament.cfg
+  station: number; // from lazyto_station.txt
   len: number; // payload bytes following the header
 }
 export const RELAY_HDR_SIZE = 8;
@@ -552,7 +552,7 @@ export function decodeListSetsResp(buf: Uint8Array, off = 0): ListSetsResp {
 /** CMD_START_SET request payload. */
 export interface StartSetReq {
   set_id: number;
-  stream: number; // from tournament.cfg
+  stream: number; // unused: the game sends 0 and the relay ignores it (the stream station is set on the relay)
 }
 export const START_SET_REQ_SIZE = 8;
 

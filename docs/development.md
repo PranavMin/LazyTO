@@ -56,14 +56,14 @@ files by hand. After changing `protocol.yaml`:
 
 The kiosk's source is `kiosk/`. It builds against the decomp in the `melee/` submodule, which
 needs its compilers fetched once (no Melee files needed): `pip install ninja`, then
-`python kiosk/tools/fetch_decomp_tools.py`. Or skip building and take `tournament.bin` from
+`python kiosk/tools/fetch_decomp_tools.py`. Or skip building and take `lazyto_kiosk.bin` from
 the `wii/` folder of the `main-build` bundle, `lazyto.tgz`. Then, from the repo root:
 
 ```
 python kiosk/tools/build_module.py
 ```
 
-writes `kiosk/build/tournament.bin`. The build runs on Windows only: the decomp's compilers are
+writes `kiosk/build/lazyto_kiosk.bin`. The build runs on Windows only: the decomp's compilers are
 `.exe` files. The module's sources, hooks, file format, developer flags and generated files are
 described in [kiosk.md](kiosk.md). Walk through [kiosk-checklist.md](kiosk-checklist.md) for each new
 build.
@@ -85,7 +85,7 @@ The kernel itself builds locally for quick checks. See the Nintendont repo's
 ## Testing on a Wii
 
 A card for a module change: make the station's zip on a relay's SD cards page, unzip it onto the
-card, then replace its `tournament.bin` with `kiosk/build/tournament.bin`. Never put a `--demo`
+card, then replace its `lazyto_kiosk.bin` with `kiosk/build/lazyto_kiosk.bin`. Never put a `--demo`
 build on a card. A loader change needs a CI loader in `apps/LazyTO/` (above).
 
 **Debugging on hardware.** Each Wii sends its kernel log and module status to the relay, so the

@@ -23,8 +23,8 @@ That is the whole card:
 | Path on the card | What |
 |---|---|
 | `apps/LazyTO/` | the LazyTO loader (`boot.dol`, `meta.xml`, `icon.png`) |
-| `tournament.bin` | the kiosk module, the same file on every card |
-| `tournament.cfg` | this Wii's station number and the relay's Wii secret, below |
+| `lazyto_kiosk.bin` | the kiosk module, the same file on every card |
+| `lazyto_station.txt` | this Wii's station number and the relay's Wii secret, below |
 | `lazyto_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, the game at `games/GALE01/game.iso` |
 | `games/GALE01/game.iso` | your Melee 1.02 image |
 
@@ -34,18 +34,16 @@ Nintendont's in `slippi_nincfg.bin`.
 The zips carry the Wii files of the relay's version; the set list's top right shows the module
 and loader versions a Wii runs.
 
-`tournament.cfg` is a plain text file with one `key=value` per line and no spaces:
+`lazyto_station.txt` is a plain text file with one `key=value` per line and no spaces:
 
 ```
 station=3
-stream=0
 secret=<the relay's Wii secret>
 ```
 
 | Key | Value |
 |---|---|
 | `station` | the number on this Wii's station label |
-| `stream` | `1` on the stream station, `0` on every other. The relay decides the stream by station number, so this value is informational, but the line must be there. |
 | `secret` | the relay's Wii secret, as on its settings page |
 
 There is no relay address. The Wii finds the relay by itself.
@@ -81,7 +79,7 @@ Changes are saved only when you start the game from the menu. From the settings,
 return to the game list, then A on the game. Home ("Go Back") returns to the SD/USB screen and
 drops unsaved changes: they apply to that one boot and are gone after a restart.
 
-Boot the game from the SD card. The loader only reads `tournament.cfg` from the card when the
+Boot the game from the SD card. The loader only reads `lazyto_station.txt` from the card when the
 game starts from it.
 
 ## 4. Check one Wii
@@ -107,14 +105,14 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 |---|---|---|
 | `JOINING THE WI-FI`, then `THIS WII COULD NOT JOIN THE WI-FI` after 60 s | The Wii can't connect | Power cycle. Check the Wii's connection test and the router's 2.4 GHz mode. |
 | `NETWORK IS OFF IN THE LOADER` | The loader's Network setting is off | Turn it on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the station's zip onto the card again. |
-| `THIS CARD IS NOT SET UP` | `tournament.cfg` is missing, or has no `secret=` | Unzip the station's zip onto the card again. |
+| `THIS CARD IS NOT SET UP` | `lazyto_station.txt` is missing, or has no `secret=` | Unzip the station's zip onto the card again. |
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
-| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's, for example after a new Wii secret | Download the station's zip again and copy its `tournament.cfg` onto the card. |
+| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's, for example after a new Wii secret | Download the station's zip again and copy its `lazyto_station.txt` onto the card. |
 | `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
-| `no tournament.cfg` on every action | The card isn't being read | Boot the game from the SD card. Check `station=`, `stream=` and `secret=` are all present. |
+| `no station file` on every action | The card isn't being read | Boot the game from the SD card. Check `station=` and `secret=` are both present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
 | Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the loader from the station's zip. A loader you build yourself fails here. |
-| Boots to the character select instead of the Tournament screen | An old `tournament.bin` | Copy the one from the station's zip onto the card. |
+| Boots to the character select instead of the Tournament screen | An old `lazyto_kiosk.bin`, or a card made before 2026-10-02 (its files were `tournament.bin` and `tournament.cfg`) | Unzip the station's zip onto the card again. |
 
 If a Wii never appears on the status page, turn on **Log** in the loader's menu, boot once, and
 read `slippi_ndebug.log` on the SD card. Then turn Log off again.
