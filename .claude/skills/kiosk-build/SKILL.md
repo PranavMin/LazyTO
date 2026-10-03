@@ -1,6 +1,6 @@
 ---
 name: kiosk-build
-description: Build the kiosk module (kiosk/build/tournament.bin) with preflight checks, read the build output, and handle hook changes in kiosk/tools/module_hooks.txt. Use whenever kiosk/ C sources or hooks change, before a Dolphin or Wii test, or when the build breaks.
+description: Build the kiosk module (kiosk/build/lazyto_kiosk.bin) with preflight checks, read the build output, and handle hook changes in kiosk/tools/module_hooks.txt. Use whenever kiosk/ C sources or hooks change, before a Dolphin or Wii test, or when the build breaks.
 ---
 
 # Build the kiosk module
@@ -14,7 +14,7 @@ Full reference: `docs/kiosk.md`. Per-build QA: `docs/kiosk-checklist.md`.
 - Never hand-edit generated files: `kiosk/include/relay_proto.h`,
   `kiosk/src/melee/lb/lbbuttonglyph_shapes.inc`, `kiosk/src/melee/lb/lbwordmark_tex.inc`,
   `kiosk/src/melee/lb/lbmodule_version.inc`. Their generators are listed in `docs/kiosk.md`.
-- Never hand-edit `tournament.bin`.
+- Never hand-edit `lazyto_kiosk.bin`.
 - No malloc, no string parsing, all buffers static.
 - If the build breaks, fix the cause. Do not work around it.
 
@@ -35,11 +35,11 @@ Full reference: `docs/kiosk.md`. Per-build QA: `docs/kiosk-checklist.md`.
 python kiosk/tools/build_module.py
 ```
 
-Run from the repo root. Output: `kiosk/build/tournament.bin`. Windows only.
+Run from the repo root. Output: `kiosk/build/lazyto_kiosk.bin`. Windows only.
 
 The build uses no `main.dol`: hook addresses are checked against `splits.txt` and the guard
 word is the constant `GUARD_WORD`. CI's `kiosk` workflow runs the same build and uploads
-`tournament.bin` as the `tournament-bin` artifact; on every push to `main`, `release.yml` puts
+`lazyto_kiosk.bin` as the `lazyto-kiosk-bin` artifact; on every push to `main`, `release.yml` puts
 it in the `main-build` bundle.
 
 Read the tail of the output:

@@ -41,7 +41,7 @@ constants:
     doc: "player tag"
   BEACON_PORT:
     value: 29471
-    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address)"
+    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; lazyto_station.txt has no relay address)"
   BEACON_INTERVAL_MS:
     value: 2000
     doc: "the relay sends one relay_beacon per interval on every IPv4 interface"
@@ -93,7 +93,7 @@ enums:
       ST_BAD_VERSION:   {value: 1}
       ST_SET_NOT_FOUND: {value: 2}
       ST_SET_TAKEN:     {value: 3, doc: "started on another station"}
-      ST_NOT_STREAM:    {value: 4, doc: "stream flag from non-stream station"}
+      ST_NOT_STREAM:    {value: 4, doc: "no longer sent: the relay picks the stream station itself"}
       ST_STARTGG_ERROR: {value: 5, doc: "upstream rejected; see status page"}
       ST_RATE_LIMITED:  {value: 6}
       ST_INTERNAL:      {value: 7}
@@ -111,11 +111,11 @@ enums:
       EXI_RELAY_POLL: {value: 0xF1, doc: "read {state, response buffer}"}
 
   exi_poll_flags:
-    doc: "bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg)"
+    doc: "bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, lazyto_station.txt)"
     values:
       PF_NO_NETWORK:  {value: 1, doc: "the host will never have a network: the loader's Network option is off"}
-      PF_NO_CFG:      {value: 2, doc: "no usable sd:/tournament.cfg"}
-      PF_NO_SECRET:   {value: 4, doc: "tournament.cfg has no valid secret="}
+      PF_NO_CFG:      {value: 2, doc: "no usable sd:/lazyto_station.txt"}
+      PF_NO_SECRET:   {value: 4, doc: "lazyto_station.txt has no valid secret="}
       PF_NET_JOINING: {value: 8, doc: "Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it"}
 
   exi_host_opts:
@@ -140,11 +140,11 @@ enums:
       TM_CRASH:  {value: 3, doc: "one crash_report: the game took an unhandled exception"}
 
   module_state:
-    doc: "what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule)"
+    doc: "what the host did with sd:/lazyto_kiosk.bin at game boot (Nintendont kernel LoadTournamentModule)"
     values:
       MOD_PENDING:     {value: 0, doc: "no game booted yet"}
       MOD_LOADED:      {value: 1}
-      MOD_NOT_FOUND:   {value: 2, doc: "no sd:/tournament.bin"}
+      MOD_NOT_FOUND:   {value: 2, doc: "no sd:/lazyto_kiosk.bin"}
       MOD_BAD_FILE:    {value: 3, doc: "not a TMOD file"}
       MOD_BAD_HEADER:  {value: 4, doc: "unsupported version, size or load address"}
       MOD_GUARD:       {value: 5, doc: "guard word mismatch: the disc is not stock Melee 1.02"}
@@ -165,7 +165,7 @@ structs:
     fields:
       - {name: state,      type: u8,  doc: "enum exi_poll_state"}
       - {name: flags,      type: u8,  doc: "exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)"}
-      - {name: station,    type: u16, doc: "tournament.cfg station; 0 in Dolphin (decisions.md R10)"}
+      - {name: station,    type: u16, doc: "lazyto_station.txt station; 0 in Dolphin (decisions.md R10)"}
       - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
       - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
       - {name: host_opts,  type: u8,  doc: "exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)"}
@@ -199,7 +199,7 @@ structs:
       Relay shared secret (decisions.md R16). Not part of the game's messages: the
       host of the fake EXI device (Nintendont kernel, Slippi Dolphin
       forwarder) writes it on the TCP connection before the game's relay_hdr
-      + payload, with the secret from its own config (tournament.cfg secret=,
+      + payload, with the secret from its own config (lazyto_station.txt secret=,
       Dolphin SlippiRelaySecret). The relay compares the secret with its
       config in constant time and answers a missing or wrong one with
       ST_BAD_SECRET without acting on the request. Responses carry no
@@ -227,7 +227,7 @@ structs:
       - {name: magic,     type: u8,  array: 2, doc: "MAGIC_0, TELEMETRY_MAGIC_1 ('M','L')"}
       - {name: version,   type: u8,            doc: "PROTO_VERSION"}
       - {name: kind,      type: u8,            doc: "enum telemetry_kind"}
-      - {name: station,   type: u16,           doc: "tournament.cfg station"}
+      - {name: station,   type: u16,           doc: "lazyto_station.txt station"}
       - {name: len,       type: u16,           doc: "payload bytes after this header"}
       - {name: seq,       type: u32}
       - {name: uptime_ms, type: u32,           doc: "milliseconds since the kernel started"}
@@ -288,7 +288,7 @@ structs:
       - {name: magic,   type: u8, array: 2, doc: "'M','T'"}
       - {name: version, type: u8,           doc: "PROTO_VERSION"}
       - {name: cmd,     type: u8,           doc: "enum relay_cmd"}
-      - {name: station, type: u16,          doc: "from tournament.cfg"}
+      - {name: station, type: u16,          doc: "from lazyto_station.txt"}
       - {name: len,     type: u16,          doc: "payload bytes following the header"}
 
   relay_resp:
@@ -328,7 +328,7 @@ structs:
     size: 8
     fields:
       - {name: set_id, type: u32}
-      - {name: stream, type: u8, doc: "from tournament.cfg"}
+      - {name: stream, type: u8, doc: "unused: the game sends 0 and the relay ignores it (the stream station is set on the relay)"}
       - {name: _pad,   type: u8, array: 3}
 
   game_result:

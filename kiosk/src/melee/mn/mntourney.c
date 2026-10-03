@@ -446,7 +446,7 @@ static void selectSet(u32 set_id)
 }
 
 /* The relay refused us over the shared secret (relay_status ST_BAD_SECRET,
- * decisions.md R15): tournament.cfg's secret= does not match the relay's. */
+ * decisions.md R15): lazyto_station.txt's secret= does not match the relay's. */
 static bool errIsSecret(void)
 {
     return !tm_err_link && tm_err_status == ST_BAD_SECRET;
@@ -989,7 +989,7 @@ static void redraw(void)
         lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim,
               hostNetJoining()    ? "POWER CYCLE THE WII, THEN CHECK THE ROUTER"
               : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER'S SETTINGS"
-              : hostNoCard()      ? "PUT TOURNAMENT.CFG WITH A SECRET ON THE SD CARD"
+              : hostNoCard()      ? "UNZIP THE STATION'S ZIP ONTO THE CARD AGAIN"
               : tm_ph.relay_ip == 0 ? "IS THIS SETUP ON THE RELAY'S NETWORK?"
               : errIsSecret()     ? "CHECK THE SECRET ON THIS CARD"
                                   : "TELL THE TO IF THIS REPEATS");
@@ -1075,7 +1075,8 @@ static void sendStart(void)
 {
     struct start_set_req req;
     req.set_id = tm_sets[tm_chosen].set_id;
-    /* The kernel overwrites stream (and hdr.station) from tournament.cfg. */
+    /* Unused by the relay, which picks the stream station itself. The kernel
+     * stamps hdr.station from lazyto_station.txt. */
     req.stream = 0;
     req._pad[0] = req._pad[1] = req._pad[2] = 0;
 
@@ -1307,8 +1308,9 @@ void mnTourney_Think(HSD_GObj* gobj)
              * say so now. */
             fail("NETWORK IS OFF IN THE LOADER");
         } else if (hostNoCard()) {
-            fail((tm_ph.flags & PF_NO_CFG) ? "NO TOURNAMENT.CFG ON THE CARD"
-                                           : "NO SECRET IN TOURNAMENT.CFG");
+            /* The font has no underscore, so the file is "the station file". */
+            fail((tm_ph.flags & PF_NO_CFG) ? "NO STATION FILE ON THE CARD"
+                                           : "NO SECRET IN THE STATION FILE");
         } else if (buttons & MenuInput_Back) {
             sfxBack();
             exitToMainMenu();

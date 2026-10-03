@@ -2,7 +2,7 @@ name: release
 
 # Builds LazyTO's one bundle, lazyto.tgz, from one commit: the relay (dist/,
 # deploy/, package.json) and the Wii files (wii/apps/LazyTO/, the loader
-# built from the pinned Nintendont commit, and wii/tournament.bin, the kiosk
+# built from the pinned Nintendont commit, and wii/lazyto_kiosk.bin, the kiosk
 # module from kiosk.yml). Its assets keep the same names everywhere:
 # lazyto.tgz, lazyto.tgz.sha256, VERSION and install.sh.
 #
@@ -88,7 +88,7 @@ jobs:
       - run: npm run build
       - uses: actions/download-artifact@v4
         with:
-          name: tournament-bin
+          name: lazyto-kiosk-bin
           path: out/bundle/wii
       - uses: actions/download-artifact@v4
         with:

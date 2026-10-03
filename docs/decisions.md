@@ -18,9 +18,9 @@ A rebooted Wii asks the relay, which offers its set first. No persistence code i
 
 ### One config file per Wii
 
-**`sd:/tournament.cfg` has `station`, `stream` and `secret`. Nothing else.**
+**`sd:/lazyto_station.txt` has `station` and `secret`. Nothing else.**
 
-Every card is identical apart from the station number. The relay decides which sets go on stream by station (`streamStation`), not by the card's `stream=` value, so a card and the relay can never disagree about the stream. The kernel still requires the `stream=` line.
+Every card is identical apart from the station number. The relay decides which sets go on stream by station (`streamStation`), so a card and the relay can never disagree about the stream. The file was `tournament.cfg` with a `stream=` line until 2026-10-02, and the module was `tournament.bin`: the card's files now carry the `lazyto_` prefix of `lazyto_nincfg.bin`, so a TO sees which files are LazyTO's and what each one is.
 
 ### Fixed-size big-endian structs
 
@@ -42,7 +42,7 @@ Retry loops in kernel code produce frozen consoles with no explanation. The only
 
 ### Stock Melee plus a module
 
-**The kiosk is `tournament.bin`, a module loaded into stock Melee 1.02 at boot. It is not a rebuilt game executable.**
+**The kiosk is `lazyto_kiosk.bin`, a module loaded into stock Melee 1.02 at boot. It is not a rebuilt game executable.**
 
 The earlier build appended a shifted decomp executable to a copy of the disc. Everything that assumes vanilla addresses broke on it: Slippi recording, and every venue codeset, which then had to be ported natively. A module keeps the game stock, so recording, hotswap and the venue's codes work unchanged, and an update is a 26 KB file instead of a 1.4 GB image. The native ports of UCF, neutral spawns, striking and audio defaults that the old build needed are retired. The kiosk still asserts tournament rules (4 stocks, 8:00, items off, everything unlocked) at boot, whatever the memory card says. (2026-09-24)
 
@@ -60,13 +60,13 @@ Before, a TO needed git, Node, the GitHub CLI, an ssh key and a hand-written `.e
 
 ### One bundle, two update channels
 
-**Each commit builds one `lazyto.tgz`: the relay, the loader and `tournament.bin`. A Pi follows published releases by default, or every build of `main`.** (2026-10-02)
+**Each commit builds one `lazyto.tgz`: the relay, the loader and `lazyto_kiosk.bin`. A Pi follows published releases by default, or every build of `main`.** (2026-10-02)
 
 The relay and the Wii files can never come from different commits, and the loader is the pinned Nintendont commit built with the fork CI's own image, byte for byte the build proven on a Wii apart from its build time. A TO's Pi moves only when a release is published; a developer's follows `main` to test changes on the fly. Any differing VERSION installs, so switching channel or rolling back is the same step.
 
 ### SD cards from the relay
 
-**The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `tournament.cfg` and the loader's settings.** (2026-10-02)
+**The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `lazyto_station.txt` and the loader's settings.** (2026-10-02)
 
 A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 

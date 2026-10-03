@@ -41,7 +41,7 @@ It runs on the venue's existing hardware: internet-connected Wiis, one Raspberry
 ```
  ┌──────────────── Wii (one per station) ────┐
  │  Melee 1.02, stock disc image (PowerPC)   │
- │   + tournament.bin, loaded at boot        │
+ │   + lazyto_kiosk.bin, loaded at boot        │
  │   ├─ set list menu                        │
  │   ├─ CSS score banner, auto-score         │
  │   └─ lbrelayexi.c ──EXI──┐                │
@@ -72,13 +72,13 @@ LazyTO has three parts, each in its own repository:
 
 | Part | Repository | Runs on |
 |------|------------|---------|
-| Kiosk module `tournament.bin` | fork of doldecomp/melee | the Wii's PowerPC, inside stock Melee 1.02 |
+| Kiosk module `lazyto_kiosk.bin` | fork of doldecomp/melee | the Wii's PowerPC, inside stock Melee 1.02 |
 | LazyTO Nintendont | fork of project-slippi/Nintendont | the Wii's ARM core |
 | Relay `lazyto-relay` | this repository | a Raspberry Pi |
 
-### Kiosk module (tournament.bin)
+### Kiosk module (lazyto_kiosk.bin)
 
-Melee has no networking. The kiosk is a small position-fixed module, `tournament.bin` (about 81 KB), built from `kiosk/` in this repo by `kiosk/tools/build_module.py` against the unmodified Melee decompilation. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
+Melee has no networking. The kiosk is a small position-fixed module, `lazyto_kiosk.bin` (about 81 KB), built from `kiosk/` in this repo by `kiosk/tools/build_module.py` against the unmodified Melee decompilation. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
 
 The module file format:
 
@@ -155,9 +155,9 @@ The game never blocks. It polls once per frame. All buffers are static. The comm
 
 LazyTO Nintendont is Slippi Nintendont plus four additions in the kernel. Its loader is otherwise the venue's normal Slippi Nintendont.
 
-1. **Config.** At boot it reads `sd:/tournament.cfg` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no tournament.cfg".
-2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/tournament.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
-3. **Relay EXI device.** On a request it copies the buffer, stamps the station number (and the stream flag on START_SET) from `tournament.cfg`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
+1. **Config.** At boot it reads `sd:/lazyto_station.txt` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no station file".
+2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/lazyto_kiosk.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
+3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from `lazyto_station.txt`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
 4. **Discovery.** While idle, the relay thread listens on UDP 29471 for the relay's beacon and takes the source address plus the advertised TCP port. If it hears nothing it sends a beacon request to UDP 29472 and gets a unicast beacon back.
 5. **Telemetry.** Once it knows the relay, the kernel sends UDP datagrams to port 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
 
@@ -173,7 +173,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
 | `setup.ts` | Setup wizard and settings page |
 | `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
-| `cards.ts` | The SD-card zips: the bundle's Wii files plus `tournament.cfg` and the loader's settings (`zip.ts` writes them) |
+| `cards.ts` | The SD-card zips: the bundle's Wii files plus `lazyto_station.txt` and the loader's settings (`zip.ts` writes them) |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
@@ -203,14 +203,14 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | Command | Request | Relay does |
 |---------|---------|------------|
 | `CMD_LIST_SETS` | nothing | Returns up to 56 `set_entry` rows (72 bytes each), this station's set first, then earliest round first |
-| `CMD_START_SET` | set id, stream flag | Checks, then `markSetInProgress`, then `assignStream` if stream |
+| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station |
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
 
 The game list is up to five 8-byte `game_result` records: winner slot, both characters, stage, and each player's stocks and costume. Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected.
 
-The game always sends station 0 and stream 0. The host stamps both from `tournament.cfg`, and the relay trusts what it receives.
+The game always sends station 0. The host stamps it from `lazyto_station.txt`, and the relay trusts what it receives.
 
 UDP messages (not on the TCP wire):
 
@@ -231,7 +231,7 @@ UDP messages (not on the TCP wire):
 | `ST_NOT_STREAM` | Not sent any more: the relay decides the stream by station (kept in the protocol) |
 | `ST_STARTGG_ERROR` | start.gg refused or failed; see the status page |
 | `ST_RATE_LIMITED` | No rate-limit token within 2 s |
-| `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no tournament.cfg") |
+| `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no station file") |
 | `ST_BAD_SECRET` | `relay_auth` missing or wrong |
 
 ## Relay internals
@@ -323,7 +323,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 | Failure | Where seen | Behaviour |
 |---------|------------|-----------|
-| No `tournament.cfg` | Wii | "no tournament.cfg". Station unusable until fixed. |
+| No `lazyto_station.txt` | Wii | "NO STATION FILE ON THE CARD". Station unusable until fixed. |
 | Wrong or missing secret | Wii + status page | RELAY SECRET MISMATCH. Counted on the status page. |
 | No beacon heard | Wii | NO RELAY FOUND after 10 s. A searches again. |
 | Relay unreachable | Wii | Times out after 3 s. A retries. TO checks the Pi and network. |
@@ -344,23 +344,22 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
 - On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
   - `apps/LazyTO/`: the loader.
-  - `tournament.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
+  - `lazyto_kiosk.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
   - `lazyto_nincfg.bin`: the loader's settings, Network and Auto Boot on. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
-  - `tournament.cfg`: per card.
+  - `lazyto_station.txt`: per card.
 
 ```
 station=3
-stream=0
 secret=<the relay's secret>
 ```
 
-`stream=1` goes on the stream station's card. The relay decides the stream by station number (`streamStation`) and ignores the card's flag, so a mis-copied card cannot take over the stream; the kernel still needs the line. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
+The relay decides the stream by station number (`streamStation`), so no card says it is the stream station and a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
 
 ### Pi
 
 A Raspberry Pi (5, 4 or Zero 2 W) on Raspberry Pi OS Lite 64-bit, on the venue Wi-Fi (Ethernet works the same). Step by step: [pi-setup.md](pi-setup.md).
 
-Everything a Pi runs comes from one bundle per commit, `lazyto.tgz` (`.github/workflows/release.yml`): the relay (`dist/`, `deploy/`) and the Wii files (`wii/apps/LazyTO/`, the loader built from the pinned Nintendont commit, and `wii/tournament.bin`). Every push to `main` republishes it on the moving prerelease `main-build`; a `v*` tag drafts a release with it. Each Pi follows one update channel, `/var/lib/lazyto/update-channel`: `release` (the newest full release, the default), `main` (`main-build`) or `off`.
+Everything a Pi runs comes from one bundle per commit, `lazyto.tgz` (`.github/workflows/release.yml`): the relay (`dist/`, `deploy/`) and the Wii files (`wii/apps/LazyTO/`, the loader built from the pinned Nintendont commit, and `wii/lazyto_kiosk.bin`). Every push to `main` republishes it on the moving prerelease `main-build`; a `v*` tag drafts a release with it. Each Pi follows one update channel, `/var/lib/lazyto/update-channel`: `release` (the newest full release, the default), `main` (`main-build`) or `off`.
 
 | File | Role |
 |------|------|
@@ -385,7 +384,7 @@ The checklist for each tournament night is in [night-of.md](night-of.md).
 - **Protocol first.** Change `protocol.yaml` and run `python tools/gen_protocol.py`, which writes `generated/wire.ts` and both header copies. `tools/check_protocol.py` regenerates them in memory and fails on any difference; the generator itself refuses implicit padding and any size that disagrees with `protocol.yaml`.
 - **Relay tests.** `npm test`: codec round-trips, the character and stage tables, and integration tests against `test/fake-startgg.ts` covering every row of the error table. Tests never touch the real API.
 - **Load.** `scripts/sim-wii.ts` drives 12 fake stations through list, start, score and end for 10 minutes and checks the upstream call rate.
-- **Kiosk.** A development setup can load `tournament.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
+- **Kiosk.** A development setup can load `lazyto_kiosk.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
 - **CI.** `test.yml` (format, shellcheck, `npm test`, build) and `kiosk.yml` (the module, when kiosk files change) run on pull requests. `release.yml` runs on every push to main and every `v*` tag: the tests, the module, the loader, the bundle, then `main-build` or a draft release.
 
 ## Status

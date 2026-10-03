@@ -1,7 +1,7 @@
 name: kiosk
 
-# Builds the kiosk module, tournament.bin, so a change that breaks kiosk/
-# fails the PR, and keeps the module as the `tournament-bin` artifact.
+# Builds the kiosk module, lazyto_kiosk.bin, so a change that breaks kiosk/
+# fails the PR, and keeps the module as the `lazyto-kiosk-bin` artifact.
 # release.yml calls this workflow on every push to main and every v* tag to
 # put the module in the bundle. No Nintendo file is needed: build_module.py
 # takes the stock 1.02 facts it checks (DOL sections, guard word) from the
@@ -54,6 +54,6 @@ jobs:
         run: python kiosk/tools/build_module.py
       - uses: actions/upload-artifact@v4
         with:
-          name: tournament-bin
-          path: kiosk/build/tournament.bin
+          name: lazyto-kiosk-bin
+          path: kiosk/build/lazyto_kiosk.bin
           if-no-files-found: error

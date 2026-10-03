@@ -14,6 +14,8 @@ The first public beta. Everything below is the work leading up to it, by date.
 - **SD-card zips** on the status page: each station's card is one unzip plus the Melee image, with Network, Auto Boot and UCF on in the loader's settings.
 - **Stream decided by station:** the card's `stream=` no longer matters to the relay; "No stream" is an option. ack takes the admin password like the other actions.
 - Removed: `npm run push` writing settings from `.env`, the rehearsal against the fake start.gg, probe's research flags, the never-sent abandon command, the cached per-game data, the third protocol header copy.
+- **Card files renamed:** `tournament.bin` is now `lazyto_kiosk.bin` and `tournament.cfg` is `lazyto_station.txt`, which has no `stream=` line. Cards made before this need their station zip again. The loader's menu settings are saved only when the game is started with B and A, not after Home (upstream behaviour, now in wii-setup.md).
+- The loader's per-request network traces and module watch are gone, so the Wii log keeps the lines that matter.
 
 ## 2026-10-01
 

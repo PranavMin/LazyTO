@@ -47,7 +47,7 @@ export interface RelayDeps {
   audit: AuditSink;
   /**
    * The stream setup: its station's sets go on this start.gg stream. Decided by
-   * station, not by the card's stream= flag, so one setting can't disagree with
+   * station, not by start_set_req.stream, so one setting can't disagree with
    * another. null = no stream tonight.
    */
   stream: { station: number; streamId: number } | null;
@@ -323,8 +323,9 @@ export class RelayTcpServer {
 
   // ---- CMD_START_SET ----
 
-  // req.stream (the card's stream= flag) is decoded but not used: the stream
-  // setup is the configured station (RelayDeps.stream).
+  // req.stream is decoded but not used (current loaders send the game's 0;
+  // older ones sent the card's stream= line): the stream setup is the
+  // configured station (RelayDeps.stream).
   private async startSet(station: number, req: { set_id: number; stream: number }): Promise<Reply> {
     const { cache, state, startgg, audit, stream } = this.deps;
 

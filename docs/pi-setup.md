@@ -188,7 +188,7 @@ while it runs. It follows the update channel picked on the settings page:
 
 At a start, `deploy/update.sh` compares the installed version with the channel's, downloads the
 new one, checks its SHA-256 and that it accepts your settings, and swaps it in. The relay and
-the Wii files (the loader and `tournament.bin`) always update together. Any failure, including
+the Wii files (the loader and `lazyto_kiosk.bin`) always update together. Any failure, including
 no internet, logs one `update:` line and the installed version starts. It checks at most once
 every 10 minutes.
 

@@ -56,7 +56,7 @@ export interface Harness {
   view: StatusView;
   statusUrl: string;
   dataDir: string;
-  /** A Wii at this station (stream=1 when it is the stream setup). */
+  /** A Wii at this station; stream is what it puts in start_set_req.stream. */
   wii(station: number, stream?: 0 | 1): WiiClient;
   /** Every audit record written so far, oldest first. */
   auditEvents(): Record<string, unknown>[];

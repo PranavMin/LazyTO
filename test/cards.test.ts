@@ -60,7 +60,7 @@ function wiiDir(): string {
   writeFileSync(join(d, 'apps', 'LazyTO', 'boot.dol'), Buffer.alloc(70_000, 7));
   writeFileSync(join(d, 'apps', 'LazyTO', 'icon.png'), 'png');
   writeFileSync(join(d, 'apps', 'LazyTO', 'meta.xml'), '<app/>');
-  writeFileSync(join(d, 'tournament.bin'), 'TMOD module');
+  writeFileSync(join(d, 'lazyto_kiosk.bin'), 'TMOD module');
   return d;
 }
 
@@ -108,7 +108,7 @@ test('loaderSettings is the NIN_CFG the loader saves: version 0xD, Network, Auto
   assert.equal(b.readUInt32BE(0x140), 0);
 });
 
-test('a station zip: the loader, the module, its tournament.cfg, the loader settings, the READMEs', () => {
+test('a station zip: the loader, the module, its lazyto_station.txt, the loader settings, the READMEs', () => {
   const dir = wiiDir();
   const files = unzip(
     stationZip({
@@ -125,23 +125,20 @@ test('a station zip: the loader, the module, its tournament.cfg, the loader sett
     'apps/LazyTO/icon.png',
     'apps/LazyTO/meta.xml',
     'games/GALE01/README.txt',
+    'lazyto_kiosk.bin',
     'lazyto_nincfg.bin',
-    'tournament.bin',
-    'tournament.cfg',
+    'lazyto_station.txt',
   ]);
   assert.deepEqual(files.get('apps/LazyTO/boot.dol'), Buffer.alloc(70_000, 7));
-  assert.equal(files.get('tournament.bin')!.toString(), 'TMOD module');
-  assert.equal(
-    files.get('tournament.cfg')!.toString(),
-    `station=3\nstream=0\nsecret=${TEST_SECRET}\n`,
-  );
+  assert.equal(files.get('lazyto_kiosk.bin')!.toString(), 'TMOD module');
+  assert.equal(files.get('lazyto_station.txt')!.toString(), `station=3\nsecret=${TEST_SECRET}\n`);
   assert.deepEqual(files.get(LOADER_SETTINGS_FILE), loaderSettings());
   assert.match(files.get('README.txt')!.toString(), /station 3\n[\s\S]*LazyTO v1\.2\.3 relay/);
 
   const stream = unzip(
     stationZip({ wiiDir: dir, station: 1, streamStation: 1, secret: TEST_SECRET, version: 'dev' }),
   );
-  assert.match(stream.get('tournament.cfg')!.toString(), /^station=1\nstream=1\n/);
+  assert.equal(stream.get('lazyto_station.txt')!.toString(), `station=1\nsecret=${TEST_SECRET}\n`);
   assert.match(stream.get('README.txt')!.toString(), /station 1 \(the stream station\)/);
 });
 
@@ -162,7 +159,7 @@ test('/cards and its zips need the admin password; bad station numbers are refus
   assert.equal(r.headers.get('content-type'), 'application/zip');
   assert.match(r.headers.get('content-disposition') ?? '', /filename="lazyto-station-1\.zip"/);
   const files = unzip(Buffer.from(await r.arrayBuffer()));
-  assert.match(files.get('tournament.cfg')!.toString(), /^station=1\nstream=1\nsecret=/);
+  assert.match(files.get('lazyto_station.txt')!.toString(), /^station=1\nsecret=/);
 
   for (const bad of ['0', 'abc', '70000', '', '1.5']) {
     const b = await fetch(`${h.statusUrl}/cards/zip?station=${bad}`, { headers: auth });

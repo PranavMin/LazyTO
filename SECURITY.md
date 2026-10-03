@@ -12,7 +12,7 @@ Only the newest beta and `main` get fixes.
 
 - **The relay holds secrets.** The Pi keeps a start.gg API token from a tournament admin, the
   admin password, and the Wii secret every card sends (`secret=` in each card's
-  `tournament.cfg`, in every station zip). Anyone with the token can edit that admin's
+  `lazyto_station.txt`, in every station zip). Anyone with the token can edit that admin's
   tournaments on start.gg. Use a token from an account that is admin only where it needs to be,
   and revoke it if a Pi goes missing; make a new Wii secret on the settings page if a card does.
 - **Setup happens over plain HTTP on the LAN.** The token crosses the network once, when you

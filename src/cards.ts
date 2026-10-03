@@ -1,17 +1,17 @@
 // cards.ts -- one zip per station with everything its SD card needs, so the
 // TO's whole card setup is: unzip onto a FAT32 card, add the Melee image
-// (docs/wii-setup.md). Behind the admin password, because tournament.cfg
+// (docs/wii-setup.md). Behind the admin password, because lazyto_station.txt
 // carries the Wii secret: /cards is the page, /cards/zip?station=N the zip.
 //
 // From the bundle's wii/ folder (release.yml), the same build as this relay:
-//   apps/LazyTO/       the loader
-//   tournament.bin     the kiosk module
+//   apps/LazyTO/        the loader
+//   lazyto_kiosk.bin    the kiosk module
 // Made here:
-//   tournament.cfg     station=, stream= (1 on the stream station), secret=
-//   lazyto_nincfg.bin  the loader's own settings, fresh: Network and Auto Boot
-//                      on, the game at games/GALE01/game.iso, Melee's codes at
-//                      their defaults (UCF on). A venue's Slippi Nintendont
-//                      keeps its own slippi_nincfg.bin; neither reads the other's.
+//   lazyto_station.txt  station= and secret=
+//   lazyto_nincfg.bin   the loader's own settings, fresh: Network and Auto Boot
+//                       on, the game at games/GALE01/game.iso, Melee's codes at
+//                       their defaults (UCF on). A venue's Slippi Nintendont
+//                       keeps its own slippi_nincfg.bin; neither reads the other's.
 //   README.txt and games/GALE01/README.txt
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -56,13 +56,9 @@ export function loaderSettings(): Buffer {
   return b;
 }
 
-/** tournament.cfg on the card (docs/wii-setup.md), as the kernel parses it. */
-export function formatTournamentCfg(c: {
-  station: number;
-  stream: number;
-  secret: string;
-}): string {
-  return `station=${c.station}\nstream=${c.stream}\nsecret=${c.secret}\n`;
+/** lazyto_station.txt on the card (docs/wii-setup.md), as the kernel parses it. */
+export function formatStationFile(c: { station: number; secret: string }): string {
+  return `station=${c.station}\nsecret=${c.secret}\n`;
 }
 
 function cardReadme(station: number, stream: boolean, version: string): string {
@@ -75,14 +71,14 @@ function cardReadme(station: number, stream: boolean, version: string): string {
    straight into Melee; hold B while it starts for the loader's menu.
 
 What is on the card:
-  apps/LazyTO/       the LazyTO loader (Slippi Nintendont with the tournament kiosk)
-  tournament.bin     the kiosk module
-  tournament.cfg     this card's station number and the relay's Wii secret
-  lazyto_nincfg.bin  the loader's settings: Network and Auto Boot on, UCF on, the
-                     game at games/GALE01/game.iso. A venue's own Slippi Nintendont
-                     on the same card keeps its own slippi_nincfg.bin.
+  apps/LazyTO/        the LazyTO loader (Slippi Nintendont with the tournament kiosk)
+  lazyto_kiosk.bin    the kiosk module
+  lazyto_station.txt  this card's station number and the relay's Wii secret
+  lazyto_nincfg.bin   the loader's settings: Network and Auto Boot on, UCF on, the
+                      game at games/GALE01/game.iso. A venue's own Slippi Nintendont
+                      on the same card keeps its own slippi_nincfg.bin.
 
-Keep the card like a password: tournament.cfg carries the Wii secret.
+Keep the card like a password: lazyto_station.txt carries the Wii secret.
 Made by the LazyTO ${version} relay.
 `;
 }
@@ -93,7 +89,7 @@ const GAME_README = `Copy your own NTSC 1.02 Melee image into this folder, named
 function hasWiiFiles(wiiDir: string | null): wiiDir is string {
   return (
     wiiDir !== null &&
-    existsSync(join(wiiDir, 'tournament.bin')) &&
+    existsSync(join(wiiDir, 'lazyto_kiosk.bin')) &&
     existsSync(join(wiiDir, 'apps', 'LazyTO', 'boot.dol'))
   );
 }
@@ -113,12 +109,10 @@ export function stationZip(o: CardOptions): Buffer {
     ...readdirSync(loader)
       .sort()
       .map((f) => ({ name: `apps/LazyTO/${f}`, data: readFileSync(join(loader, f)) })),
-    { name: 'tournament.bin', data: readFileSync(join(o.wiiDir, 'tournament.bin')) },
+    { name: 'lazyto_kiosk.bin', data: readFileSync(join(o.wiiDir, 'lazyto_kiosk.bin')) },
     {
-      name: 'tournament.cfg',
-      data: Buffer.from(
-        formatTournamentCfg({ station: o.station, stream: stream ? 1 : 0, secret: o.secret }),
-      ),
+      name: 'lazyto_station.txt',
+      data: Buffer.from(formatStationFile({ station: o.station, secret: o.secret })),
     },
     { name: LOADER_SETTINGS_FILE, data: loaderSettings() },
     { name: 'games/GALE01/README.txt', data: Buffer.from(GAME_README) },
