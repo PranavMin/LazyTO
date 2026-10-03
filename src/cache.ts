@@ -1,10 +1,12 @@
 // cache.ts -- the pending-set cache (architecture.md Relay). One upstream
 // query, refreshed every 20 s; everything the Wiis can see comes from here.
 //
-// Preview set ids (decisions.md R8, option a): a set in an unstarted pool has a
-// string id like preview_3292311_1_1, which cannot be a uint32 on the wire.
-// The cache DROPS those sets and records a warning for the status page; the
-// per-tournament setup checklist says to start all pools before doors.
+// Preview set ids (decisions.md R8): a set in an unstarted pool has a string
+// id like preview_3480760_2_0, which cannot be a uint32 on the wire, so the
+// cache never lists one. When a preview set has both entrants (top 8 is
+// ready but its phase was never started) the cache starts that pool on
+// start.gg, once per pool; its sets come back with numeric ids on the next
+// refresh. A failed start is a status page warning, not a retry.
 
 import { ROUND_LEN } from '../generated/wire.js';
 import { bestOfFor, bracketShape, type SetFormat } from './format.js';
@@ -63,12 +65,15 @@ export class SetCache {
   private refreshing = false;
   /** TO overrides from the status page, set id -> best-of; outlive refreshes (admin.ts). */
   private bestOfOverrides = new Map<number, number>();
+  /** Pools the cache asked start.gg to start, phase group id -> error message, or null when it worked (R8). */
+  private poolStarts = new Map<number, string | null>();
 
   constructor(
     private readonly client: StartggClient,
     private readonly eventId: number,
     private readonly setFormat: SetFormat,
     private readonly onRefreshError: (e: Error) => void = () => {},
+    private readonly onPoolStart: (previewSetId: string, error: Error | null) => void = () => {},
   ) {}
 
   /** Fetch and rebuild. Throws on upstream failure; the old data is kept. */
@@ -83,7 +88,7 @@ export class SetCache {
 
     const next = new Map<number, CachedSet>();
     const warnings: string[] = [];
-    let previewCount = 0;
+    const readyPools = new Map<number, string>(); // phase group id -> one ready preview set id
 
     const shape = bracketShape(
       upstream.map((s) => ({ round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder })),
@@ -91,7 +96,8 @@ export class SetCache {
 
     for (const s of upstream) {
       if (typeof s.id === 'string') {
-        previewCount++;
+        // A preview set with a TBD slot is not selectable yet, like a numeric one.
+        if (s.slots[0]?.entrant && s.slots[1]?.entrant) readyPools.set(s.phaseGroup.id, s.id);
         continue;
       }
       if (!Number.isInteger(s.id) || s.id < 1 || s.id > U32_MAX) {
@@ -125,9 +131,23 @@ export class SetCache {
       });
     }
 
-    if (previewCount > 0) {
+    for (const [pool, previewSetId] of readyPools) {
+      if (!this.poolStarts.has(pool)) {
+        try {
+          await this.client.startPool(previewSetId);
+          this.poolStarts.set(pool, null);
+          this.onPoolStart(previewSetId, null);
+          continue; // its numeric ids arrive with the next refresh
+        } catch (e) {
+          this.poolStarts.set(pool, (e as Error).message);
+          this.onPoolStart(previewSetId, e as Error);
+        }
+      }
+      const error = this.poolStarts.get(pool);
       warnings.unshift(
-        `${previewCount} preview-id set(s) dropped -- a pool has not been started; start all pools on start.gg (R8)`,
+        error
+          ? `pool ${pool} has a ready set but could not be started (${error}) -- start it on start.gg (R8)`
+          : `pool ${pool} is still unstarted after the relay started it -- start it on start.gg (R8)`,
       );
     }
 

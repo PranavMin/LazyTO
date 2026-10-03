@@ -158,10 +158,9 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 
 - [ ] **Relay is running** and its status page loads: http://localhost:29473 .
       *Restart it after a machine reboot.*
-- [ ] Status page shows **`Cache: N sets` with N > 0**, and **no "preview-id set(s)
-      dropped" warning**. *0 sets or a preview warning = a start.gg pool isn't started.
-      Start it: `markSetInProgress` on any set materializes real numeric ids for the whole
-      pool (R8). The relay drops preview (string-id) sets by design.*
+- [ ] Status page shows **`Cache: N sets` with N > 0**, and **no "could not be started"
+      warning**. *The relay starts a pool itself once one of its preview (string-id) sets
+      has both players (R8); the warning means start.gg refused, so start that pool by hand.*
 - [ ] Status page shows the **correct event id** (1613010 for the test tournament).
 
 ## 6. Full set flow (end-to-end smoke test)

@@ -8,6 +8,7 @@ The first public beta. Everything below is the work leading up to it, by date.
 
 ## 2026-10-02
 
+- **Top 8 reaches the kiosk without the TO starting it.** A set in an unstarted pool or phase used to be dropped (preview id). Now the relay starts that pool on start.gg as soon as one of its sets has both players, and the set is on every Wii within 20 s (decisions.md R8).
 - **Set up from a browser.** The relay serves a setup page: paste the start.gg token, pick the tournament (follow its short URL each week, one tournament, or a pasted link), the event, the stream, the format and an admin password. The Wii secret is generated. Settings live in `/var/lib/lazyto/config.json`; later changes go through the same page. A relay whose event can't be found shows why, with Retry, and retries by itself.
 - **One install command:** `curl -fsSL .../releases/latest/download/install.sh | sudo bash` installs Node, the relay and the Wii files and prints the setup page's address and code. Nothing else is needed on the TO's computer.
 - **One bundle per commit, two update channels.** `lazyto.tgz` holds the relay, the loader (built from the pinned Nintendont commit) and `tournament.bin`. Pis follow published releases by default, or `main-build`; the settings page switches.

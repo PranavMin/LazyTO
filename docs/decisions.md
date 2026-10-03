@@ -102,7 +102,7 @@ A card then needs only unzipping and the Melee image, and always matches the rel
 
 ### R8: preview set ids
 
-**The cache drops sets with string preview ids, and the status page warns until every pool is started.** Unstarted pools have ids that do not fit the protocol's 32-bit set id. Any mutation on a preview id starts the whole pool, so the relay never does that on its own.
+**The relay starts a pool on start.gg as soon as one of its preview sets has both entrants.** Unstarted pools have string ids that do not fit the protocol's 32-bit set id, so those sets are never listed. Any mutation on a preview id starts the whole pool. The first ruling (2026-09-19) left starting to the TO, but a weekly's top 8 phase is never started before doors, so its ready sets never reached the kiosk. Starting it locks that pool's seeding, which is what a web report in it does too. One start per pool per run; a refusal is a status page warning, never a retry.
 
 ### R9: kernel connect() has no timeout
 

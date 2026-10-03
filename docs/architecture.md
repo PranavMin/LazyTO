@@ -271,7 +271,7 @@ The event is the one Melee singles event whose name contains `eventName`. The st
 
 ### Set cache
 
-The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` query. Sets in an unstarted pool have string "preview" ids that do not fit the protocol's 32-bit set id, so the cache drops them and the status page warns "start all pools on start.gg".
+The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` query. Sets in an unstarted pool have string "preview" ids that do not fit the protocol's 32-bit set id, so the cache never lists them. When a preview set has both entrants (typically a top 8 phase nobody started), the cache starts its pool on start.gg, once per pool per run; the pool's sets come back with numeric ids on the next refresh. If start.gg refuses, the status page warns "start it on start.gg" and the relay does not try again.
 
 ### Station state
 
@@ -292,12 +292,15 @@ A station in `IN_SET` that lists again (after a reboot) gets its own set first w
 | startup (short URL) | `currentUser.tournaments(filter: {tournamentView: "admin"})`, paged |
 | startup | `tournament(slug)` → events, streams |
 | cache refresh | `event(id).sets(filters: {state: [1,2]}, perPage: 100)` |
+| cache refresh, ready preview set | `markSetInProgress(previewId)`, then `resetSet(realId)`: starts the pool |
 | START_SET | `markSetInProgress`, then `assignStream` on the stream station |
 | REPORT_SCORE | `reportBracketSet(setId, gameData)` |
 | END_SET | `reportBracketSet(setId, winnerId, gameData)` |
 | ABANDON_SET | `resetSet(setId)` |
 
 Per game, characters go out as `selections` and the stage as `stageId`. Stocks and costume go out as `entrant1Score`/`entrant2Score` = `(costume + 1) * 100 + stocks`, which start.gg shows as stocks and set pages render as colour plus stock icons.
+
+`markSetInProgress` on a preview id starts the whole pool and answers with the set's new numeric id; the pool's rounds are renumbered from 1. `resetSet` answers "Set not found" for a preview id (probe, 2026-10-02).
 
 `resetSet` does not clear a stream assignment. After an abandon on the stream station, the TO clears the assignment by hand.
 
@@ -317,7 +320,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 - Every failed start.gg call with its message, until the TO clicks "ack". Ack only hides the flag.
 - **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it, because the protocol never sends a Wii earlier games.
 - **Waiting sets** with their best-of and a button to switch Bo3/Bo5 or go back to `setFormat`'s answer. Only for sets no station holds, since a Wii learns best-of when it starts a set. Overrides are `bestof` events in the audit log and replay at startup.
-- Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, the preview-set warning, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
+- Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, a pool the relay could not start, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
 
 ## Error handling
 

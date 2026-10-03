@@ -8,7 +8,10 @@
 // gotcha). gameNum exists only inside the BracketSetGameDataInput variables.
 //
 // Behavior verified by the probe and reproduced here:
-//   - markSetInProgress: state 1 -> 2.
+//   - markSetInProgress: state 1 -> 2. On a preview id it starts the whole
+//     pool: every preview set of that phase group gets a numeric id, and the
+//     answer carries the set's new id (probe, 2026-10-02). The real API also
+//     renumbers the pool's rounds; the fake keeps them.
 //   - assignStream: attaches the stream, no stream-queue precondition.
 //   - reportBracketSet without winnerId: full overwrite of the game rows
 //     (old ids deleted, fresh ids created), set stays state 2.
@@ -46,6 +49,7 @@ export interface FakeSet {
   fullRoundText: string;
   totalGames: number; // best of N
   phaseOrder?: number; // default FIXTURE_PHASE_ORDER, the Bracket phase; a Top 8 phase is one higher
+  phaseGroupId?: number; // default FIXTURE_POOL, the started pool 1
   slots: [FakeEntrant | null, FakeEntrant | null];
   games: FakeGame[];
   stream: { id: number; streamName: string; streamSource: string } | null;
@@ -90,6 +94,7 @@ export class FakeStartgg {
   private server: Server;
   private baseUrl = '';
   private nextGameId = 500_000;
+  private nextSetId = 108_464_842; // numeric ids for a pool started from a preview id
   private failures: { op: Op | '*'; mode: FailMode; message: string; times: number }[] = [];
 
   constructor(
@@ -229,7 +234,10 @@ export class FakeStartgg {
       round: set.round,
       fullRoundText: set.fullRoundText,
       totalGames: set.totalGames,
-      phaseGroup: { phase: { phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER } },
+      phaseGroup: {
+        id: set.phaseGroupId ?? FIXTURE_POOL,
+        phase: { phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER },
+      },
       slots: set.slots.map((e) => ({ entrant: e ? { id: e.id, name: e.name } : null })),
       games: set.games.length
         ? set.games.map((g) => ({ id: g.id, orderNum: g.orderNum, winnerId: g.winnerId }))
@@ -256,6 +264,14 @@ export class FakeStartgg {
     const set = this.findSet(variables);
     if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
     if (set.state === 3) return { status: 200, body: gqlErrorBody('Set is already complete') };
+    if (typeof set.id === 'string') {
+      const pool = set.phaseGroupId ?? FIXTURE_POOL;
+      for (const s of this.sets) {
+        if (typeof s.id === 'string' && (s.phaseGroupId ?? FIXTURE_POOL) === pool) {
+          s.id = this.nextSetId++;
+        }
+      }
+    }
     set.state = 2;
     return {
       status: 200,
@@ -391,7 +407,9 @@ export class FakeStartgg {
 
   private resetSet(variables: Record<string, unknown>): { status: number; body: string } {
     const set = this.findSet(variables);
-    if (!set) return { status: 200, body: gqlErrorBody('Set not found') };
+    // The real resetSet answers "Set not found" for a preview id (probe, 2026-10-02).
+    if (!set || typeof set.id === 'string')
+      return { status: 200, body: gqlErrorBody('Set not found') };
     set.state = 1;
     set.games = [];
     // set.stream stays: the real resetSet does not clear a stream assignment
@@ -406,12 +424,16 @@ export class FakeStartgg {
 // ---- default fixture: the shape of the real test tournament ----
 // Event 1613010, 16 dummy entrants Alpha..Papa. Pool 1 is started (numeric
 // set ids like the probe's 107949994); pool 2 (3292311) is deliberately
-// unstarted, so its sets have preview_* string ids (decisions.md R8).
+// unstarted, so its sets have preview_* string ids (decisions.md R8). Its
+// slots are TBD, like a Top 8 nobody has qualified for yet, so the relay
+// leaves it alone; a test that wants it ready fills a slot pair.
 // Matches the live event's shape (2026-09-20 run): sets are Bo5 and the
 // first round is "Winners Quarter-Final".
 
 export const FIXTURE_EVENT_ID = 1613010;
 export const FIXTURE_PHASE_ORDER = 2; // the Bracket phase's phaseOrder on the real test event
+export const FIXTURE_POOL = 3290148; // pool 1's phase group id on the real test event
+export const FIXTURE_PREVIEW_POOL = 3292311; // pool 2, unstarted
 export const FIXTURE_TOKEN = 'test-token';
 
 const TAGS = [
@@ -457,7 +479,7 @@ function set(
   };
 }
 
-/** Fresh mutable fixture per test; entrants 1..8 in pool 1, 9..16 in preview pool 2. */
+/** Fresh mutable fixture per test; entrants 1..8 in pool 1, preview pool 2 still all TBD. */
 export function defaultFixture(): FakeSet[] {
   return [
     set(107949994, 1, 'Winners Quarter-Final', 1, 2),
@@ -469,9 +491,15 @@ export function defaultFixture(): FakeSet[] {
     set(107950002, 3, 'Winners Final', null, null),
     set(107950003, -3, 'Losers Final', null, null),
     set(107950004, 4, 'Grand Final', null, null),
-    // Unstarted pool 2: preview ids, both entrants known but unreportable (R8).
-    set('preview_3292311_1_1', 1, 'Winners Quarter-Final', 9, 10),
-    set('preview_3292311_1_2', 1, 'Winners Quarter-Final', 11, 12),
+    // Unstarted pool 2: preview ids, entrants TBD (R8).
+    {
+      ...set('preview_3292311_1_1', 1, 'Winners Quarter-Final', null, null),
+      phaseGroupId: FIXTURE_PREVIEW_POOL,
+    },
+    {
+      ...set('preview_3292311_1_2', 1, 'Winners Quarter-Final', null, null),
+      phaseGroupId: FIXTURE_PREVIEW_POOL,
+    },
   ];
 }
 
