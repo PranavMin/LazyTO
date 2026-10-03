@@ -69,7 +69,8 @@ Delete `kiosk/build/obj/` and rebuild. A stale object once rendered mixed old an
   patch the inlined jump tables with `word` lines instead (`mn_8022C010` was inlined).
 - The builder refuses any address a Nintendont gecko codeset also writes, because gecko
   applies after the module and would win silently. Do not reimplement venue codeset
-  behaviour (UCF, spawns, striking, stealth tags, rumble, music/mono).
+  behaviour (UCF, spawns, striking, stealth tags, rumble). Music and mono are the kiosk's own
+  (from the loader's `host_opts`); no codeset does them.
 
 ## After the build
 
