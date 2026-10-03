@@ -77,6 +77,10 @@ something, hold B while the loader starts to reach its menu:
 Slippi Nintendont's options, such as UCF, stage striking and stage lists, work as usual. LazyTO
 adds nothing to them.
 
+Changes are saved only when you start the game from the menu. From the settings, press B to
+return to the game list, then A on the game. Home ("Go Back") returns to the SD/USB screen and
+drops unsaved changes: they apply to that one boot and are gone after a restart.
+
 Boot the game from the SD card. The loader only reads `tournament.cfg` from the card when the
 game starts from it.
 
