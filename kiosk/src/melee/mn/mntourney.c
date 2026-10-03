@@ -204,7 +204,7 @@ static int tm_boot_frames = 0;
  * set list is up: a stable, fully-rendered menu frame (so no GX-transition
  * crash), AFTER the memcard save-load (so it isn't overwritten), and before any
  * match. sound_balance = 100 puts the SOUNDS<->MUSIC slider at all-sounds (music
- * off); OSSetSoundMode(0) forces mono. */
+ * off) and gm_801603B0 applies it to the mix; OSSetSoundMode(0) forces mono. */
 static bool tm_audio_set = false;
 
 /* Kiosk: hide/show the main menu's visuals. Its background (class 4, plink 5,
@@ -1281,6 +1281,11 @@ void mnTourney_Think(HSD_GObj* gobj)
         }
         if (!(tm_ph.host_opts & HO_MUSIC_ON)) {
             gmMainLib_GetGamePrefs()->sound_balance = 100; /* music off */
+            /* The pref alone changes nothing until the mix is set from it:
+             * gm_801603B0 sets the music and sound volumes from
+             * sound_balance, as vanilla does at audio init and when the main
+             * menu reloads its save (mnMain_Scene_OnFrame). */
+            gm_801603B0();
         }
     }
 

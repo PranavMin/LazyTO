@@ -109,7 +109,9 @@ after the module and would win silently.
 - Vanilla addresses only, from `symbols.txt`; verify a hook is really reached (inlining! the
   light-colour function was inlined at both real call sites - 2026-09-24).
 - Nothing the venue's codesets already do is re-implemented here: UCF, neutral spawns,
-  striking, stealth tags, rumble toggle, music/mono are theirs.
+  striking, stealth tags and the rumble toggle are theirs. Music and mono are not in any
+  codeset: the kiosk sets them from the loader's Music and Audio options (`host_opts`) once the
+  set list is up.
 - Per-build QA: `kiosk-checklist.md`.
 
 ## Compiler and engine pitfalls

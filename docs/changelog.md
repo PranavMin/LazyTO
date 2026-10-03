@@ -6,6 +6,10 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 
 The first public beta. Everything below is the work leading up to it, by date.
 
+## 2026-10-03
+
+- **Music off works from boot.** With the loader's Music option off, the kiosk now silences music as soon as the set list is up; before, it only set the preference, and music kept playing until the Options page was visited.
+
 ## 2026-10-02
 
 - **Top 8 reaches the kiosk without the TO starting it.** A set in an unstarted pool or phase used to be dropped (preview id). Now the relay starts that pool on start.gg as soon as one of its sets has both players, and the set is on every Wii within 20 s (decisions.md R8).
