@@ -294,6 +294,26 @@ test('upstream 4xx: set completed by the TO (decisions.md R6)', async (t) => {
   assert.equal(env.state.get(6), undefined);
 });
 
+test('a ready set in an unstarted top 8 reaches the Wii (decisions.md R8)', async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  const wii = env.wii(6);
+
+  // Winners side of the feeder is done: two players land in the preview pool.
+  const preview = env.fake.getSet('preview_3292311_1_1');
+  preview.slots = [entrant(9), entrant(10)];
+  await env.cache.refresh(); // starts the pool on start.gg
+  assert.equal(typeof preview.id, 'number', 'the pool has numeric ids now');
+  await env.cache.refresh(); // and lists them
+
+  const { sets } = await wii.listSets();
+  const row = sets.find((s) => s.set_id === preview.id);
+  assert.ok(row, 'the top 8 set is on the list');
+  assert.equal(row.p1_tag, 'India');
+  assert.equal((await wii.startSet(preview.id as number)).resp.status, RelayStatus.ST_OK);
+  assert.equal(preview.state, 2);
+});
+
 test('rate limited request gets ST_RATE_LIMITED', async (t) => {
   // A 3-token bucket refilling one token a minute: finding the event at
   // startup, the initial cache refresh and the first start each take one;

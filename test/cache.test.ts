@@ -100,12 +100,13 @@ test('set cache', async (t) => {
   });
 
   await t.test(
-    'refresh keeps numeric both-entrant sets and drops preview ids with a warning',
+    'refresh keeps numeric both-entrant sets; TBD preview sets are left alone',
     async () => {
+      const before = fake.callsFor('markSetInProgress').length;
       const cache = new SetCache(client, FIXTURE_EVENT_ID, 'startgg');
       await cache.refresh();
 
-      // Fixture: 4 numeric sets with both entrants, 5 with TBD slots, 2 preview.
+      // Fixture: 4 numeric sets with both entrants, 5 with TBD slots, 2 TBD preview.
       const pending = cache.pending();
       assert.deepEqual(
         pending.map((s) => s.id),
@@ -119,17 +120,87 @@ test('set cache', async (t) => {
       assert.equal(status.count, 4);
       assert.equal(status.error, null);
       assert.ok(status.refreshedAt > 0);
-      assert.equal(status.warnings.length, 1);
-      assert.match(status.warnings[0]!, /2 preview-id set\(s\) dropped/);
-      assert.match(status.warnings[0]!, /R8/);
+      assert.deepEqual(status.warnings, []);
+      assert.equal(fake.callsFor('markSetInProgress').length, before, 'no pool started');
     },
   );
+
+  await t.test('a ready preview set starts its pool once; the next refresh lists it', async () => {
+    const sets = defaultFixture();
+    sets[9]!.slots = [entrant(9), entrant(10)]; // both preview sets of pool 2 ready
+    sets[10]!.slots = [entrant(11), entrant(12)];
+    const f2 = makeFake(sets);
+    await f2.start();
+    try {
+      const started: [string, Error | null][] = [];
+      const cache = new SetCache(
+        makeClient(f2.url),
+        FIXTURE_EVENT_ID,
+        'startgg',
+        () => {},
+        (id, e) => started.push([id, e]),
+      );
+      await cache.refresh();
+      assert.equal(f2.callsFor('markSetInProgress').length, 1, 'one start for the pool');
+      assert.equal(f2.callsFor('resetSet').length, 1, 'the started set goes back to pending');
+      assert.equal(started.length, 1);
+      assert.match(started[0]![0], /^preview_3292311_/);
+      assert.equal(started[0]![1], null);
+      assert.deepEqual(cache.status().warnings, []);
+      assert.equal(cache.pending().length, 4, 'the pool is not listed before the next refresh');
+
+      await cache.refresh();
+      const tags = cache.pending().map((s) => s.p1.tag);
+      assert.ok(tags.includes('India') && tags.includes('Kilo'), 'pool 2 sets are selectable');
+      assert.ok(cache.pending().every((s) => s.state === 1));
+      assert.equal(f2.callsFor('markSetInProgress').length, 1, 'no second start');
+    } finally {
+      await f2.close();
+    }
+  });
+
+  await t.test('a failed pool start is a warning and is not tried again', async () => {
+    const sets = defaultFixture();
+    sets[9]!.slots = [entrant(9), entrant(10)];
+    const f2 = makeFake(sets);
+    await f2.start();
+    try {
+      const started: [string, Error | null][] = [];
+      const cache = new SetCache(
+        makeClient(f2.url),
+        FIXTURE_EVENT_ID,
+        'startgg',
+        () => {},
+        (id, e) => started.push([id, e]),
+      );
+      f2.failNext('markSetInProgress', 'gqlError', 1, 'not an admin');
+      await cache.refresh();
+      assert.equal(started.length, 1);
+      assert.ok(started[0]![1]);
+      assert.equal(cache.status().error, null, 'the refresh itself succeeded');
+      assert.equal(cache.status().warnings.length, 1);
+      assert.match(
+        cache.status().warnings[0]!,
+        /pool 3292311 .*not an admin.*start it on start\.gg/,
+      );
+
+      await cache.refresh();
+      assert.equal(f2.callsFor('markSetInProgress').length, 1, 'no retry');
+      assert.equal(
+        cache.status().warnings.length,
+        1,
+        'the warning stays while the pool is unstarted',
+      );
+    } finally {
+      await f2.close();
+    }
+  });
 
   await t.test('pending sorts earliest rounds first, winners before losers', async () => {
     const sets = defaultFixture().map((s) => ({ ...s }));
     // Give the TBD sets entrants so round ordering is visible.
     for (const s of sets) {
-      if (!s.slots[0]) s.slots = [entrant(13), entrant(14)];
+      if (!s.slots[0] && typeof s.id === 'number') s.slots = [entrant(13), entrant(14)];
     }
     const f2 = makeFake(sets);
     await f2.start();

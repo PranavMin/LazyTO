@@ -54,8 +54,19 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
   const host = o.host ?? '0.0.0.0';
   const network = o.network ?? true;
   const audit = new AuditLog(auditPath(o.dataDir, o.eventId));
-  const cache = new SetCache(o.startgg, o.eventId, o.setFormat, (e) =>
-    audit.record({ type: 'refresh_error', error: String(e) }),
+  const cache = new SetCache(
+    o.startgg,
+    o.eventId,
+    o.setFormat,
+    (e) => audit.record({ type: 'refresh_error', error: String(e) }),
+    (setId, e) =>
+      audit.record({
+        type: 'upstream',
+        op: 'startPool',
+        setId,
+        ok: e === null,
+        ...(e ? { error: String(e) } : {}),
+      }),
   );
   try {
     await cache.refresh();

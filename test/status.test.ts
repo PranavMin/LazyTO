@@ -7,6 +7,7 @@ import { WiiClient, game } from './wii-client.js';
 import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
 import { startHarness, TEST_PASSWORD } from './harness.js';
+import { entrant } from './fake-startgg.js';
 
 function basic(password: string): string {
   return `Basic ${Buffer.from(`to:${password}`).toString('base64')}`;
@@ -122,6 +123,11 @@ test('status page', async (t) => {
   fake.failNext('reportBracketSet', '5xx', 3);
   await wii4.reportScore(107949995, [game(1)]);
 
+  // The preview pool gets a ready set that start.gg refuses to start (R8).
+  fake.getSet('preview_3292311_1_1').slots = [entrant(9), entrant(10)];
+  fake.failNext('markSetInProgress', 'gqlError', 1, 'not an admin');
+  await cache.refresh();
+
   await t.test('renders stations, sets, scores, actions, flags, and cache info', async () => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /1 ★/, 'stream station is starred');
@@ -133,7 +139,11 @@ test('status page', async (t) => {
       /✗ reportBracketSet failed: start\.gg HTTP 503 after 3 attempts \(\d+s ago\)/,
       'failed upstream call, message, and age',
     );
-    assert.match(html, /preview-id set\(s\) dropped/, 'R8 warning is shown');
+    assert.match(
+      html,
+      /pool 3292311 has a ready set but could not be started/,
+      'R8 warning is shown',
+    );
     assert.match(html, /Cache: 4 sets \(2 selectable, 2 on stations\), refreshed \d+s ago/);
     assert.match(html, /Upstream: \d+ calls last 60s/);
     assert.doesNotMatch(html, /cache is stale/);

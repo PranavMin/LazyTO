@@ -7,9 +7,9 @@ Everything here works from your phone: the status page at http://relay.local:294
 1. **Power on the Pi.** The relay looks your tournament up at every start, so there is nothing
    to change from week to week. Open the status page. The header must name tonight's tournament
    and event, and the line under the tables must show `Cache: N sets`.
-2. **Start every pool and phase on start.gg**, later phases included. Sets in a pool that hasn't
-   started can't be reported. The status page shows `⚠ N preview-id set(s) dropped` until every
-   pool is started.
+2. **Finish seeding on start.gg.** You don't have to start pools or phases: the relay starts each
+   one, top 8 included, as soon as one of its sets has both players. Its seeding is locked from
+   then on, the same as when you report a set in it on the website.
 3. **Check the stations.** Each Wii's card comes from its own station's zip, so its station
    number matches its label.
 4. **Boot every Wii.** Each one shows the set list and appears in the status page's **Wii
@@ -49,7 +49,7 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | **Not running** with a reason | The relay couldn't start tonight's event | Fix what the reason names, on start.gg or on the settings page, then tap Retry now. [pi-setup.md](pi-setup.md#troubleshooting) explains each reason. |
 | Header names the wrong week | The short URL had not moved when the relay started | Move the short URL on start.gg, then open **settings** and press Save: the relay looks the tournament up again. |
 | `Cache: 0 sets` | No set has both players yet | Start the bracket. |
-| `⚠ N preview-id set(s) dropped` | A pool or phase isn't started | Start it. The warning clears within 20 seconds. |
+| `⚠ pool N has a ready set but could not be started` | start.gg refused to start a pool or phase (the token's account is not an admin of the tournament, or start.gg is down) | Start it on start.gg. The warning clears within 20 seconds. |
 | `⚠ cache is stale` or `✗ last refresh failed: start.gg unreachable` | The venue internet is down | Fix the uplink. Wiis keep the last set list, but every action fails until it is back. The relay recovers by itself. |
 | `✗ last refresh failed: ... Invalid authentication token` | The token was revoked or expired | Make a new token and paste it on the settings page (Replace the token). |
 | `✗ discovery beacon: ...` | The relay can't announce itself | The Pi has lost its network. Check its Wi-Fi. |
