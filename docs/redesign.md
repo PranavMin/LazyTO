@@ -49,6 +49,8 @@ Laptop: LazyTO app = Electron shell + the relay core (src/, unchanged in shape)
 | D10 | Only set games are recorded. Friendlies, handwarmers and anything outside a set leave no replay. | Only set replays are wanted, and the card holds less. See [Recording only set games](#recording-only-set-games). |
 | D11 | The app follows Replay Reporter and Beamer Manager: Electron, electron-builder, no paid signing, an update check that links to the release page. | One familiar way to install for TOs, no yearly cost, a possible merge with Beamer Manager later. |
 | D12 | A set with a reported game that has no replay gets no Lucky Stats zip. | Lucky Stats probably rejects it (`game_count_mismatch`). |
+| D13 | Sudden Death is never played in a 1v1 game. A time-out with equal stocks goes to the lower percent; an exact tie or a double KO is a no-contest the players score by hand. | The ruleset. The results screen then agrees with the kiosk's score. See [Timeout ties](#timeout-ties-no-sudden-death). |
+| D14 | The Slippi writer syncs each recording once, after its first data block. | An interrupted game's clusters are then freed by the erase instead of leaking. See [Self-erase](#self-erase). |
 
 ## The Wii side
 
@@ -210,8 +212,9 @@ opt-in.
 ## Recording only set games
 
 Only a match the kiosk starts as a game of the current set is recorded. Friendlies, handwarmers,
-Sudden Death, training, 1P modes, title demos and anything played from the vanilla main menu leave
-no file on the beamer. Slippi's memory ring and console mirroring are untouched: a mirroring PC
+training, 1P modes, title demos, a Sudden Death (only possible in a free-for-all or teams friendly,
+see [Timeout ties](#timeout-ties-no-sudden-death)) and anything played from the vanilla main menu
+leave no file on the beamer. Slippi's memory ring and console mirroring are untouched: a mirroring PC
 still receives every match.
 
 - **When the kiosk decides.** A new hook on the VS scene's on_enter (`ptr 0x803DA950
@@ -260,6 +263,48 @@ still receives every match.
   recorded.
 - **Dolphin** has no MEM2 gate. `host_build` is 0 there, so the kiosk never touches 0xD3xxxxxx, and
   development runs get `replay_id` 0.
+
+## Timeout ties: no Sudden Death
+
+The ruleset says a time-out goes to the player with more stocks, and with equal stocks to the one
+with less percent. Melee and Slippi Nintendont don't do that.
+
+- **Vanilla Melee, and Slippi Nintendont with Gameplay off** (as LazyTO cards set it):
+  - A time-out is decided by stocks only; percent is never compared.
+  - Equal stocks go to Sudden Death: 1 stock each at 300%, no timer. So does both players losing
+    their last stock on the same frame, with no time-out at all.
+  - Slippi records the main game as one file (Game End method TIME), and Sudden Death as a second
+    file.
+- **Slippi's Gameplay: LGL option** (UnclePunch's ledge-grab limit code):
+  - It settles a stock tie by lower percent inside the game.
+  - It also makes a player over the ledge-grab limit lose a time-out.
+  - An exact percent tie still goes to a Sudden Death tiebreaker.
+- **The kiosk today:**
+  - It scores a stock tie by percent at the end of the main game, and an exact tie as TIE - SCORE
+    IT MANUALLY.
+  - Sudden Death is still played, and the results screen then shows the Sudden Death winner. That
+    can be a different player from the one the kiosk reported.
+
+The change is in the kiosk only, with no new hook:
+
+- **Where.** The existing wrapper on the VS scene's exit (`lbTourney_MatchExit`) runs between two
+  vanilla steps: `gm_Scene_Vs_OnExit`, which builds the match result, and `gmVsMelee_ExitVs`, which
+  goes to Sudden Death only when that result has more than one winner.
+- **What.** After vanilla and the auto-score, `decideTie` settles a 1v1 VS result that still has
+  two winners:
+  - a time-out with different percent: the lower percent wins;
+  - an exact tie, or a double KO on the last stock: a no-contest.
+- **Afterwards.** Melee goes to the results screen and the CSS like after any other game, and the
+  screen agrees with the kiosk's score.
+- **Scope.** Every 1v1 VS game: set games, friendlies and handwarmers. Free-for-all and teams
+  friendlies stay vanilla, and are never recorded.
+- **Replays.** Slippi records only the main game. Its Game End goes out on the last frame, before
+  this step, so the replay is unchanged.
+- **With LGL on,** the game has already settled a percent tie, and `decideTie` does nothing. LGL is
+  optional and off on LazyTO cards, so this does not reimplement a codeset the venue runs.
+- **Check in Dolphin before a Wii:**
+  - a 1:00 timer with idle players gives an exact tie at 0%;
+  - one hit, then idle, gives a percent decision.
 
 ## Replays and the set archive
 
@@ -377,27 +422,55 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
    - The ack header holds the card id (FAT volume serial and SD CID). A swapped card drops the
      table.
 6. **Budget.**
-   - About 10 s per cold boot. 0-byte entries go first, and files are unlinked in batches of 8.
+   - 3-5 s per cold boot (the bench's per-file time decides the exact value), so a beamer bumped
+     mid-set misses as little as possible. 0-byte entries go first, and files are unlinked in
+     batches of 8.
    - The LCD shows ERASING n.
    - What doesn't fit waits for the next cold boot.
 
 ### Firmware and kernel fixes it needs
 
 - **Live detection.**
-  - Nintendont never syncs a file it is writing, so the directory entry stays at size 0 and the
-    beamer cannot see a Wii game as live.
+  - Since upstream PR #66 (2026-09-22), Nintendont syncs a file only when it closes it. The directory
+    entry of the game being recorded stays at size 0, so the beamer cannot see a Wii game as live.
+    It flags the file SLP MISFORMAT and re-reads the whole replay folder every second.
   - A file closed with raw length 0 is then treated as live forever, and it freezes the beamer's
-    replay scan.
-  - In LazyTO mode, live means raw length 0, the newest file, and a host write in the last 30 s.
-    Anything else is "incomplete": it is served and synced, and the laptop keeps it as partial.
-- **One `f_sync` after the first data block of each recording** (kernel).
-  - An interrupted recording then owns its clusters, and the normal erase frees them. Today they
-    leak, up to about 7 MB per interrupted game.
-  - The scan fix must land first or together.
+    replay scan until a reboot.
+  - In LazyTO mode, live means raw length 0, the newest file, and any USB command from the Wii in
+    the last few seconds. The kernel reads the hello every second even while a game is paused, so a
+    long pause is still live; "a host write in the last 30 s" would not be.
+  - Anything else is "incomplete": it is served and synced, and the laptop keeps it as partial.
+  - A file counts as finished only when its size covers the header's raw length. Files are tracked
+    by name, size and modified time, so a file first seen as incomplete is collected again once it
+    is finished. When the laptop gets the same name twice, it keeps the complete copy.
+- **One `f_sync` after the first data block of each recording** (kernel, decided 2026-10-07).
+  - It goes in the writer's write-success branch, once per file, about 0.2-0.3 s after Game Start
+    (during the countdown). That block holds Event Payloads and Game Start.
+  - An interrupted recording (Wii off, exit to the loader, beamer unplugged) then owns its clusters
+    through its directory entry. Both FatFs versions free a file's whole chain on delete,
+    whatever its size, so the normal erase frees the whole game. Today the chain leaks, up to about
+    7 MB per interrupted game. Only a recording cut off in its first ~0.3 s still leaves a 0-byte
+    entry (one or two clusters).
+  - The laptop gets about 4 KB of an interrupted file: enough to identify the game, no use for
+    stats.
+  - The game cannot hitch. The main loop that serves the game's EXI transfers never takes the USB
+    lock, and the writer has 3 MB of buffer. The sync is 3 small writes and 2 reads (about 10 ms,
+    not measured).
+  - Why upstream dropped syncing: PR #66 removed a sync after every 100 ms write (about 14,000 per
+    game) for flash wear. One sync per game adds 3 writes.
+  - It also gives the beamer back its live detection.
+  - The same in every mode, with or without a beamer: one path.
+  - **The beamer's scan fix ships first, or in the same bundle.** With older firmware, one
+    interrupted game stops that beamer finding replays until it reboots. The status page flags
+    beamers with older firmware.
+  - Merge risk: upstream PR #67 (open) rewrites `SlippiFileWriter.c` and `usbstorage.c`. It would
+    clash with all the fork's writer changes, not just this one.
 - **Uncapped inventory.**
   - The beamer counts every file, not just up to `REPLAY-CAP`.
   - FULL means less than 64 MB free, so the next game would fail. FILLING means 384 files or less
     than 1 GB free, with the reason "replug to erase collected replays".
+  - Free space is counted from the FAT, not from FSInfo, which overstates it after interrupted
+    games.
 - **WAITING FOR THE BEAMER.** For about 45 s after kernel boot or a USB removal, the kernel reports
   "starting" instead of "no drive". A beamer that is erasing or joining the Wi-Fi then doesn't show
   as missing.
@@ -407,7 +480,7 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
 | Case | What happens |
 | --- | --- |
 | The TO forgets to unplug; Wii standby keeps the beamer powered | No erase. The next event's status page says "Beamer N not unplugged since \<date\>: X collected replays wait to be erased; replug it between sets". Later FILLING, and at FULL the kiosk shows REPLAYS NOT SAVING. |
-| A Wii power cycle mid-event cuts USB power (to be measured) | The beamer erases that day's acked files (up to 10 s) while the Wii reboots, which takes longer. |
+| A Wii power cycle mid-event cuts USB power (to be measured) | The beamer erases that day's acked files (3-5 s) while the Wii reboots, which takes longer. |
 | Only the beamer loses power mid-set (bumped, replugged) | The open replay is lost, and a game started during boot and erase is not recorded. The status page flags the missing replay, and that set is skipped for Lucky Stats. The kiosk shows WAITING FOR THE BEAMER without blocking play. |
 | Plugged into the laptop to provision or flash | A cold boot erases only acked files. Download mode runs no firmware, and the reset after flashing is not a power-on. |
 | Reflashing | The app's flasher writes around NVS and never erases the whole chip, so the station number and acks survive. |
@@ -507,6 +580,8 @@ no paid signing.
 
 ### What a TO clicks the first time
 
+The TO-facing steps are in [laptop-setup.md](laptop-setup.md). Keep it in step with the app.
+
 - **Windows.**
   - SmartScreen: "Windows protected your PC" → More info → Run anyway.
   - Firewall, on the first launch: tick Private and Public, then Allow access (an admin approves).
@@ -596,16 +671,21 @@ Each phase leaves a working system. Phases 2 and 3 do not depend on each other.
      mode, `/reset-beamer` refused, the button guard.
    - Kernel: delete the network path; bound the USB lock.
    - Kiosk: the texts above. One identical card zip.
+   - Kiosk, independent of the beamer (it can land on `main` first): `decideTie`, so Sudden Death
+     is never played.
 3. **The laptop app.**
-   - First, test a packaged dmg on a macOS 15+ Mac: Open Anyway, the Local Network alert, and a
+   - First, test a packaged dmg on the maintainer's macOS 15+ Mac: Open Anyway, the Local Network
+     alert, and a
      beacon reaching a beamer.
    - Then `desktop/`, the firewall and Local Network detection, keep-awake, the update check,
      flashing and beamer provisioning.
+   - Check [laptop-setup.md](laptop-setup.md) against the packaged app on both systems, with the
+     real prompt wording.
    - Then retire the Pi.
 4. **Replays.**
    - Set-only recording and replay ids, together.
    - Collection driven by the sync, acks with HMAC, the cold-boot erase.
-   - The scan fix and the kernel's early `f_sync`.
+   - The beamer's scan fix, then (in the same bundle or later) the kernel's early `f_sync`.
    - The N3 resume fix, and a test upload to Lucky Stats.
 5. **A full night.** When more beamers arrive: duplicate detection, a 12-station load run
    (`scripts/sim-wii.ts` against a beamer impersonator), the router and the end-of-night steps in
@@ -613,27 +693,24 @@ Each phase leaves a working system. Phases 2 and 3 do not depend on each other.
 
 ## Open questions
 
-1. **A Mac for testing.** Is there a macOS 15+ Mac (ideally Apple silicon) to test the packaged dmg
-   on? It gates Phase 3.
-2. **The firewall button.** May the status page offer "Allow LazyTO through the firewall", which
+1. **The firewall button.** May the status page offer "Allow LazyTO through the firewall", which
    raises one admin prompt?
-3. **The erase budget.** 10 s per power-on, or 3-5 s so a beamer bumped mid-set misses less, at the
-   cost of more power-ons to clear a backlog?
-4. **The kernel's early `f_sync`.** May the fork sync each recording once after its first data
-   block? It touches Slippi's writer path.
-5. **Raw retention.** Keep raw files until the TO deletes the event? The laptop can only answer
+2. **Raw retention.** Keep raw files until the TO deletes the event? The laptop can only answer
    "held" while a raw file exists.
-6. **The archive folder's default.** Documents is often synced to OneDrive or iCloud. Use a
+3. **The archive folder's default.** Documents is often synced to OneDrive or iCloud. Use a
    non-synced default, or warn?
-7. **Sudden Death.** Leave it unrecorded (the game is scored from the main portion), or record it
-   as a second file?
-8. **Strays.** Keep stray and incomplete recordings in an unmatched folder, or discard them once
+4. **Strays.** Keep stray and incomplete recordings in an unmatched folder, or discard them once
    acked?
-9. **Duplicate station numbers.** Refuse only the newcomer (proposed), or both?
-10. **The button.** In LazyTO mode, hold to edit, and a press only shows the number?
-11. **Licence.** Relicense the generated protocol headers as MIT or dual?
-12. **Upstream.** Persist the number only in LazyTO mode, or offer jendotpg an opt-in key?
-13. **Builds.**
+5. **Duplicate station numbers.** Refuse only the newcomer (proposed), or both?
+6. **The button.** In LazyTO mode, hold to edit, and a press only shows the number?
+7. **Ledge-grab limit.** Is it part of the ruleset? If so, cards turn on Slippi's Gameplay: LGL, and
+   the kiosk reports the game's own winner instead of recomputing it.
+8. **Licence.** Relicense the generated protocol headers as MIT or dual?
+9. **Upstream.**
+   - Persist the station number only in LazyTO mode, or offer jendotpg an opt-in key?
+   - Offer the early `f_sync` to project-slippi/Nintendont as a small PR? It restores the beamer's
+     live detection, which PR #66 broke.
+10. **Builds.**
     - A universal dmg (about 230 MB) or one per architecture?
     - A Linux AppImage too? It's free in the same CI.
     - The final `productName` and `appId`?
@@ -648,10 +725,13 @@ Each phase leaves a working system. Phases 2 and 3 do not depend on each other.
     lives on the beamer).
   - New entries: recording only set games, matching replays by their own id, the beamer's
     self-erase, the app built like Replay Reporter.
-- `architecture.md`: components, EXI contract, deployment, network, error table.
+- `architecture.md`: components, EXI contract, deployment, network, error table; auto-score
+  (a percent-decided time-out shows on screen too, no Sudden Death, an exact tie is a no-contest).
+- `kiosk-checklist.md`: the three time-out cases in the auto-score item.
 - `night-of.md`: the router, laptop rules, beamer numbering.
 - `wii-setup.md`: replays on, game on SD, one card for every Wii.
 - `kiosk.md`: the VS on_enter hook and the record gate.
 - `beamer.md`: folds into `architecture.md`.
-- `pi-setup.md`: deleted.
+- `pi-setup.md`: deleted; [laptop-setup.md](laptop-setup.md) replaces it (drop its status note
+  when the app ships).
 - `CLAUDE.md`, as above.
