@@ -49,7 +49,7 @@ jobs:
         run: python kiosk/tools/fetch_decomp_tools.py
       - name: Developer switches are off in the sources (build_module.py --demo sets them)
         shell: bash
-        run: "! grep -rnE '#define (TM_DEMO_AUTOSTART|LB_TOURNEY_DEMO_CLAIM)[[:space:]]+[1-9]' kiosk/src"
+        run: "! grep -rnE '#define (TM_DEMO_AUTOSTART|LB_TOURNEY_DEMO_CLAIM|TM_DEMO_SCROLL)[[:space:]]+[1-9]' kiosk/src"
       - name: Build the module
         run: python kiosk/tools/build_module.py
       - uses: actions/upload-artifact@v4

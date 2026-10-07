@@ -585,6 +585,18 @@ static void freeText(HSD_Text** t)
     }
 }
 
+/* A text that is kept across redraws and emptied in place: its buffer stays
+ * at its largest size, so a redraw allocates nothing from the scene's SIS
+ * pool, whose allocator never merges freed blocks (mntourney.c redraw). */
+static void reuseText(HSD_Text** t, s32 ctx, u8 alpha)
+{
+    if (*t == NULL) {
+        *t = newText(ctx, alpha);
+    } else {
+        HSD_SisLib_803A7664(*t);
+    }
+}
+
 /* A line with its shadow; fmt may carry #A-style icons. */
 static void ovLine(HSD_Text* shadow, HSD_Text* text, f32 x, f32 y, f32 s,
                    const GXColor* c, const char* fmt)
@@ -751,9 +763,9 @@ static void redraw(void)
     char p1[TAG_LEN + 1];
     char p2[TAG_LEN + 1];
 
-    freeText(&css_text);
-    freeText(&css_shadow);
     if (!has_set) {
+        freeText(&css_text);
+        freeText(&css_shadow);
         return;
     }
     memcpy(p1, cur_set.p1_tag, TAG_LEN);
@@ -761,8 +773,8 @@ static void redraw(void)
     memcpy(p2, cur_set.p2_tag, TAG_LEN);
     p2[TAG_LEN] = '\0';
 
-    css_shadow = newText(css_ctx, 190);
-    css_text = newText(css_ctx, 255);
+    reuseText(&css_shadow, css_ctx, 190);
+    reuseText(&css_text, css_ctx, 255);
 
     /* Handwarmer hint at the top-left corner (2026-09-25; it sat
      * top-right beside BACK before). */
@@ -831,10 +843,8 @@ static void redrawMatch(void)
     int sec = match_frames / 60;
     char line[32];
 
-    freeText(&vs_text);
-    freeText(&vs_shadow);
-    vs_shadow = newText(vs_ctx, 190);
-    vs_text = newText(vs_ctx, 255);
+    reuseText(&vs_shadow, vs_ctx, 190);
+    reuseText(&vs_text, vs_ctx, 255);
     sprintf(line, "HANDWARMER %d:%02d", sec / 60, sec % 60);
     ovLine(vs_shadow, vs_text, 34.0f, 24.0f, 0.6f,
            match_frames >= LB_TOURNEY_HANDWARMER_RED_FRAMES ? &red : &ov_white,

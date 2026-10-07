@@ -79,6 +79,7 @@ TUS = [KIOSK / "src" / "melee" / t for t in (
 DEMO_FLAGS = {
     "start": ["-DTM_DEMO_AUTOSTART=1", "-DLB_TOURNEY_DEMO_CLAIM=1"],
     "confirm": ["-DTM_DEMO_AUTOSTART=2"],
+    "scroll": ["-DTM_DEMO_SCROLL=6"],
 }
 
 MWCC = DECOMP / "build" / "compilers" / "GC" / "1.2.5n" / "mwcceppc.exe"

@@ -140,9 +140,22 @@ enum mnTourney_State {
 #ifndef TM_DEMO_AUTOSTART
 #define TM_DEMO_AUTOSTART 0
 #endif
+/* Developer switch (docs/kiosk.md): the set list scrolls itself, one row
+ * every TM_DEMO_SCROLL frames, down to the end and back, for soak runs with
+ * no controller. 0 in every committed build. */
+#ifndef TM_DEMO_SCROLL
+#define TM_DEMO_SCROLL 0
+#endif
 #define L_PANEL_R 12.0f  /* corner radius of the rounded panels */
 #define L_SHADOW_DX 2.0f
 #define L_SHADOW_A 190
+/* Encoded bytes each text starts with (newText). A full list of 16-letter
+ * tags measured 2560 / 1920 / 128 / 384 in Dolphin (2026-10-07); these leave
+ * room above that, 8 KB of the menu's 30 KB pool. */
+#define L_RESERVE_TEXT 4096
+#define L_RESERVE_SHADOW 3072
+#define L_RESERVE_BAR 512
+#define L_RESERVE_SCRIM 512
 
 static const GXColor c_white = { 255, 255, 255, 255 };
 static const GXColor c_dim = { 169, 188, 230, 255 };  /* secondary */
@@ -474,11 +487,29 @@ static void destroyText(void)
     }
 }
 
-static HSD_Text* newText(u8 alpha)
+/* A text whose buffer starts at reserve bytes. A buffer otherwise grows from
+ * 128 bytes in 128-byte steps, each step a new block with the old one freed,
+ * and the SIS allocator never merges freed blocks: the first draw of a full
+ * list took 23 KB of the menu's 30 KB pool in steps that nothing could reuse
+ * (Dolphin, 2026-10-07). One block of the final size up front costs only
+ * that size. Done while the text is still empty, as HSD_SisLib_803A6B98
+ * does when it grows one. */
+static HSD_Text* newText(u8 alpha, u32 reserve)
 {
     HSD_Text* t = HSD_SisLib_803A6754(lbButton_Font(), tm_ctx);
+    SisBuffer* b = t->alloc_data;
     t->default_kerning = 1;
     t->text_color.a = alpha;
+    if (reserve > b->size) {
+        u8* old = b->data;
+        u8* buf = HSD_SisLib_Alloc((s32) reserve);
+        buf[0] = 0;
+        b->data = buf;
+        b->end = buf;
+        b->size = reserve;
+        t->sis_buffer = buf;
+        HSD_SisLib_Free(old);
+    }
     return t;
 }
 
@@ -921,13 +952,29 @@ static void drawPane(void)
     }
 }
 
+/* The four texts are made once per visit and emptied in place on every
+ * redraw (HSD_SisLib_803A7664 keeps each text's buffer). Destroying and
+ * re-creating them made every buffer regrow in 128-byte steps, and the SIS
+ * allocator never merges freed blocks: a few seconds of scrolling a long
+ * list fragmented the menu's text pool until "Memory Empty" halted the CPU
+ * (seen at a venue 2026-10-06 with 16 sets). Kept buffers stop at their
+ * largest screen, so a redraw allocates nothing. Every entry sets its own
+ * colour and scale (lbbuttonglyph.c), so an emptied text draws the same as
+ * a new one. Their buffers are reserved up front (newText). */
 static void redraw(void)
 {
-    destroyText();
-    tm_scrim = newText(70);
-    tm_shadow = newText(L_SHADOW_A);
-    tm_bar = newText(L_BAR_A);
-    tm_text = newText(255);
+    if (tm_text == NULL) {
+        destroyText();
+        tm_scrim = newText(70, L_RESERVE_SCRIM);
+        tm_shadow = newText(L_SHADOW_A, L_RESERVE_SHADOW);
+        tm_bar = newText(L_BAR_A, L_RESERVE_BAR);
+        tm_text = newText(255, L_RESERVE_TEXT);
+    } else {
+        HSD_SisLib_803A7664(tm_scrim);
+        HSD_SisLib_803A7664(tm_shadow);
+        HSD_SisLib_803A7664(tm_bar);
+        HSD_SisLib_803A7664(tm_text);
+    }
 
     paneBox(L_LIST_X, L_LIST_Y, L_LIST_W, L_LIST_H, c_scrim, true);
     paneBox(L_PANE_BOX_X, L_PANE_BOX_Y, L_PANE_BOX_W, L_PANE_BOX_H, c_scrim,
@@ -986,11 +1033,14 @@ static void redraw(void)
               tm_errmsg);
         lineC(L_TEXT_X, 262.0f, 0.45f, &c_dim,
               tm_count > 0 ? "YOUR LIST IS STILL HERE" : "NO SETS LOADED YET");
+        /* Each line encodes to under 128 bytes: HSD_SisLib_803A6B98 encodes
+         * into a 128-byte stack buffer without a bound, and a space after a
+         * letter costs 7 bytes there. */
         lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim,
-              hostNetJoining()    ? "POWER CYCLE THE WII, THEN CHECK THE ROUTER"
-              : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER'S SETTINGS"
-              : hostNoCard()      ? "UNZIP THE STATION'S ZIP ONTO THE CARD AGAIN"
-              : tm_ph.relay_ip == 0 ? "IS THIS SETUP ON THE RELAY'S NETWORK?"
+              hostNetJoining()    ? "POWER CYCLE, CHECK THE ROUTER"
+              : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER"
+              : hostNoCard()      ? "UNZIP THE STATION ZIP AGAIN"
+              : tm_ph.relay_ip == 0 ? "IS THE RELAY ON THIS WI-FI?"
               : errIsSecret()     ? "CHECK THE SECRET ON THIS CARD"
                                   : "TELL THE TO IF THIS REPEATS");
         centredAt(L_HINT_CX, L_HINT_Y, L_HINT_S, &c_white,
@@ -1351,6 +1401,17 @@ void mnTourney_Think(HSD_GObj* gobj)
 #if TM_DEMO_AUTOSTART
         if (tm_nview > 0 && tm_frame % 600 == 120) {
             buttons |= MenuInput_Confirm;
+        }
+#endif
+#if TM_DEMO_SCROLL
+        if (tm_nview > 1 && tm_frame % TM_DEMO_SCROLL == 0) {
+            static int demo_dir = 1;
+            if ((demo_dir > 0 && tm_sel + 1 >= tm_nview) ||
+                (demo_dir < 0 && tm_sel == 0))
+            {
+                demo_dir = -demo_dir;
+            }
+            moveCursor(demo_dir);
         }
 #endif
         listInputs(buttons);

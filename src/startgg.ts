@@ -48,7 +48,7 @@ export interface UpstreamSet {
   round: number;
   fullRoundText: string;
   totalGames: number;
-  slots: { entrant: { id: number; name: string } | null }[];
+  slots: { entrant: UpstreamEntrant | null }[];
   stream: { id: number } | null;
   /** The pool: its phase's phaseOrder for format.ts (phases number their rounds from 1 again), the rest for the set archive's context.json (archive.ts). */
   phaseGroup: UpstreamPhaseGroup;
@@ -60,6 +60,14 @@ export interface UpstreamPhaseGroup {
   bracketType: string | null; // "DOUBLE_ELIMINATION", ...
   wave: { id: number } | null;
   phase: { id: number; name: string; groupCount: number | null; phaseOrder: number };
+}
+
+/** name is the display name with the sponsor prefix ("C9 | Mang0"); a singles
+ * entrant's one participant carries the bare gamerTag. */
+export interface UpstreamEntrant {
+  id: number;
+  name: string;
+  participants?: { gamerTag: string | null }[] | null;
 }
 
 /** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
@@ -123,7 +131,7 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
         round
         fullRoundText
         totalGames
-        slots { entrant { id name } }
+        slots { entrant { id name participants { gamerTag } } }
         stream { id }
         phaseGroup { id displayIdentifier bracketType wave { id } phase { id name groupCount phaseOrder } }
       }
