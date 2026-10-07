@@ -1,239 +1,222 @@
-// config.ts -- load and validate /etc/lazyto/config.json
-// (architecture.md Relay). Every field is required, every field is checked,
-// there are no defaults; any problem is a ConfigError listing everything
-// wrong so one restart fixes it all. main.ts turns that into a non-zero exit.
+// config.ts -- the relay's settings (architecture.md Relay): one JSON file in
+// the data directory, written by the setup page (setup.ts) and read at every
+// (re)start of the event (app.ts).
 //
 // The event and stream are named, not numbered: tournament is the start.gg
 // short URL (e.g. "mybar") or, for an unpublished tournament, its full slug;
 // eventName and streamName pick from it by name; resolve.ts turns them into
-// ids at startup, because the ids change every week and the names do not.
+// ids, because the ids change every week and the names do not.
 // weeklyNamePrefix ("" for none) lets a numbered weekly series be found by
 // name when the short URL has not been moved yet (resolve.ts).
 //
-// Two fields beyond the design's example: auditDir, the directory the audit
-// log <eventId>.jsonl is written to (section 10 hardcodes a Linux path; a
-// hardcoded path is a hidden default, so it lives in the config instead),
-// and startggEndpoint, the GraphQL URL -- https://api.start.gg/gql/alpha in
-// production, the in-process fake (test/fake-startgg.ts) when the built
-// relay is exercised on a dev machine. Same reasoning: explicit, not hidden.
+// Values are validated strictly. Fields fall in two groups: the five
+// required ones never change meaning; every other field is optional with a
+// default, so a build that adds a field still accepts the file an older build
+// wrote and an auto-update never stalls a Pi (test/config.test.ts keeps a
+// frozen copy of an old file). Unknown fields are ignored and reported, so a
+// field a later build dropped does no harm either.
 //
-// The set archive (archive.ts, 2026-10-01): archiveDir is where the zips go,
-// archiveSetName and archiveGameName are the file-name templates (names.ts
-// lists their {fields}; an unknown field is a config error), and
-// beamerHttpPort is the port the stations' beamers serve replays on -- 80 on
-// a real beamer, another port for scripts/fake-beamer.ts on a dev machine.
+// The set archive (archive.ts, experimental): archiveSetName and
+// archiveGameName are the file-name templates (names.ts lists their
+// {fields}; an unknown field is a settings error). The zips go to
+// <dataDir>/archive, and the stations' beamers serve replays on
+// BEAMER_HTTP_PORT; neither is a setting.
 
-import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
+import { join } from 'node:path';
 import { SET_FORMATS, type SetFormat } from './format.js';
 import { GAME_FIELDS, SET_FIELDS, unknownFields } from './names.js';
 
+/** Fixed facts of every install; not settings. */
+export const STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha';
+export const TCP_PORT = 29470;
+export const HTTP_PORT = 29473;
+/** Where every Slippi Beamer serves its replays (beamer.ts). */
+export const BEAMER_HTTP_PORT = 80;
+/** Settings, audit logs and Wii logs. LAZYTO_DIR overrides it on a development machine. */
+export const DATA_DIR = process.env.LAZYTO_DIR ?? '/var/lib/lazyto';
+
+export function configPath(dataDir: string): string {
+  return join(dataDir, 'config.json');
+}
+
 export interface Config {
-  startggEndpoint: string; // GraphQL URL, http(s)
   token: string;
   tournament: string; // start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")
-  eventName: string; // e.g. "Melee Singles"
-  streamName: string; // the stream's name in the tournament's stream settings
-  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
+  eventName: string; // e.g. "Melee Singles! (7:30 Start)"; matched as a substring
   secret: string; // shared with every station's relay_auth (decisions.md R16)
+  adminPassword: string; // the TO's password for the settings and the status page's actions
+  weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
+  streamName: string; // the stream's name in the tournament's stream settings; "" = no stream
   streamStation: number; // station number (u16 on the wire) of the stream Wii
-  setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q": Bo3, Bo5 from the top-8 qualifiers (format.ts)
-  tcpPort: number;
-  httpPort: number;
-  auditDir: string;
-  archiveDir: string;
+  setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q" (format.ts)
   archiveSetName: string; // e.g. "{tournament} - {round_short} - {p1} vs {p2}"
   archiveGameName: string; // e.g. "Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}"
-  beamerHttpPort: number;
 }
 
-const FIELDS = [
-  'startggEndpoint',
-  'token',
-  'tournament',
-  'eventName',
-  'streamName',
-  'weeklyNamePrefix',
-  'secret',
-  'streamStation',
-  'setFormat',
-  'tcpPort',
-  'httpPort',
-  'auditDir',
-  'archiveDir',
-  'archiveSetName',
-  'archiveGameName',
-  'beamerHttpPort',
-] as const;
+export const SECRET_RE = /^[A-Za-z0-9_-]{8,16}$/;
+const PASSWORD_RE = /^[\x21-\x7e]{8,64}$/;
+const TOURNAMENT_RE = /^(tournament\/)?[A-Za-z0-9-]+$/;
 
-export class ConfigError extends Error {
-  constructor(public readonly problems: string[]) {
-    super(`invalid config:\n  - ${problems.join('\n  - ')}`);
-    this.name = 'ConfigError';
+/** One row per field: its check (a problem string, or null) and, for an optional field, its default. */
+const FIELDS: {
+  [K in keyof Config]: { check: (v: unknown) => string | null; default?: Config[K] };
+} = {
+  token: {
+    check: (v) => (typeof v === 'string' && v.length > 0 ? null : 'must be a non-empty string'),
+  },
+  tournament: {
+    check: (v) =>
+      typeof v === 'string' && TOURNAMENT_RE.test(v)
+        ? null
+        : 'must be a start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")',
+  },
+  eventName: {
+    check: (v) =>
+      typeof v === 'string' && v.trim().length > 0 ? null : 'must be a non-empty string',
+  },
+  // Letters, digits, - and _ only: it is written onto every SD card as
+  // secret=<value> and must survive the kernel's key=value parser. 8 to
+  // SECRET_LEN (16) characters.
+  secret: {
+    check: (v) =>
+      typeof v === 'string' && SECRET_RE.test(v) ? null : 'must be 8-16 letters, digits, - or _',
+  },
+  // Typed into a browser's password prompt, so any printable ASCII.
+  adminPassword: {
+    check: (v) =>
+      typeof v === 'string' && PASSWORD_RE.test(v)
+        ? null
+        : 'must be 8-64 printable characters, no spaces',
+  },
+  weeklyNamePrefix: {
+    check: (v) => (typeof v === 'string' ? null : 'must be a string ("" for no weekly fallback)'),
+    default: '',
+  },
+  streamName: {
+    check: (v) => (typeof v === 'string' ? null : 'must be a string ("" for no stream)'),
+    default: '',
+  },
+  streamStation: {
+    check: (v) =>
+      typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 0xffff
+        ? null
+        : 'must be an integer in 1..65535',
+    default: 1,
+  },
+  setFormat: {
+    check: (v) =>
+      (SET_FORMATS as readonly unknown[]).includes(v)
+        ? null
+        : `must be one of ${SET_FORMATS.map((f) => `"${f}"`).join(', ')}`,
+    default: 'startgg',
+  },
+  archiveSetName: {
+    check: (v) => templateProblem(v, SET_FIELDS),
+    default: '{tournament} - {round_short} - {p1} vs {p2}',
+  },
+  archiveGameName: {
+    check: (v) => templateProblem(v, [...SET_FIELDS, ...GAME_FIELDS]),
+    default: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+  },
+};
+
+/** A file-name template (names.ts): non-empty, and only the {fields} it may use. */
+function templateProblem(v: unknown, allowed: readonly string[]): string | null {
+  if (typeof v !== 'string' || v.trim().length === 0) return 'must be a non-empty string';
+  const bad = unknownFields(v, allowed);
+  return bad.length > 0
+    ? `has unknown field(s) ${bad.map((b) => `{${b}}`).join(', ')}; known: ${allowed.map((a) => `{${a}}`).join(' ')}`
+    : null;
+}
+
+export type ParsedConfig =
+  { ok: true; config: Config; ignored: string[] } | { ok: false; problems: string[] };
+
+/** Validate a parsed JSON value. Every problem is listed at once. */
+export function parseConfig(raw: unknown): ParsedConfig {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, problems: ['the settings file must hold a JSON object'] };
   }
-}
-
-function isPositiveInt(v: unknown): v is number {
-  return typeof v === 'number' && Number.isInteger(v) && v > 0;
-}
-
-function isHttpUrl(v: unknown): v is string {
-  if (typeof v !== 'string') return false;
-  try {
-    const { protocol } = new URL(v);
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
+  const obj = raw as Record<string, unknown>;
+  const problems: string[] = [];
+  const out: Record<string, unknown> = {};
+  for (const [name, f] of Object.entries(FIELDS) as [
+    keyof Config,
+    { check: (v: unknown) => string | null; default?: unknown },
+  ][]) {
+    if (!(name in obj)) {
+      if (f.default === undefined) problems.push(`missing field "${name}"`);
+      else out[name] = f.default;
+      continue;
+    }
+    const problem = f.check(obj[name]);
+    if (problem) problems.push(`${name} ${problem}`);
+    else out[name] = obj[name];
   }
+  const config = out as unknown as Config;
+  if (
+    typeof obj.weeklyNamePrefix === 'string' &&
+    obj.weeklyNamePrefix.length > 0 &&
+    typeof obj.tournament === 'string' &&
+    obj.tournament.startsWith('tournament/')
+  ) {
+    problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
+  }
+  if (typeof obj.adminPassword === 'string' && obj.adminPassword === obj.secret) {
+    problems.push('adminPassword must differ from secret (the secret is on every SD card)');
+  }
+  if (problems.length > 0) return { ok: false, problems };
+  const ignored = Object.keys(obj).filter((k) => !(k in FIELDS));
+  return { ok: true, config, ignored };
 }
 
-export function loadConfig(path: string): Config {
+export type LoadedConfig =
+  | { kind: 'missing' }
+  | { kind: 'invalid'; problems: string[] }
+  | { kind: 'ok'; config: Config; ignored: string[] };
+
+export function loadConfig(path: string): LoadedConfig {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
   } catch (e) {
-    throw new ConfigError([`cannot read ${path}: ${(e as Error).message}`]);
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' };
+    return { kind: 'invalid', problems: [`cannot read ${path}: ${(e as Error).message}`] };
   }
-
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch (e) {
-    throw new ConfigError([`${path} is not valid JSON: ${(e as Error).message}`]);
+    return { kind: 'invalid', problems: [`${path} is not valid JSON: ${(e as Error).message}`] };
   }
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new ConfigError([`${path} must be a JSON object`]);
-  }
-  const obj = raw as Record<string, unknown>;
+  const parsed = parseConfig(raw);
+  return parsed.ok
+    ? { kind: 'ok', config: parsed.config, ignored: parsed.ignored }
+    : { kind: 'invalid', problems: parsed.problems };
+}
 
-  const problems: string[] = [];
-  for (const key of Object.keys(obj)) {
-    if (!(FIELDS as readonly string[]).includes(key)) {
-      problems.push(`unknown field "${key}"`);
-    }
+/** Write atomically (temp file, fsync, rename), readable by the relay's user only. */
+export function saveConfig(path: string, config: Config): void {
+  const tmp = `${path}.tmp`;
+  const fd = openSync(tmp, 'w', 0o600);
+  try {
+    writeSync(fd, JSON.stringify(config, null, 2) + '\n');
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
   }
-  for (const key of FIELDS) {
-    if (!(key in obj)) problems.push(`missing field "${key}"`);
-  }
+  renameSync(tmp, path);
+}
 
-  const {
-    startggEndpoint,
-    token,
-    tournament,
-    eventName,
-    streamName,
-    weeklyNamePrefix,
-    secret,
-    streamStation,
-    setFormat,
-    tcpPort,
-    httpPort,
-    auditDir,
-    archiveDir,
-    archiveSetName,
-    archiveGameName,
-    beamerHttpPort,
-  } = obj;
+/** A new Wii secret: 16 characters of A-Z a-z 0-9 - _ (base64url of 12 random bytes). */
+export function newSecret(): string {
+  return randomBytes(12).toString('base64url');
+}
 
-  if ('startggEndpoint' in obj && !isHttpUrl(startggEndpoint)) {
-    problems.push('startggEndpoint must be an http(s) URL');
-  }
-  if ('token' in obj && (typeof token !== 'string' || token.length === 0)) {
-    problems.push('token must be a non-empty string');
-  }
-  if (
-    'tournament' in obj &&
-    (typeof tournament !== 'string' || !/^(tournament\/)?[A-Za-z0-9-]+$/.test(tournament))
-  ) {
-    problems.push(
-      'tournament must be a start.gg short URL (e.g. "mybar") or full slug ("tournament/<slug>")',
-    );
-  }
-  if ('weeklyNamePrefix' in obj && typeof weeklyNamePrefix !== 'string') {
-    problems.push('weeklyNamePrefix must be a string ("" for no weekly fallback)');
-  }
-  if (
-    typeof weeklyNamePrefix === 'string' &&
-    weeklyNamePrefix.length > 0 &&
-    typeof tournament === 'string' &&
-    tournament.startsWith('tournament/')
-  ) {
-    problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
-  }
-  for (const [name, v] of [
-    ['eventName', eventName],
-    ['streamName', streamName],
-  ] as const) {
-    if (name in obj && (typeof v !== 'string' || v.trim().length === 0)) {
-      problems.push(`${name} must be a non-empty string`);
-    }
-  }
-  // Letters, digits, - and _ only: it is typed onto every SD card as
-  // secret=<value> and must survive the kernel's key=value parser. 8 to
-  // SECRET_LEN (16) characters.
-  if ('secret' in obj && (typeof secret !== 'string' || !/^[A-Za-z0-9_-]{8,16}$/.test(secret))) {
-    problems.push('secret must be 8-16 letters, digits, - or _');
-  }
-  if ('streamStation' in obj && (!isPositiveInt(streamStation) || streamStation > 0xffff)) {
-    problems.push('streamStation must be an integer in 1..65535');
-  }
-  if ('setFormat' in obj && !(SET_FORMATS as readonly unknown[]).includes(setFormat)) {
-    problems.push(`setFormat must be one of ${SET_FORMATS.map((f) => `"${f}"`).join(', ')}`);
-  }
-  for (const [name, v] of [
-    ['tcpPort', tcpPort],
-    ['httpPort', httpPort],
-  ] as const) {
-    if (name in obj && (!isPositiveInt(v) || v > 65535)) {
-      problems.push(`${name} must be an integer in 1..65535`);
-    }
-  }
-  if (isPositiveInt(tcpPort) && tcpPort === httpPort) {
-    problems.push('tcpPort and httpPort must differ');
-  }
-  if ('auditDir' in obj && (typeof auditDir !== 'string' || auditDir.length === 0)) {
-    problems.push('auditDir must be a non-empty string');
-  }
-  if ('archiveDir' in obj && (typeof archiveDir !== 'string' || archiveDir.length === 0)) {
-    problems.push('archiveDir must be a non-empty string');
-  }
-  for (const [name, v, allowed] of [
-    ['archiveSetName', archiveSetName, SET_FIELDS],
-    ['archiveGameName', archiveGameName, [...SET_FIELDS, ...GAME_FIELDS]],
-  ] as const) {
-    if (!(name in obj)) continue;
-    if (typeof v !== 'string' || v.trim().length === 0) {
-      problems.push(`${name} must be a non-empty string`);
-      continue;
-    }
-    const bad = unknownFields(v, allowed);
-    if (bad.length > 0) {
-      problems.push(
-        `${name} has unknown field(s) ${bad.map((b) => `{${b}}`).join(', ')}; known: ${allowed.map((a) => `{${a}}`).join(' ')}`,
-      );
-    }
-  }
-  if ('beamerHttpPort' in obj && (!isPositiveInt(beamerHttpPort) || beamerHttpPort > 65535)) {
-    problems.push('beamerHttpPort must be an integer in 1..65535 (80 for a real beamer)');
-  }
-
-  if (problems.length > 0) throw new ConfigError(problems);
-
-  return {
-    startggEndpoint: startggEndpoint as string,
-    token: token as string,
-    tournament: tournament as string,
-    eventName: eventName as string,
-    streamName: streamName as string,
-    weeklyNamePrefix: weeklyNamePrefix as string,
-    secret: secret as string,
-    streamStation: streamStation as number,
-    setFormat: setFormat as SetFormat,
-    tcpPort: tcpPort as number,
-    httpPort: httpPort as number,
-    auditDir: auditDir as string,
-    archiveDir: archiveDir as string,
-    archiveSetName: archiveSetName as string,
-    archiveGameName: archiveGameName as string,
-    beamerHttpPort: beamerHttpPort as number,
-  };
+/** "LazyTO Weekly #160" -> "LazyTO Weekly #"; "" when the name does not end in a number. */
+export function weeklyPrefixFrom(tournamentName: string): string {
+  const m = /^(.*\D)\d+\s*$/.exec(tournamentName);
+  return m ? m[1]! : '';
 }

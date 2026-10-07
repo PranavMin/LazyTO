@@ -49,7 +49,6 @@ export interface UpstreamSet {
   fullRoundText: string;
   totalGames: number;
   slots: { entrant: { id: number; name: string } | null }[];
-  games: { orderNum: number; winnerId: number }[] | null;
   stream: { id: number } | null;
   /** The pool: its phase's phaseOrder for format.ts (phases number their rounds from 1 again), the rest for the set archive's context.json (archive.ts). */
   phaseGroup: UpstreamPhaseGroup;
@@ -125,7 +124,6 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
         fullRoundText
         totalGames
         slots { entrant { id name } }
-        games { orderNum winnerId }
         stream { id }
         phaseGroup { id displayIdentifier bracketType wave { id } phase { id name groupCount phaseOrder } }
       }
@@ -255,6 +253,19 @@ export class StartggClient {
 
   async markSetInProgress(setId: number): Promise<void> {
     await this.gql(MARK_IN_PROGRESS, { setId });
+  }
+
+  /**
+   * Start an unstarted pool from one of its preview set ids (decisions.md R8).
+   * resetSet rejects a preview id ("Set not found"); markSetInProgress takes
+   * it, gives the whole pool numeric ids and answers with this set's real id,
+   * so that set is put straight back to pending (probe, 2026-10-02).
+   */
+  async startPool(previewSetId: string): Promise<void> {
+    const data = await this.gql(MARK_IN_PROGRESS, { setId: previewSetId });
+    const set = data.markSetInProgress as { id: number } | null;
+    if (!set) throw new StartggError('rejected', 'markSetInProgress returned no set');
+    await this.gql(RESET_SET, { setId: set.id });
   }
 
   async assignStream(setId: number, streamId: number): Promise<void> {

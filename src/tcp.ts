@@ -23,7 +23,6 @@ import {
   decodeStartSetReq,
   decodeReportScoreReq,
   decodeEndSetReq,
-  decodeAbandonSetReq,
   decodeGameStartReq,
   encodeRelayHdr,
   encodeRelayResp,
@@ -33,7 +32,7 @@ import {
   type SetEntry,
 } from '../generated/wire.js';
 import type { SetCache, CachedSet } from './cache.js';
-import { StationState, type Claim } from './state.js';
+import { StationState, wins, type Claim } from './state.js';
 import { StartggClient, StartggError, RateLimitedError, type GameDataInput } from './startgg.js';
 import { toStartggCharacter } from './chars.js';
 import { toStartggStage } from './stages.js';
@@ -58,8 +57,12 @@ export interface RelayDeps {
   startgg: StartggClient;
   audit: AuditSink;
   archive: ArchiveHooks;
-  streamStation: number;
-  streamId: number;
+  /**
+   * The stream setup: its station's sets go on this start.gg stream. Decided by
+   * station, not by start_set_req.stream, so one setting can't disagree with
+   * another. null = no stream tonight.
+   */
+  stream: { station: number; streamId: number } | null;
   /** Shared secret every request's relay_auth must carry (decisions.md R16). */
   secret: string;
 }
@@ -86,6 +89,8 @@ export class RelayTcpServer {
   private readonly server: Server;
   private readonly expectedSecret: Buffer; // SECRET_LEN bytes, NUL-padded, as relay_auth carries it
   private refusals: RefusedStatus | null = null;
+  /** Connections that have not sent a whole request yet; close() drops them. */
+  private readonly waiting = new Set<Socket>();
 
   constructor(private readonly deps: RelayDeps) {
     this.expectedSecret = Buffer.alloc(SECRET_LEN);
@@ -112,22 +117,28 @@ export class RelayTcpServer {
     return this.server.address() as AddressInfo;
   }
 
+  /**
+   * Stop listening, drop connections still waiting for their request, and let
+   * a request already received send its reply (SOCKET_TIMEOUT_MS bounds it).
+   */
   async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) =>
+    const closed = new Promise<void>((resolve, reject) =>
       this.server.close((e) => (e ? reject(e) : resolve())),
     );
+    for (const socket of this.waiting) socket.destroy();
+    await closed;
   }
 
   // ---- framing ----
 
   // A request is relay_auth (the host's shared secret, decisions.md R16), then the
-  // game's relay_hdr + payload. A host that sends no relay_auth starts with
-  // relay_hdr's 'M','T' instead of 'M','K': it is answered ST_BAD_SECRET
-  // within its own framing, so the kiosk can say what is wrong.
+  // game's relay_hdr + payload. Anything else is not our protocol and is dropped.
   private onConnection(socket: Socket): void {
     const chunks: Buffer[] = [];
     let received = 0;
     let handled = false;
+    this.waiting.add(socket);
+    socket.on('close', () => this.waiting.delete(socket));
     socket.setTimeout(SOCKET_TIMEOUT_MS, () => socket.destroy());
     socket.on('error', () => socket.destroy());
     socket.on('data', (chunk: Buffer) => {
@@ -137,14 +148,12 @@ export class RelayTcpServer {
       if (received < 2) return;
 
       const buf = Buffer.concat(chunks);
-      const authed = buf[0] === AUTH_MAGIC_0 && buf[1] === AUTH_MAGIC_1;
-      const bare = buf[0] === MAGIC_0 && buf[1] === MAGIC_1;
-      if (!authed && !bare) {
+      if (buf[0] !== AUTH_MAGIC_0 || buf[1] !== AUTH_MAGIC_1) {
         // Not our protocol; there is no framing to answer within.
         socket.destroy();
         return;
       }
-      const hdrOff = authed ? RELAY_AUTH_SIZE : 0;
+      const hdrOff = RELAY_AUTH_SIZE;
       if (received < hdrOff + RELAY_HDR_SIZE) return;
       if (buf[hdrOff] !== MAGIC_0 || buf[hdrOff + 1] !== MAGIC_1) {
         socket.destroy();
@@ -155,8 +164,8 @@ export class RelayTcpServer {
       if (received < payloadOff + hdr.len) return;
 
       handled = true;
-      const secretOk =
-        authed && timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
+      this.waiting.delete(socket);
+      const secretOk = timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
       const pending: Promise<Reply> = secretOk
         ? this.handle(
             hdr.cmd,
@@ -164,7 +173,7 @@ export class RelayTcpServer {
             hdr.station,
             buf.subarray(payloadOff, payloadOff + hdr.len),
           )
-        : Promise.resolve(this.refuse(hdr.cmd, hdr.station, authed, socket.remoteAddress ?? '?'));
+        : Promise.resolve(this.refuse(hdr.cmd, hdr.station, socket.remoteAddress ?? '?'));
       void pending
         .then((reply) => {
           const payload = reply.payload ?? new Uint8Array(0);
@@ -186,11 +195,11 @@ export class RelayTcpServer {
     });
   }
 
-  // ---- refused: missing or wrong secret ----
+  // ---- refused: wrong secret ----
 
   /** Answer without acting. The claimed station is not trusted, so no station row is touched. */
-  private refuse(cmd: number, station: number, sentSecret: boolean, from: string): Reply {
-    const reason = sentSecret ? 'wrong relay secret' : 'no relay secret sent';
+  private refuse(cmd: number, station: number, from: string): Reply {
+    const reason = 'wrong relay secret';
     const prev = this.refusals?.count ?? 0;
     this.refusals = {
       count: prev + 1,
@@ -231,9 +240,6 @@ export class RelayTcpServer {
             break;
           case RelayCmd.CMD_END_SET:
             reply = await this.endSet(station, decodeEndSetReq(payload));
-            break;
-          case RelayCmd.CMD_ABANDON_SET:
-            reply = await this.abandonSet(station, decodeAbandonSetReq(payload));
             break;
           case RelayCmd.CMD_GAME_START:
             reply = this.gameStart(station, decodeGameStartReq(payload));
@@ -333,12 +339,15 @@ export class RelayTcpServer {
 
   // ---- CMD_START_SET ----
 
+  // req.stream is decoded but not used (current loaders send the game's 0;
+  // older ones sent the card's stream= line): the stream setup is the
+  // configured station (RelayDeps.stream).
   private async startSet(station: number, req: { set_id: number; stream: number }): Promise<Reply> {
-    const { cache, state, startgg, audit, streamStation, streamId } = this.deps;
+    const { cache, state, startgg, audit, stream } = this.deps;
 
     const claim = state.get(station);
     if (claim?.setId === req.set_id) {
-      // Rebooted station resuming its own set: no upstream call (section 7.1).
+      // Rebooted station resuming its own set: no upstream call.
       audit.record({ type: 'resume', station, setId: req.set_id });
       return { status: RelayStatus.ST_OK, msg: 'resumed' };
     }
@@ -358,10 +367,6 @@ export class RelayTcpServer {
       // by hand on start.gg. Not ours to take.
       return { status: RelayStatus.ST_SET_TAKEN, msg: 'in progress on start.gg' };
     }
-    if (req.stream === 1 && station !== streamStation) {
-      return { status: RelayStatus.ST_NOT_STREAM, msg: 'not the stream station' };
-    }
-
     const markFailure = await this.upstream(
       station,
       'markSetInProgress',
@@ -371,16 +376,16 @@ export class RelayTcpServer {
     if (markFailure) return markFailure;
 
     // From here the set IS in progress upstream, so the station gets the
-    // claim even if the stream assignment below fails (section 5.3).
+    // claim even if the stream assignment below fails.
     this.recordClaim(station, set);
     this.deps.archive.setStarted(station, set);
 
-    if (req.stream === 1) {
+    if (stream !== null && station === stream.station) {
       const assignFailure = await this.upstream(
         station,
         'assignStream',
-        { setId: req.set_id, streamId },
-        () => startgg.assignStream(req.set_id, streamId),
+        { setId: req.set_id, streamId: stream.streamId },
+        () => startgg.assignStream(req.set_id, stream.streamId),
       );
       if (assignFailure) {
         return { status: RelayStatus.ST_STARTGG_ERROR, msg: 'stream assign failed - ask TO' };
@@ -396,16 +401,7 @@ export class RelayTcpServer {
       p1Id: set.p1.id,
       p2Id: set.p2.id,
       bestOf: set.bestOf,
-      games: set.games.map((g) => ({
-        winner_slot: g.winnerSlot,
-        p1_char: 0xff,
-        p2_char: 0xff,
-        stage: 0,
-        p1_stocks: 0xff,
-        p2_stocks: 0xff,
-        p1_costume: 0xff,
-        p2_costume: 0xff,
-      })),
+      games: [], // only pending (unplayed) sets are claimed
     };
     this.deps.state.claim(station, claim);
     this.deps.audit.record({
@@ -465,8 +461,7 @@ export class RelayTcpServer {
     const games = validGames(req, claim);
     if (typeof games === 'string') return { status: RelayStatus.ST_INTERNAL, msg: games };
 
-    const wins1 = games.list.filter((g) => g.winner_slot === 1).length;
-    const wins2 = games.list.length - wins1;
+    const [wins1, wins2] = wins(games.list);
     const needed = Math.floor(claim.bestOf / 2) + 1;
     const winnerId = wins1 >= needed ? claim.p1Id : wins2 >= needed ? claim.p2Id : null;
     if (winnerId === null) {
@@ -488,31 +483,6 @@ export class RelayTcpServer {
     audit.record({ type: 'release', station, setId: req.set_id, reason: 'end_set', winnerId });
     this.deps.archive.setEnded(req.set_id, games.list);
     return { status: RelayStatus.ST_OK, msg: `final ${scoreText(games.list)}` };
-  }
-
-  // ---- CMD_ABANDON_SET ----
-
-  private async abandonSet(station: number, req: { set_id: number }): Promise<Reply> {
-    const { state, startgg, audit } = this.deps;
-
-    const claim = state.get(station);
-    if (!claim || claim.setId !== req.set_id) {
-      return { status: RelayStatus.ST_SET_NOT_FOUND, msg: 'no such set on this station' };
-    }
-    if (claim.games.length > 0) {
-      // Undoing a set with reported games is a TO decision (section 5.6).
-      return { status: RelayStatus.ST_INTERNAL, msg: 'set has games - ask TO' };
-    }
-
-    const failure = await this.upstream(station, 'resetSet', { setId: req.set_id }, () =>
-      startgg.resetSet(req.set_id),
-    );
-    if (failure) return failure;
-
-    state.release(station);
-    audit.record({ type: 'release', station, setId: req.set_id, reason: 'abandon' });
-    this.deps.archive.setAbandoned(req.set_id);
-    return { status: RelayStatus.ST_OK, msg: 'set abandoned' };
   }
 
   // ---- CMD_GAME_START ----
@@ -604,12 +574,11 @@ function validGames(
 }
 
 /** (costume + 1) * 100 + stocks; undefined when the stocks are unknown (0xFF). A costume of 0xFF leaves the hundreds off. */
-export function packedScore(stocks: number, costume: number): number | undefined {
+function packedScore(stocks: number, costume: number): number | undefined {
   if (stocks === 0xff || stocks > 99) return undefined;
   return (costume === 0xff ? 0 : (costume + 1) * 100) + stocks;
 }
 
 function scoreText(games: GameResult[]): string {
-  const wins1 = games.filter((g) => g.winner_slot === 1).length;
-  return `${wins1}-${games.length - wins1}`;
+  return wins(games).join('-');
 }

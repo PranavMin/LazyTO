@@ -143,9 +143,10 @@ function cachedSet(id: number): CachedSet {
     roundName: 'WINNERS SEMI-FINAL',
     fullRoundText: 'Winners Semi-Final',
     bestOf: 3,
+    autoBestOf: 3,
+    bestOfOverridden: false,
     p1: { id: 9001, tag: 'Alpha' },
     p2: { id: 9002, tag: 'Bravo' },
-    games: [],
     phaseGroup: {
       id: 77,
       displayIdentifier: 'A1',
@@ -406,8 +407,7 @@ test('end to end: START_SET, GAME_STARTs, reports and END_SET over TCP produce t
     startgg,
     audit,
     archive,
-    streamStation: 1,
-    streamId: 1358079,
+    stream: { station: 1, streamId: 1358079 },
     secret: 'test-secret-1234',
   });
   await server.listen(0, '127.0.0.1');

@@ -6,6 +6,22 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 
 The first public beta. Everything below is the work leading up to it, by date.
 
+## 2026-10-03
+
+- **Music off works from boot.** With the loader's Music option off, the kiosk now silences music as soon as the set list is up; before, it only set the preference, and music kept playing until the Options page was visited.
+
+## 2026-10-02
+
+- **Top 8 reaches the kiosk without the TO starting it.** A set in an unstarted pool or phase used to be dropped (preview id). Now the relay starts that pool on start.gg as soon as one of its sets has both players, and the set is on every Wii within 20 s (decisions.md R8).
+- **Set up from a browser.** The relay serves a setup page: paste the start.gg token, pick the tournament (follow its short URL each week, one tournament, or a pasted link), the event, the stream, the format and an admin password. The Wii secret is generated. Settings live in `/var/lib/lazyto/config.json`; later changes go through the same page. A relay whose event can't be found shows why, with Retry, and retries by itself.
+- **One install command:** `curl -fsSL .../releases/latest/download/install.sh | sudo bash` installs Node, the relay and the Wii files and prints the setup page's address and code. Nothing else is needed on the TO's computer.
+- **One bundle per commit, two update channels.** `lazyto.tgz` holds the relay, the loader (built from the pinned Nintendont commit) and `tournament.bin`. Pis follow published releases by default, or `main-build`; the settings page switches.
+- **SD-card zips** on the status page: each station's card is one unzip plus the Melee image, with Network, Auto Boot and UCF on in the loader's settings.
+- **Stream decided by station:** the card's `stream=` no longer matters to the relay; "No stream" is an option. ack takes the admin password like the other actions.
+- Removed: `npm run push` writing settings from `.env`, the rehearsal against the fake start.gg, probe's research flags, the never-sent abandon command, the cached per-game data, the third protocol header copy.
+- **Card files renamed:** `tournament.bin` is now `lazyto_kiosk.bin` and `tournament.cfg` is `lazyto_station.txt`, which has no `stream=` line. Cards made before this need their station zip again. The loader's menu settings are saved only when the game is started with B and A, not after Home (upstream behaviour, now in wii-setup.md).
+- The loader's per-request network traces and module watch are gone, so the Wii log keeps the lines that matter.
+
 ## 2026-10-01
 
 - **Operator scripts run everywhere**: `sync-card`, `push` and `wiiload` are Node/TypeScript (`scripts/*.ts`, `npm run sync-card|push|wiiload`), tested in `test/deploy-scripts.test.ts`; wiiload speaks the Homebrew Channel protocol itself. The `deploy/*.ps1` files are shims onto them for one release.
@@ -69,18 +85,3 @@ The first public beta. Everything below is the work leading up to it, by date.
 - Nintendont investigation: blocking in the EXI handler is unsafe (R3); relay thread design.
 - Melee investigation: the decomp has no Slippi code; a new EXI driver was written. Memory budget fine (R4).
 - `MAX_SETS` set by the poll buffer framing (now 56 rows of 72 bytes).
-
-## Ideas / later
-
-- **Set list redesign phase 3:** stream a venue logo from the SD card over the relay EXI device.
-- **Hardware checks:** full set lifecycle, `.slp` recording with the module, hotswap, the confirm view and bar translucency on a CRT, and whether the venue's codes give the six-legal-stage filter and un-strike the old build had.
-- **Kiosk defaults:** drop `forceKioskDefaults` if Slippi's own defaults prove enough.
-- **Relay-aware handwarmers and friendlies,** if match lifecycle ever goes over the relay.
-- **Station assignment:** call `assignStation` on START_SET when the event uses start.gg stations.
-- **Multi-phase brackets:** confirm the cache behaves across pools and top-cut phases.
-- **Probe follow-ups:** re-assigning a stream (rest of R1); whether a decided score without a winner completes a set.
-- **Kernel connect timeout (R9)** if it hurts on hardware.
-- **HMAC instead of a plain secret (R16).**
-- **Poster:** re-verify against the shipped build and proof the print layout.
-- **Second relay for redundancy:** not now; the manual start.gg workflow is the fallback.
-- **Per-station overlay data** for a second stream, from the relay's state.

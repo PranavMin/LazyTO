@@ -17,7 +17,7 @@ protocol versions shows `NO SETS LOADED YET`.
    ```bash
    python tools/gen_protocol.py
    ```
-   This writes `generated/` and both header copies. Never edit any of them by hand.
+   This writes `generated/wire.ts` and both header copies. Never edit any of them by hand.
 3. Update relay code in `src/`. Import from `generated/wire.ts`; never copy it.
 4. Update kiosk code. Check size limits:
    - EXI request payload cap is 48 bytes (`lbrelayexi.h` and kernel `RelayEXI.c` must agree).
@@ -34,17 +34,17 @@ protocol versions shows `NO SETS LOADED YET`.
    ```bash
    npm test
    ```
-   It fails if `generated/` or either header drifts from `protocol.yaml`.
+   It fails if `generated/wire.ts` or either header drifts from `protocol.yaml`.
 7. Build the module with the `kiosk-build` skill.
 8. Commit order (ask the user before each push):
    1. Commit and push the header and kernel change inside `Nintendont/`.
-   2. In this repo, commit `protocol.yaml`, `generated/`, `kiosk/include`, the relay and kiosk
+   2. In this repo, commit `protocol.yaml`, `generated/wire.ts`, `kiosk/include`, the relay and kiosk
       changes, and the new Nintendont position (`git add Nintendont`).
 9. Ship together:
    - Loader: CI build only (`gh workflow run build.yml -R PranavMin/Nintendont --ref LazyTO`).
      A locally built loader stops at "Preparing IOS58 Kernel" on a real Wii.
    - Relay: restart any running relay on the new build. The Pi updates itself from `main`.
-   - Module: new `tournament.bin` on every card (`wii-test` skill).
+   - Module: new `lazyto_kiosk.bin` on every card (each station's zip from the relay).
    - Dolphin's relay forwarder is length-driven and needs no rebuild.
 
 Record the decision in `docs/decisions.md` if it changes the contract, and add a

@@ -1,16 +1,16 @@
 # systemd unit for the LazyTO relay (architecture.md Deployment).
 # Installed to /etc/systemd/system by deploy/install.sh. Node lives at
-# /opt/node (a pinned official tarball), the compiled relay at
-# /opt/lazyto/dist, config at /etc/lazyto.
+# /opt/node (a pinned official tarball), the release bundle at /opt/lazyto,
+# the relay's settings and logs in /var/lib/lazyto.
 
 [Unit]
 Description=LazyTO relay (Wii <-> start.gg)
 Documentation=https://github.com/PranavMin/LazyTO/blob/main/docs/night-of.md
-After=network-online.target time-sync.target
-Wants=network-online.target time-sync.target
-# Never give up: a Pi that boots without Wi-Fi, or before tonight's
-# tournament is findable, must recover on its own once it is. The pacing
-# below keeps the retries off start.gg's back.
+After=network-online.target
+Wants=network-online.target
+# Never give up on a crash. (A Pi that boots without Wi-Fi, before the
+# clock is set, or before tonight's tournament is findable does not exit:
+# the relay keeps its page up and tries again itself, app.ts.)
 StartLimitIntervalSec=0
 
 [Service]
@@ -18,27 +18,18 @@ Type=simple
 User=relay
 Group=relay
 WorkingDirectory=/opt/lazyto
-Environment=CONFIG=/etc/lazyto/config.json
-# Auto-update before every start (deploy/update.sh): fetch the relay bundle
-# built from the newest main, verify it, check it accepts the installed
-# config.json, swap it in. The "+" runs it as root outside the sandbox below;
-# it logs one line and lets the installed version start on any failure, so a
-# Pi without internet starts as before. /etc/lazyto/no-auto-update disables it.
+# Update before every start (deploy/update.sh): the newest build of the
+# channel in /var/lib/lazyto/update-channel (release, main or off), verified
+# and checked against the relay's settings, then swapped in. The "+" runs it
+# as root outside the sandbox below. On any failure it logs one line and the
+# installed version starts, so a Pi without internet starts as before.
 ExecStartPre=+/opt/lazyto/deploy/update.sh
 ExecStart=/opt/node/bin/node /opt/lazyto/dist/main.js
-# The relay exits non-zero on a bad config or an unreachable start.gg at
-# startup (fail fast). on-failure brings it back when the network returns;
-# a genuinely bad config shows up as a restart loop in `systemctl status`.
-#
-# Pacing: a failed start costs up to ~6 start.gg calls (every admin
-# tournament page when the short URL cannot be found, then the tournament), and
-# start.gg allows 80 a minute per token. Restarts wait 10 s, stretching over
-# 5 steps to 2 min (RestartSteps/RestartMaxDelaySec, systemd >= 254:
-# Raspberry Pi OS Trixie). Worst case ~36 calls in the first two minutes,
-# then ~3 a minute. An older systemd ignores the two stretch keys with a
-# warning and waits 10 s every time: ~36 a minute, still under the limit.
-# The stretch does not reset until the unit is started by hand, so a crash
-# late in a night that began with failed starts waits up to 2 min.
+# The relay exits non-zero only if its web server cannot start (port 29473
+# taken) or it crashes; on-failure brings it back. Restarts wait 10 s,
+# stretching over 5 steps to 2 min (RestartSteps/RestartMaxDelaySec,
+# systemd >= 254: Raspberry Pi OS Trixie; an older systemd ignores the two
+# keys and waits 10 s every time).
 Restart=on-failure
 RestartSec=10
 RestartSteps=5

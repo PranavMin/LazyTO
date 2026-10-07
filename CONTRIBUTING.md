@@ -15,9 +15,9 @@ Looking for somewhere to start? Try an issue labelled
   every test. CI runs it on every pull request.
 - A change to `protocol.yaml` means regenerating with `python tools/gen_protocol.py` and
   rebuilding the module and the loader together. `npm test` fails until the header copies match.
-- Keep the relay's rules from [CLAUDE.md](CLAUDE.md): one code path, no fallbacks, fail fast on
-  bad config, no retries except start.gg 5xx. Integration tests use the fake start.gg in
-  `test/`, never the real API.
+- Keep the relay's rules from [CLAUDE.md](CLAUDE.md): one code path, no fallbacks, no retries
+  except start.gg 5xx. A new settings field is optional with a default. Integration tests use
+  the fake start.gg in `test/`, never the real API.
 - Kiosk code hooks into Melee only through `kiosk/tools/module_hooks.txt`; the decomp in
   `melee/` is never edited.
 - Open a pull request against `main`. Describe what changed and how you checked it. A kiosk

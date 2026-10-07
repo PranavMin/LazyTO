@@ -1,52 +1,50 @@
 # Setting up the Wiis
 
-Each Wii needs an SD card with the LazyTO loader, the kiosk module, a small config file and a
-stock Melee image. Every card is the same except for its config file.
+Each Wii needs an SD card with the LazyTO loader, the kiosk module, two small settings files and
+a stock Melee image. The relay makes one zip per station with everything but the Melee image.
 
 ## What you need
 
 - Wiis with the Homebrew Channel. Any Wii that runs Slippi Nintendont is ready.
 - One SD card per Wii, formatted FAT32.
 - A stock NTSC 1.02 Melee image (`GALE01`).
-- The LazyTO loader (the `apps/LazyTO` folder) and the kiosk module (`tournament.bin`). Until
-  the first release is published, `npm run sync-card` fetches the loader from the newest
-  successful CI build of the [Nintendont fork](https://github.com/PranavMin/Nintendont), and you
-  build `tournament.bin` yourself as described in [development.md](development.md). Never use a
-  loader you built yourself: it fails on a real Wii.
-- For `npm run sync-card`: a clone of this repo with Node 22, and the GitHub CLI
-  ([`gh`](https://cli.github.com/)) installed and logged in (`gh auth login`). It uses `gh` to
-  download the loader.
-- Your relay's secret, `RELAY_SECRET` in the `.env` you set up in [pi-setup.md](pi-setup.md).
+- Your relay, set up ([pi-setup.md](pi-setup.md)).
 
 ## 1. The SD card
+
+On the relay's status page, open **SD cards** and enter your admin password. For each Wii:
+
+1. Download its station's zip. The station number is the one on its label at the venue.
+2. Unzip everything onto the root of its SD card.
+3. Copy your Melee image onto the card as `games/GALE01/game.iso`.
+
+That is the whole card:
 
 | Path on the card | What |
 |---|---|
 | `apps/LazyTO/` | the LazyTO loader (`boot.dol`, `meta.xml`, `icon.png`) |
-| `tournament.bin` | the kiosk module, the same file on every card |
-| `tournament.cfg` | this Wii's settings, below |
+| `lazyto_kiosk.bin` | the kiosk module, the same file on every card |
+| `lazyto_station.txt` | this Wii's station number and the relay's Wii secret, below |
+| `lazyto_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, the game at `games/GALE01/game.iso` |
 | `games/GALE01/game.iso` | your Melee 1.02 image |
 
 The loader appears in the Homebrew Channel as **LazyTO**. Your usual Slippi Nintendont can stay
-installed beside it.
+installed beside it. Each keeps its own settings: LazyTO's in `lazyto_nincfg.bin`, Slippi
+Nintendont's in `slippi_nincfg.bin`.
+The zips carry the Wii files of the relay's version; the set list's top right shows the module
+and loader versions a Wii runs.
 
-From a clone of the repo, one command writes all of this except the game image and checks it:
-`npm run sync-card -- --station 3` (`--stream 1` on the stream Wii; Windows, macOS or Linux; see
-[development.md](development.md)). The rest of this section is what it does, for doing it by hand.
-
-`tournament.cfg` is a plain text file with one `key=value` per line and no spaces:
+`lazyto_station.txt` is a plain text file with one `key=value` per line and no spaces:
 
 ```
 station=3
-stream=0
-secret=<your RELAY_SECRET>
+secret=<the relay's Wii secret>
 ```
 
 | Key | Value |
 |---|---|
 | `station` | the number on this Wii's station label |
-| `stream` | `1` on the one Wii that is on stream, `0` on every other. The stream Wii's station number must match the relay's `STREAM_STATION`. |
-| `secret` | the relay's secret, exactly as in `.env` |
+| `secret` | the relay's Wii secret, as on its settings page |
 
 There is no relay address. The Wii finds the relay by itself.
 
@@ -64,19 +62,24 @@ which needs a Wii Remote, and run the connection test.
 
 ## 3. Loader settings
 
-Start **LazyTO** from the Homebrew Channel. In its settings:
+The zip's `lazyto_nincfg.bin` turns on what LazyTO needs, so there is nothing to set. To change
+something, hold B while the loader starts to reach its menu:
 
 | Setting | Value |
 |---|---|
 | Network | **On**. Without it the kiosk says `NETWORK IS OFF IN THE LOADER`. |
-| Auto Boot | On, to start Melee straight away. Hold B while the loader starts to reach its menu. |
+| Auto Boot | On, to start Melee straight away. |
 | Melee Music, Melee Audio | your choice. Unless set to On and Stereo, the kiosk turns music off and uses mono. |
 | Everything else | as your venue normally runs Slippi Nintendont |
 
-Your venue's own options, such as UCF, stage striking and stage lists, work as usual. LazyTO
+Slippi Nintendont's options, such as UCF, stage striking and stage lists, work as usual. LazyTO
 adds nothing to them.
 
-Boot the game from the SD card. The loader only reads `tournament.cfg` from the card when the
+Changes are saved only when you start the game from the menu. From the settings, press B to
+return to the game list, then A on the game. Home ("Go Back") returns to the SD/USB screen and
+drops unsaved changes: they apply to that one boot and are gone after a restart.
+
+Boot the game from the SD card. The loader only reads `lazyto_station.txt` from the card when the
 game starts from it.
 
 ## 4. Check one Wii
@@ -101,15 +104,15 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | The Wii shows | Meaning | Do |
 |---|---|---|
 | `JOINING THE WI-FI`, then `THIS WII COULD NOT JOIN THE WI-FI` after 60 s | The Wii can't connect | Power cycle. Check the Wii's connection test and the router's 2.4 GHz mode. |
-| `NETWORK IS OFF IN THE LOADER` | The loader's Network setting is off | Turn it on. |
-| `THIS CARD IS NOT SET UP` | `tournament.cfg` is missing, or has no `secret=` | Fix the card. |
+| `NETWORK IS OFF IN THE LOADER` | The loader's Network setting is off | Turn it on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the station's zip onto the card again. |
+| `THIS CARD IS NOT SET UP` | `lazyto_station.txt` is missing, or has no `secret=` | Unzip the station's zip onto the card again. |
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
-| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's | Copy `RELAY_SECRET` from `.env` exactly. |
-| `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A firewall between them is blocking TCP 29470. |
-| `no tournament.cfg` on every action | The card isn't being read | Boot the game from the SD card. Check `station=`, `stream=` and `secret=` are all present. |
+| `RELAY SECRET MISMATCH` | The card's secret differs from the relay's, for example after a new Wii secret | Download the station's zip again and copy its `lazyto_station.txt` onto the card. |
+| `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
+| `no station file` on every action | The card isn't being read | Boot the game from the SD card. Check `station=` and `secret=` are both present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
-| Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the CI loader that `npm run sync-card` downloads. A loader you build yourself fails here. |
-| Boots to the character select instead of the Tournament screen | An old `tournament.bin` | Copy the current one to the card. |
+| Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the loader from the station's zip. A loader you build yourself fails here. |
+| Boots to the character select instead of the Tournament screen | An old `lazyto_kiosk.bin`, or a card made before 2026-10-02 (its files were `tournament.bin` and `tournament.cfg`) | Unzip the station's zip onto the card again. |
 
-If a Wii never appears on the status page, turn on **Log** in the loader's settings, boot once,
-and read `slippi_ndebug.log` on the SD card.
+If a Wii never appears on the status page, turn on **Log** in the loader's menu, boot once, and
+read `slippi_ndebug.log` on the SD card. Then turn Log off again.

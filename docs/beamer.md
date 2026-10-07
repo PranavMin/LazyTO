@@ -35,21 +35,22 @@ The set archive works with either transport, as long as each station has a beame
    matched too, so they cannot be taken for the next game, but they never go in the zip
    (`src/archive.ts`).
 5. **Writing the zip.** At `CMD_END_SET` the relay waits until every scored game has its replay,
-   or 3 minutes have passed. Then it writes `<archiveDir>/<ARCHIVE_SET_NAME>.zip`, which contains:
+   or 3 minutes have passed. Then it writes `<dataDir>/archive/<archiveSetName>.zip`, which contains:
    - `context.json`, written only when every game had an L + R claim;
-   - one `<ARCHIVE_GAME_NAME>.slp` per game, with the tags in the replay's display-name fields.
+   - one `<archiveGameName>.slp` per game, with the tags in the replay's display-name fields.
      Replay Reporter and Slippi Launcher show those names.
 
 Notes:
 
-- **Name templates** are set in `.env` (`ARCHIVE_SET_NAME`, `ARCHIVE_GAME_NAME`; the list of
-  fields is in `.env.example` and `src/names.ts`). An unknown field stops the relay at startup.
+- **Name templates** are the settings file's optional `archiveSetName` and `archiveGameName`
+  (defaults in `src/config.ts`, fields in `src/names.ts`). They are not on the setup page; edit
+  `config.json` and the setup page keeps them. An unknown field is a settings error.
   Example: `My Bar {number} - {round_short} - {p1} vs {p2}` gives
   `My Bar 60 - WSF - Cody vs Zain.zip`.
 - **A game played again after an undo** replaces the first try in the zip.
 - **The status page** has a "Beamers and set archives" section showing each beamer, the sets in
   progress, and the zips written.
-- **State survives a relay restart.** It lives in `<archiveDir>/.sets` and `.raw`.
+- **State survives a relay restart.** It lives in `<dataDir>/archive/.sets` and `.raw`.
 
 ### Trying it without a beamer (Dolphin)
 
@@ -62,8 +63,9 @@ Notes:
    ```
 
    Dolphin is station 0. If multicast does not loop back on your machine, add `--to 127.0.0.1`.
-3. Run the relay with `"beamerHttpPort": 8085` and an `archiveDir`.
-4. Play a set: claim with L + R, play, end it. The zip appears in `archiveDir`.
+3. Run the relay against the fake start.gg with the network side on and the fake beamer's
+   port: `startHarness({ network: true, beamerHttpPort: 8085 })` (`test/harness.ts`).
+4. Play a set: claim with L + R, play, end it. The zip appears in `<dataDir>/archive`.
 
 ## Beamer transport
 
@@ -74,7 +76,7 @@ Notes:
   it would send over TCP, `relay_auth` included. It then polls for the beamer's answer. The
   beamer forwards the bytes to the relay over Wi-Fi and finds the relay by its beacon, as a Wii
   does. The relay does not change at all.
-- **Setup.** Put `transport=beamer` in `tournament.cfg`, turn the loader's Network option off,
+- **Setup.** Put `transport=beamer` in `lazyto_station.txt`, turn the loader's Network option off,
   and turn Slippi replays on with the game on SD.
 - **Kiosk messages.** The kiosk shows `PF_NO_BEAMER` when no LazyTO beamer answers.
 

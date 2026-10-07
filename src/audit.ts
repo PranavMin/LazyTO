@@ -1,13 +1,13 @@
 // audit.ts -- append-only JSONL audit log (architecture.md Relay): every
 // request, response, and upstream call, one JSON object per line with a
-// timestamp. Named <eventId>.jsonl so each tournament gets its own file
-// (section 10). Writes are synchronous appends -- the request rate is a few
-// per second at worst and a crash must not lose the tail.
+// timestamp. Named <eventId>.jsonl so each tournament gets its own file.
+// Writes are synchronous appends -- the request rate is a few per second at
+// worst and a crash must not lose the tail.
 //
-// The log is also the relay's persistence (section 8, relay restart):
-// replayClaims() folds claim / score / release events back into the
-// station -> set map. main.ts drops any replayed claim whose set is no
-// longer live in the cache.
+// The log is also the relay's persistence across a restart (architecture.md
+// Error handling): replayClaims() folds claim / score / release events back
+// into the station -> set map, and replayBestOf() the TO's best-of overrides.
+// relay.ts drops any replayed claim whose set is no longer live in the cache.
 
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,27 +41,32 @@ export class AuditLog implements AuditSink {
  * tournament (empty map). A torn FINAL line (crash mid-write) is tolerated;
  * a corrupt line anywhere else is a damaged log and an error.
  */
-export function replayClaims(path: string): Map<number, Claim> {
+function readEvents(path: string): Record<string, unknown>[] {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw e;
   }
 
   const lines = text.split('\n').filter((l) => l.length > 0);
-  const claims = new Map<number, Claim>();
-
+  const events: Record<string, unknown>[] = [];
   for (let i = 0; i < lines.length; i++) {
-    let event: Record<string, unknown>;
     try {
-      event = JSON.parse(lines[i]);
+      events.push(JSON.parse(lines[i]));
     } catch {
       if (i === lines.length - 1) break; // torn final line: crash mid-write
       throw new Error(`${path}: corrupt audit line ${i + 1}`);
     }
+  }
+  return events;
+}
 
+export function replayClaims(path: string): Map<number, Claim> {
+  const claims = new Map<number, Claim>();
+
+  for (const event of readEvents(path)) {
     const station = event.station as number;
     switch (event.type) {
       case 'claim':
@@ -84,4 +89,20 @@ export function replayClaims(path: string): Map<number, Claim> {
     }
   }
   return claims;
+}
+
+/**
+ * The TO's best-of overrides from the status page (admin.ts): set id ->
+ * best-of, the last 'bestof' event per set winning; bestOf null cleared it.
+ * Same log, same torn-line rule as replayClaims.
+ */
+export function replayBestOf(path: string): Map<number, number> {
+  const overrides = new Map<number, number>();
+  for (const event of readEvents(path)) {
+    if (event.type !== 'bestof') continue;
+    const setId = event.setId as number;
+    if (event.bestOf === null) overrides.delete(setId);
+    else overrides.set(setId, event.bestOf as number);
+  }
+  return overrides;
 }

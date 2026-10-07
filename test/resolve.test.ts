@@ -75,6 +75,19 @@ test('the test tournament resolves to its singles event and the LazyTOStream str
   });
 });
 
+test('an empty stream name means no stream', async () => {
+  await withFake(defaultTournaments(), async (client) => {
+    const r = await resolveEvent(client, {
+      tournament: 'lazyto-weekly',
+      eventName: 'melee singles',
+      streamName: '',
+      weeklyNamePrefix: '',
+    });
+    assert.equal(r.streamId, null);
+    assert.equal(r.streamName, null);
+  });
+});
+
 test('"lazyto-weekly" picks the week that currently holds the short URL, skipping doubles and the waitlist', async () => {
   await withFake(defaultTournaments(), async (client) => {
     const r = await resolveEvent(client, {

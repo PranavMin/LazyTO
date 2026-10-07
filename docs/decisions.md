@@ -18,9 +18,9 @@ A rebooted Wii asks the relay, which offers its set first. No persistence code i
 
 ### One config file per Wii
 
-**`sd:/tournament.cfg` has `station`, `stream` and `secret`. Nothing else.**
+**`sd:/lazyto_station.txt` has `station` and `secret`. Nothing else.**
 
-Every card is identical apart from the station number and the one `stream=1`. The relay refuses a stream START_SET from the wrong station, so a mis-copied card cannot take over the stream.
+Every card is identical apart from the station number. The relay decides which sets go on stream by station (`streamStation`), so a card and the relay can never disagree about the stream. The file was `tournament.cfg` with a `stream=` line until 2026-10-02, and the module was `tournament.bin`: the card's files now carry the `lazyto_` prefix of `lazyto_nincfg.bin`, so a TO sees which files are LazyTO's and what each one is.
 
 ### Fixed-size big-endian structs
 
@@ -42,15 +42,33 @@ Retry loops in kernel code produce frozen consoles with no explanation. The only
 
 ### Stock Melee plus a module
 
-**The kiosk is `tournament.bin`, a module loaded into stock Melee 1.02 at boot. It is not a rebuilt game executable.**
+**The kiosk is `lazyto_kiosk.bin`, a module loaded into stock Melee 1.02 at boot. It is not a rebuilt game executable.**
 
-The earlier build appended a shifted decomp executable to a copy of the disc. Everything that assumes vanilla addresses broke on it: Slippi recording, and every venue codeset, which then had to be ported natively. A module keeps the game stock, so recording, hotswap and the venue's codes work unchanged, and an update is a 26 KB file instead of a 1.4 GB image. (2026-09-24)
+The earlier build appended a shifted decomp executable to a copy of the disc. Everything that assumes vanilla addresses broke on it: Slippi recording, and every venue codeset, which then had to be ported natively. A module keeps the game stock, so recording, hotswap and the venue's codes work unchanged, and an update is a 26 KB file instead of a 1.4 GB image. The native ports of UCF, neutral spawns, striking and audio defaults that the old build needed are retired. The kiosk still asserts tournament rules (4 stocks, 8:00, items off, everything unlocked) at boot, whatever the memory card says. (2026-09-24)
 
 ### Event found by name at startup
 
-**The config names the tournament, event and stream. The relay resolves the ids at startup.**
+**The settings name the tournament, event and stream. The relay resolves the ids at startup.**
 
-Ids change every week; names do not. A short URL that the TO moves weekly means no weekly push. The numbered-weekly fallback (`weeklyNamePrefix`) is a deliberate, opt-in exception to "no fallbacks" for a series whose short URL may not have moved yet. A full slug reaches unpublished tournaments.
+Ids change every week; names do not. A short URL that the TO moves weekly means nothing changes on the relay from week to week. The numbered-weekly fallback (`weeklyNamePrefix`) is a deliberate, opt-in exception to "no fallbacks" for a series whose short URL may not have moved yet. A full slug reaches unpublished tournaments.
+
+### Set up from a browser
+
+**The relay is set up and changed on its own web page. The TO's computer needs nothing beyond a browser and ssh for one install command.** (2026-10-02)
+
+Before, a TO needed git, Node, the GitHub CLI, an ssh key and a hand-written `.env`, and pushed a build to the Pi only to write one settings file. The setup page asks for the token, lists the token's tournaments, events and streams, and checks the result against start.gg before saving. Two exceptions to fail-fast follow: a relay without settings serves only its setup page, and one whose event can't be found keeps its page up with the reason and retries, so the TO can recover from a phone. The first save needs a one-time setup code that the installer prints; later ones need the admin password, and every POST must come from the page itself, addressed to the relay (no DNS rebinding). Settings fields after the first five are optional with defaults, so no update ever finds the file unreadable.
+
+### One bundle, two update channels
+
+**Each commit builds one `lazyto.tgz`: the relay, the loader and `lazyto_kiosk.bin`. A Pi follows published releases by default, or every build of `main`.** (2026-10-02)
+
+The relay and the Wii files can never come from different commits, and the loader is the pinned Nintendont commit built with the fork CI's own image, byte for byte the build proven on a Wii apart from its build time. A TO's Pi moves only when a release is published; a developer's follows `main` to test changes on the fly. Any differing VERSION installs, so switching channel or rolling back is the same step.
+
+### SD cards from the relay
+
+**The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `lazyto_station.txt` and the loader's settings.** (2026-10-02)
+
+A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 
 ## Risks and questions (R1-R16)
 
@@ -84,7 +102,7 @@ Ids change every week; names do not. A short URL that the TO moves weekly means 
 
 ### R8: preview set ids
 
-**The cache drops sets with string preview ids, and the status page warns until every pool is started.** Unstarted pools have ids that do not fit the protocol's 32-bit set id. Any mutation on a preview id starts the whole pool, so the relay never does that on its own.
+**The relay starts a pool on start.gg as soon as one of its preview sets has both entrants.** Unstarted pools have string ids that do not fit the protocol's 32-bit set id, so those sets are never listed. Any mutation on a preview id starts the whole pool. The first ruling (2026-09-19) left starting to the TO, but a weekly's top 8 phase is never started before doors, so its ready sets never reached the kiosk. Starting it locks that pool's seeding, which is what a web report in it does too. One start per pool per run; a refusal is a status page warning, never a retry.
 
 ### R9: kernel connect() has no timeout
 
@@ -93,14 +111,6 @@ Ids change every week; names do not. A short URL that the TO moves weekly means 
 ### R10: station number in a development setup
 
 **A development emulator reports station 0.** Station 0 just must not be a real station number. One fewer config knob.
-
-### R11: Slippi's codes crashed the shifted executable
-
-**Superseded 2026-09-24: the kiosk is now a module in stock Melee; venue codesets apply unmodified.**
-
-### R12: venue codes must keep working
-
-**Superseded 2026-09-24: the kiosk is now a module in stock Melee; venue codesets apply unmodified.** The native ports of UCF, neutral spawns, striking and audio defaults are retired. The kiosk still asserts tournament rules (4 stocks, 8:00, items off, everything unlocked) at boot.
 
 ### R13: per-game characters
 
@@ -124,4 +134,4 @@ The Pi is usually on Wi-Fi with no guaranteed address. Alternatives were a DHCP 
 
 **A shared secret, the same on every card, sent by the host before every request and telemetry datagram.**
 
-Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. The status page stays open on the network; its only action, ack, hides a flag.
+Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. Reading the status page needs nothing; its actions, the settings and the SD-card zips need the admin password. A new secret is one tick on the settings page, after which every card needs its zip again.

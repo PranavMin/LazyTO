@@ -2,7 +2,7 @@
 // (architecture.md Relay / decisions.md R13). The wire carries the game's own StKind (the
 // value in the start rules, melee/src/melee/gr/forward.h); start.gg numbers
 // Melee's 29 selectable stages 1..29. Both tables are frozen. The start.gg side
-// was read from the real API 2026-09-22 (`node scripts/probe.ts --stages`:
+// was read from the real API 2026-09-22 (the maintainer's read-only probe:
 // videogame(id: 1).stages, 29 rows) and matched by name below.
 
 const STKIND_TO_STARTGG: readonly (readonly [stkind: number, startgg: number, name: string])[] = [

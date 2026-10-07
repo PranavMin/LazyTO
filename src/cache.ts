@@ -1,19 +1,16 @@
 // cache.ts -- the pending-set cache (architecture.md Relay). One upstream
 // query, refreshed every 20 s; everything the Wiis can see comes from here.
 //
-// Preview set ids (decisions.md R8, option a): a set in an unstarted pool has a
-// string id like preview_3292311_1_1, which cannot be a uint32 on the wire.
-// The cache DROPS those sets and records a warning for the status page; the
-// per-tournament setup checklist says to start all pools before doors.
+// Preview set ids (decisions.md R8): a set in an unstarted pool has a string
+// id like preview_3480760_2_0, which cannot be a uint32 on the wire, so the
+// cache never lists one. When a preview set has both entrants (top 8 is
+// ready but its phase was never started) the cache starts that pool on
+// start.gg, once per pool; its sets come back with numeric ids on the next
+// refresh. A failed start is a status page warning, not a retry.
 
 import { ROUND_LEN } from '../generated/wire.js';
 import { bestOfFor, bracketShape, type SetFormat } from './format.js';
 import type { StartggClient, UpstreamPhaseGroup, UpstreamSet } from './startgg.js';
-
-export interface CachedGame {
-  orderNum: number;
-  winnerSlot: 1 | 2;
-}
 
 export interface CachedSet {
   id: number; // fits uint32
@@ -23,10 +20,11 @@ export interface CachedSet {
   roundName: string; // "WINNERS QUARTER-FINAL" -- the wire field the Wii shows (ROUND_LEN chars)
   fullRoundText: string; // "Winners Quarter-Final" -- start.gg's own text, for the set archive
   phaseGroup: UpstreamPhaseGroup | null; // the pool, for the set archive's context.json
-  bestOf: number;
+  bestOf: number; // what the Wiis are sent: the TO's override if any, else autoBestOf
+  autoBestOf: number; // setFormat's answer (format.ts)
+  bestOfOverridden: boolean; // the TO set it on the status page (admin.ts)
   p1: { id: number; tag: string };
   p2: { id: number; tag: string };
-  games: CachedGame[]; // reloaded from upstream, for state rebuild after reboots
 }
 
 const WORD_ABBREV: Record<string, string> = {
@@ -67,12 +65,17 @@ export class SetCache {
   private refreshError: string | null = null;
   private timer: NodeJS.Timeout | null = null;
   private refreshing = false;
+  /** TO overrides from the status page, set id -> best-of; outlive refreshes (admin.ts). */
+  private bestOfOverrides = new Map<number, number>();
+  /** Pools the cache asked start.gg to start, phase group id -> error message, or null when it worked (R8). */
+  private poolStarts = new Map<number, string | null>();
 
   constructor(
     private readonly client: StartggClient,
     private readonly eventId: number,
     private readonly setFormat: SetFormat,
     private readonly onRefreshError: (e: Error) => void = () => {},
+    private readonly onPoolStart: (previewSetId: string, error: Error | null) => void = () => {},
   ) {}
 
   /** Fetch and rebuild. Throws on upstream failure; the old data is kept. */
@@ -87,7 +90,7 @@ export class SetCache {
 
     const next = new Map<number, CachedSet>();
     const warnings: string[] = [];
-    let previewCount = 0;
+    const readyPools = new Map<number, string>(); // phase group id -> one ready preview set id
 
     const shape = bracketShape(
       upstream.map((s) => ({ round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder })),
@@ -95,7 +98,8 @@ export class SetCache {
 
     for (const s of upstream) {
       if (typeof s.id === 'string') {
-        previewCount++;
+        // A preview set with a TBD slot is not selectable yet, like a numeric one.
+        if (s.slots[0]?.entrant && s.slots[1]?.entrant) readyPools.set(s.phaseGroup.id, s.id);
         continue;
       }
       if (!Number.isInteger(s.id) || s.id < 1 || s.id > U32_MAX) {
@@ -110,17 +114,6 @@ export class SetCache {
         continue;
       }
 
-      const games: CachedGame[] = [];
-      for (const g of s.games ?? []) {
-        if (g.winnerId === e1.id) games.push({ orderNum: g.orderNum, winnerSlot: 1 });
-        else if (g.winnerId === e2.id) games.push({ orderNum: g.orderNum, winnerSlot: 2 });
-        else
-          warnings.push(
-            `set ${s.id}: game ${g.orderNum} winner ${g.winnerId} is neither entrant, skipped`,
-          );
-      }
-      games.sort((a, b) => a.orderNum - b.orderNum);
-
       next.set(s.id, {
         id: s.id,
         state: s.state,
@@ -129,20 +122,36 @@ export class SetCache {
         roundName: wireRoundName(s.fullRoundText),
         fullRoundText: s.fullRoundText,
         phaseGroup: s.phaseGroup,
-        bestOf: bestOfFor(
-          this.setFormat,
-          { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames },
-          shape,
+        ...this.withOverride(
+          s.id,
+          bestOfFor(
+            this.setFormat,
+            { round: s.round, phaseOrder: s.phaseGroup.phase.phaseOrder, totalGames: s.totalGames },
+            shape,
+          ),
         ),
         p1: { id: e1.id, tag: e1.name },
         p2: { id: e2.id, tag: e2.name },
-        games,
       });
     }
 
-    if (previewCount > 0) {
+    for (const [pool, previewSetId] of readyPools) {
+      if (!this.poolStarts.has(pool)) {
+        try {
+          await this.client.startPool(previewSetId);
+          this.poolStarts.set(pool, null);
+          this.onPoolStart(previewSetId, null);
+          continue; // its numeric ids arrive with the next refresh
+        } catch (e) {
+          this.poolStarts.set(pool, (e as Error).message);
+          this.onPoolStart(previewSetId, e as Error);
+        }
+      }
+      const error = this.poolStarts.get(pool);
       warnings.unshift(
-        `${previewCount} preview-id set(s) dropped -- a pool has not been started; start all pools on start.gg (R8)`,
+        error
+          ? `pool ${pool} has a ready set but could not be started (${error}) -- start it on start.gg (R8)`
+          : `pool ${pool} is still unstarted after the relay started it -- start it on start.gg (R8)`,
       );
     }
 
@@ -176,6 +185,28 @@ export class SetCache {
 
   get(setId: number): CachedSet | undefined {
     return this.sets.get(setId);
+  }
+
+  private withOverride(
+    setId: number,
+    autoBestOf: number,
+  ): Pick<CachedSet, 'bestOf' | 'autoBestOf' | 'bestOfOverridden'> {
+    const o = this.bestOfOverrides.get(setId);
+    return { bestOf: o ?? autoBestOf, autoBestOf, bestOfOverridden: o !== undefined };
+  }
+
+  /** The TO's best-of for one set (3 or 5), or null to go back to setFormat's. Applies now and on every refresh. */
+  setBestOfOverride(setId: number, bestOf: number | null): void {
+    if (bestOf === null) this.bestOfOverrides.delete(setId);
+    else this.bestOfOverrides.set(setId, bestOf);
+    const s = this.sets.get(setId);
+    if (s) Object.assign(s, this.withOverride(setId, s.autoBestOf));
+  }
+
+  /** After the relay reset a set on start.gg: pending again, without waiting for the next refresh. */
+  markReset(setId: number): void {
+    const s = this.sets.get(setId);
+    if (s) s.state = 1;
   }
 
   /** Selectable sets: upstream-pending with both entrants, earliest rounds first. */

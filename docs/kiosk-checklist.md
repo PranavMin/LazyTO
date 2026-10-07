@@ -1,6 +1,6 @@
 # New-version check-yourself list
 
-Manual checks to run **every time a new `tournament.bin` is built** (the kiosk module
+Manual checks to run **every time a new `lazyto_kiosk.bin` is built** (the kiosk module
 injected into stock Melee 1.02, see `kiosk.md`), each one born from a bug we actually hit. If a check fails,
 the note says the usual cause and where it's documented. **This is a living list - add a row
 whenever a new build issue bites us.** Rows tagged *(venue code)* are behaviours that now come
@@ -17,12 +17,12 @@ Legend: each item is something *you* verify by eye on the running build.
       `python configure.py --non-matching` once). The tail of its output lists every patch
       and ends with `guard: 0x8016D800 == 0x7C0802A6` and the `.bin` size (~26 KB). *A failed
       external resolution or a gecko overlap stops the build with the symbol/address named -
-      never hand-edit `tournament.bin`.*
+      never hand-edit `lazyto_kiosk.bin`.*
 - [ ] **No non-ASCII in edited C files** before building (scan for em-dash U+2014,
       smart quotes, etc.). *MWCC parses source as Shift-JIS and errors on them.*
 - [ ] If any on-screen text looks jammed/wrong after an edit, **delete `kiosk/build/obj/*.o`** and
       rebuild. *A stale `mntourney.o` once rendered "STARTPapa VS Hotel" / wrong confirm text.*
-- [ ] For hardware: copy `tournament.bin` to the SD card root next to `tournament.cfg`; the
+- [ ] For hardware: copy `lazyto_kiosk.bin` to the SD card root next to `lazyto_station.txt`; the
       Nintendont boot log must show the module line *and* `Patch:Apply Slippi core`.
 
 ## 1. Boot & menu flow
@@ -140,7 +140,7 @@ Everything in this section is Nintendont's `kernel/gecko/*.bin` applied to the s
 hide, D-pad rumble toggle) - on hardware by the venue's MeleeCodes toggles, in Dolphin by the
 same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbneutralspawn.c`) and the
 `mnstagesel.c`/`ifnametag.c` edits live only on tag `shifted-dol-final`. History of why they existed: `melee fork, docs/history/ucf-investigation.md`,
-`melee fork, docs/history/ucf-readdressing.md`, `melee fork, docs/history/venue-codes-readdressing.md`, decisions.md R11/R12.
+`melee fork, docs/history/ucf-readdressing.md`, `melee fork, docs/history/venue-codes-readdressing.md`, and the changelog's 2026-09-21 and 2026-09-24 entries.
 
 - [ ] **UCF feels right** *(venue code)*: dashback, shield-drop, wiggle-out-of-tumble behave
       like UCF 0.84.
@@ -158,10 +158,9 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 
 - [ ] **Relay is running** and its status page loads: http://localhost:29473 .
       *Restart it after a machine reboot.*
-- [ ] Status page shows **`Cache: N sets` with N > 0**, and **no "preview-id set(s)
-      dropped" warning**. *0 sets or a preview warning = a start.gg pool isn't started.
-      Start it: `markSetInProgress` on any set materializes real numeric ids for the whole
-      pool (R8). The relay drops preview (string-id) sets by design.*
+- [ ] Status page shows **`Cache: N sets` with N > 0**, and **no "could not be started"
+      warning**. *The relay starts a pool itself once one of its preview (string-id) sets
+      has both players (R8); the warning means start.gg refused, so start that pool by hand.*
 - [ ] Status page shows the **correct event id** (1613010 for the test tournament).
 
 ## 6. Full set flow (end-to-end smoke test)
@@ -275,22 +274,8 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       are known the **lower port is on the left** (`BRAVO P1  0 - 0  P3 ALPHA`), and
       Z + C-left / C-right give the game to the left / right name AS SHOWN. Auto-score
       uses the claim over the tags. *`claim_port` in lbtourney.c, reset at START_SET and
-      END_SET; `LB_TOURNEY_DEMO_CLAIM 1` fakes a claim by port 3 for the headless Dolphin
-      loop (its slots stay N/A, so the demo also treats port 1 as human) - must be 0 in a
-      shipped build.*
-- [ ] **(superseded 2026-09-25: the score and status live in the banner and the hint is
-      top-left) CSS overlay layout (v31, tuned live by the user):** score `MANGO P1  0 - 0  P3
-      ZAIN` top centre (x 188, y -4, 0.62); hint `Z + X FOR HANDWARMER` (the `+` is the SJIS escape `{`, v34) bottom right
-      (x 456, y 446, 0.43); status (`SENDING... / SCORE SENT / SEND FAILED`) bottom left (x 2,
-      y 446, 0.45). (v32)
-      *`ZX`, not `Z + X`: the SIS font has no `+` (nor `(` `)` `/`). History: v25-v29
-      were placed by rebuild-and-look; v30 added **layout tune mode** so that never
-      happens again; **compiled out since v33** (`LB_TOURNEY_LAYOUT_TUNE 0` in lbtourney.c -
-      set it to 1 to get it back). With it on, on the CSS with a set active, hold **L + R**: D-pad nudges the
-      selected element 2 px (10 with Z), **X** cycles SCORE / HINT / STATUS, **Y** grows
-      the scale by 0.02 (shrinks with Z), and a mid-screen readout `TUNE SCORE X 212 Y 4
-      S 52` shows the live values for 3 s. Read them off and hardcode them in `el[]`
-      (lbtourney.c). The rumble D-pad toggle is suppressed while the chord is held.*
+      END_SET; a `build_module.py --demo` build fakes a claim by port 3 for the headless
+      Dolphin loop (its slots stay N/A, so the demo also treats port 1 as human).*
 - [ ] **SIS vertical rule (found fixing the icon letters, v36):** a glyph drawn at
       entry scale s lands **32*(1-s) px below the entry's y**. Each entry pushes its
       scale opcode at its start and pops it at its end, so every entry is measured as a
@@ -325,24 +310,3 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 - [ ] **Sheik's nametag vanishes during Vanish** (up-B) *(venue code - the stealth
       nametag hook in `g_mods_tournament.bin`, verified 2026-09-24)*. *Our `ifnametag.c` edit
       is retired.*
-
-## 8. Dolphin (development setup)
-
-Only for testing the module in the patched Slippi Dolphin kept as a separate development
-setup. Paths are inside that Dolphin's folder. Venue Wiis never run it.
-
-- [ ] **Dolphin picked up the new file**: `SlippiTournamentModule` in
-      `User/Config/Dolphin.ini` points at `kiosk/build/tournament.bin`
-      and `HLE_BS2 = True`; restart the game after every build (the module is read at boot).
-      *An old module + new expectations looks exactly like a silent no-op.*
-- [ ] **Gecko list is the generated one**: `Data/Sys/GameSettings/GALE01r2.ini` (and
-      the `Binary/x64/Sys` copy) from `Tools/make_venue_ini.py` - `[Gecko_Enabled]` =
-      `Required: Slippi Recording`, `Venue: UCF 0.84`, `Venue: Tournament Mods`, nothing else.
-      *Slippi's General Codes / Slippi Online blank the kiosk text and run the netplay CSS
-      (2026-09-24); a `[creator]` suffix on an enabled name silently disables it.* `EnableCheats
-      = True` and no per-ISO `User/GameSettings/GALE01.ini` override.
-- [ ] **No "missing memory card" popup.** *Slot A = Memory Card, Slot B = the relay EXI
-      device. This is config, not a code hack (the game edit was reverted).*
-
-History: before 2026-09-24 this list was run per `SmashTournament-vN.iso` (the retired
-shifted-DOL build).

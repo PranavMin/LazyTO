@@ -86,17 +86,11 @@ static bool handwarmer;
  * light press must do (2026-09-25: a light R press read 50 on the
  * trigger readout). The friction is the two-trigger one-second hold, not the depth. */
 #define LB_TOURNEY_CLAIM_PULL_RAW 49
-/* Dev flag (docs/kiosk.md): 1 draws the raw L/R trigger values of every
- * port bottom-left, to pick the claim threshold from a real pad. Must be 0
- * in a shipped build; sync-card.ps1 refuses otherwise. */
-#ifndef LB_TOURNEY_TRIGGER_READOUT
-#define LB_TOURNEY_TRIGGER_READOUT 0
-#endif
 static s8 claim_port = -1;   /* port that claimed entrant 1, or -1 */
 static u8 claim_hold[4];     /* frames each port has held L + R */
-/* Dev flag (docs/kiosk.md): 1 fakes an L + R claim by port 3 after 150 CSS
- * frames and treats port 1 as human, for a Dolphin run with no controller.
- * Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
+/* Dev switch (docs/kiosk.md): 1 fakes an L + R claim by port 3 after 150
+ * CSS frames and treats port 1 as human, for a Dolphin run with no
+ * controller. build_module.py --demo sets it; the source keeps 0. */
 #ifndef LB_TOURNEY_DEMO_CLAIM
 #define LB_TOURNEY_DEMO_CLAIM 0
 #endif
@@ -113,17 +107,6 @@ static u8 auto_stage;         /* internal StKind the game was played on */
 static char auto_note[40];    /* why nothing was scored, or what was */
 static u32 auto_note_frames;  /* frames left showing auto_note */
 
-/* CSS overlay layout: the shipped positions, tuned live on a Wii
- * (2026-09-22). */
-enum lbTourney_El { EL_SCORE, EL_HINT, EL_STATUS, EL_COUNT };
-static struct {
-    f32 x, y, scale;
-} el[EL_COUNT] = {
-    { 188.0f, -4.0f, 0.62f },  /* score, top centre (tuned live, 2026-09-22) */
-    { 456.0f, 446.0f, 0.43f }, /* handwarmer hint, bottom right (tuned live) */
-    { 2.0f, 446.0f, 0.45f },   /* SENDING / SENT / FAILED, bottom left (tuned
-                                * live) */
-};
 /* CMD_GAME_START (2026-10-01): sent on a match's first frame so the relay
  * can match the replay the station's beamer records and label who played
  * on which port. Fire and forget: polled during the match only to clear it,
@@ -767,7 +750,6 @@ static void redraw(void)
 {
     char p1[TAG_LEN + 1];
     char p2[TAG_LEN + 1];
-    int entry;
 
     freeText(&css_text);
     freeText(&css_shadow);
@@ -781,7 +763,6 @@ static void redraw(void)
 
     css_shadow = newText(css_ctx, 190);
     css_text = newText(css_ctx, 255);
-    (void) entry;
 
     /* Handwarmer hint at the top-left corner (2026-09-25; it sat
      * top-right beside BACK before). */
@@ -790,19 +771,6 @@ static void redraw(void)
         ovLine(css_shadow, css_text, 10.0f, -8.0f, 0.50f,
                handwarmer ? &ov_amb : &ov_white, fmt);
     }
-#if LB_TOURNEY_TRIGGER_READOUT
-    {
-        /* Raw trigger values as the game sees them (0-140), to pick the
-         * claim threshold from a real pad. Dev build only. */
-        char line[64];
-        sprintf(line, "L %d R %d   L %d R %d   L %d R %d   L %d R %d",
-                HSD_PadCopyStatus[0].analogL, HSD_PadCopyStatus[0].analogR,
-                HSD_PadCopyStatus[1].analogL, HSD_PadCopyStatus[1].analogR,
-                HSD_PadCopyStatus[2].analogL, HSD_PadCopyStatus[2].analogR,
-                HSD_PadCopyStatus[3].analogL, HSD_PadCopyStatus[3].analogR);
-        ovLine(css_shadow, css_text, 30.0f, 430.0f, 0.50f, &ov_white, line);
-    }
-#endif
 
     /* The CSS's own rules banner carries the score and the status: score
      * "NAME P1   0 - 0   P3 NAME" (entrant 1 left, digits yellow, amber
@@ -1037,11 +1005,6 @@ void lbTourney_CSSFrame(void)
             css_dirty = true;
         }
         css_frames++;
-#if LB_TOURNEY_TRIGGER_READOUT
-        if (css_frames % 6 == 0) {
-            css_dirty = true;
-        }
-#endif
         if ((last_failed || entrantPort(1) < 0 || entrantPort(2) < 0) &&
             css_frames % 120 == 0)
         {

@@ -1,147 +1,44 @@
-// main.ts -- process entry point (architecture.md (Relay, Deployment)). Reads the
-// config path from the CONFIG environment variable (the systemd unit sets
-// it), validates everything, resolves the configured tournament short URL,
-// event name and stream name to tonight's ids (resolve.ts), does one cache
-// refresh -- so a bad token, a short URL nobody moved yet or an ambiguous
-// event name kills the process before a Wii ever connects -- replays the
-// audit log to rebuild station claims, then serves TCP and the status page.
+// main.ts -- process entry point (architecture.md (Relay, Deployment)). Starts
+// the relay app (app.ts): the web server first, then tonight's event from the
+// settings in the data directory -- or the setup page if there are none yet.
+// Exits non-zero only if the web server can't start (port 29473 taken).
 
-import { loadConfig } from './config.js';
-import { StartggClient } from './startgg.js';
-import { SetCache } from './cache.js';
-import { StationState } from './state.js';
-import { AuditLog, auditPath, replayClaims } from './audit.js';
-import { RelayTcpServer } from './tcp.js';
-import { StatusServer } from './status.js';
-import { resolveEvent } from './resolve.js';
-import { RelayBeacon } from './beacon.js';
-import { StationTelemetry } from './telemetry.js';
-import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { BEACON_PORT, BEACON_INTERVAL_MS } from '../generated/wire.js';
-import { ANNOUNCE_GROUP, ANNOUNCE_PORT, BeamerDirectory } from './beamer.js';
-import { SetArchive } from './archive.js';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { App } from './app.js';
+import { DATA_DIR, HTTP_PORT, TCP_PORT } from './config.js';
+
+/**
+ * The root of the release bundle (/opt/lazyto), two levels above the built
+ * dist/src/main.js; null when run from source, which has no bundle.
+ */
+const BUNDLE = import.meta.filename.endsWith('.js')
+  ? resolve(import.meta.dirname, '..', '..')
+  : null;
+
+/** The bundle's VERSION; "dev" from source. */
+function version(): string {
+  if (BUNDLE === null) return 'dev';
+  try {
+    return readFileSync(join(BUNDLE, 'VERSION'), 'utf8').trim() || 'dev';
+  } catch {
+    return 'dev';
+  }
+}
 
 async function main(): Promise<void> {
-  const configPath = process.env.CONFIG;
-  if (!configPath) {
-    throw new Error('CONFIG environment variable not set (path to config.json)');
-  }
-  const config = loadConfig(configPath);
-
-  const startgg = new StartggClient({ endpoint: config.startggEndpoint, token: config.token });
-  const ev = await resolveEvent(startgg, config); // fail fast: unknown short URL / event / stream dies here
-  console.log(
-    `resolved "${config.tournament}" by ${ev.foundBy}: ${ev.tournamentName} (${ev.tournamentSlug}), ` +
-      `event "${ev.eventName}" ${ev.eventId}, stream "${ev.streamName}" ${ev.streamId}`,
-  );
-
-  const audit = new AuditLog(auditPath(config.auditDir, ev.eventId));
-  const cache = new SetCache(startgg, ev.eventId, config.setFormat, (e) =>
-    audit.record({ type: 'refresh_error', error: String(e) }),
-  );
-  await cache.refresh(); // fail fast: bad token / event id dies here
-
-  const state = new StationState();
-  for (const [station, claim] of replayClaims(audit.path)) {
-    if (cache.get(claim.setId)) {
-      state.claim(station, claim);
-      audit.record({ type: 'replay', station, setId: claim.setId, games: claim.games.length });
-    }
-  }
-
-  // The set archive (archive.ts): each station's beamer is found by its own
-  // announce; finished sets become zips in archiveDir.
-  let archive: SetArchive | null = null;
-  const beamers = new BeamerDirectory({
-    port: ANNOUNCE_PORT,
-    onAnnounce: (e) => archive?.onAnnounce(e.station),
+  const app = new App({
+    dataDir: DATA_DIR,
+    httpPort: HTTP_PORT,
+    tcpPort: TCP_PORT,
+    version: version(),
+    wiiDir: BUNDLE === null ? undefined : join(BUNDLE, 'wii'),
   });
-  await beamers.start();
-  archive = new SetArchive({
-    dir: config.archiveDir,
-    setTemplate: config.archiveSetName,
-    gameTemplate: config.archiveGameName,
-    beamerHttpPort: config.beamerHttpPort,
-    beamers,
-    event: ev,
-    audit,
-  });
-  archive.start();
-
-  cache.start();
-  const tcp = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit,
-    archive,
-    streamStation: config.streamStation,
-    streamId: ev.streamId,
-    secret: config.secret,
-  });
-  await tcp.listen(config.tcpPort);
-  // Stations find the relay from this broadcast (decisions.md R15); started only
-  // once TCP is listening, so a station never learns an address that refuses.
-  const beacon = new RelayBeacon({ tcpPort: config.tcpPort, eventId: ev.eventId });
-  await beacon.start();
-  // Each Wii's own boot report (kernel log + module status). Lines are also
-  // appended to <auditDir>/wii-station-N.log so a boot can be read after the fact.
-  const telemetry = new StationTelemetry({
-    secret: config.secret,
-    beaconPayload: beacon.beaconPayload,
-    onLine: (station, line) => {
-      try {
-        appendFileSync(
-          join(config.auditDir, `wii-station-${station}.log`),
-          `${new Date().toISOString()} ${line}\n`,
-        );
-      } catch (e) {
-        console.error(`wii log write failed: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
-  });
-  await telemetry.start();
-  const status = new StatusServer({
-    state,
-    cache,
-    startgg,
-    streamStation: config.streamStation,
-    eventLabel: `${ev.tournamentName} · ${ev.eventName} (${ev.eventId})`,
-    beacon,
-    tcp,
-    telemetry,
-    archive,
-    beamers,
-  });
-  await status.listen(config.httpPort);
-
-  audit.record({ type: 'startup', ...ev, sets: cache.status().count });
-  console.log(
-    `relay up: event ${ev.eventId}, ${cache.status().count} sets cached, ` +
-      `tcp :${config.tcpPort}, status http://localhost:${config.httpPort}`,
-  );
-  console.log(
-    `beacon: udp :${BEACON_PORT} to ${beacon.status().targets.join(', ') || '(no IPv4 interface yet)'} every ${BEACON_INTERVAL_MS} ms`,
-  );
-  console.log(`telemetry: udp :${telemetry.address().port} (Wii kernel logs and module status)`);
-  console.log(
-    `beamers: announces on ${ANNOUNCE_GROUP}:${ANNOUNCE_PORT}, replays from :${config.beamerHttpPort}, set archives in ${config.archiveDir}`,
-  );
+  await app.start();
 
   const shutdown = async (signal: string) => {
     console.log(`${signal}: shutting down`);
-    cache.stop();
-    archive?.stop();
-    await Promise.all([
-      beacon.stop(),
-      telemetry.stop(),
-      beamers.stop(),
-      tcp.close(),
-      status.close(),
-    ]);
-    audit.record({ type: 'shutdown', signal });
-    audit.close();
+    await app.stop();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

@@ -64,16 +64,12 @@ def tri(ax, ay, bx, by, cx, cy):
 GLYPHS = [
     ("DISC",  disc(16.0, 16.0, 13.75),                       (2, 29)),
     ("RSQ",   rounded_rect(3.0, 3.0, 29.0, 29.0, 7.0),       (3, 28)),
-    ("PILL",  rounded_rect(1.0, 9.0, 31.0, 23.0, 7.0),       (1, 30)),
-    ("CROSS", union(rounded_rect(11.0, 2.0, 21.0, 30.0, 2.0),
-                    rounded_rect(2.0, 11.0, 30.0, 21.0, 2.0)), (2, 29)),
     # Flat UI shapes for the kiosk menus (2026-09-25): a solid cell that is
-    # stretched into bars/scrims by per-entry x/y scale, and scroll/cursor
+    # stretched into bars/scrims by per-entry x/y scale, and scroll
     # triangles.
     ("BLOCK",  rect(0.0, 0.0, 32.0, 32.0),                  (0, 31)),
     ("TRI_UP", tri(16.0, 5.0, 28.0, 26.0, 4.0, 26.0),       (4, 27)),
     ("TRI_DN", tri(4.0, 6.0, 28.0, 6.0, 16.0, 27.0),        (4, 27)),
-    ("TRI_RT", tri(7.0, 4.0, 27.0, 16.0, 7.0, 28.0),        (7, 26)),
     # Rounded-panel pieces: a quarter disc per corner (the circle's centre is
     # the cell corner that meets the panel's straight edges, so the piece
     # fills its quadrant flush with the neighbouring blocks) and a quarter

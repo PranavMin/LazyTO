@@ -133,10 +133,10 @@ enum mnTourney_State {
  * translucent navy panels with a thin light-blue rim and a light fill, plus
  * a drop shadow under every text line (chosen 2026-09-25 among five trial
  * looks). */
-/* Dev flag (docs/kiosk.md): with 1 the list auto-confirms and starts its
+/* Dev switch (docs/kiosk.md): with 1 the list auto-confirms and starts its
  * first set two seconds after it is up, so the CSS overlay can be captured
  * in a Dolphin run that has no controller; with 2 it only opens the confirm
- * pane. Must be 0 in a shipped build; sync-card.ps1 refuses otherwise. */
+ * pane. build_module.py --demo sets it; the source keeps 0. */
 #ifndef TM_DEMO_AUTOSTART
 #define TM_DEMO_AUTOSTART 0
 #endif
@@ -204,7 +204,7 @@ static int tm_boot_frames = 0;
  * set list is up: a stable, fully-rendered menu frame (so no GX-transition
  * crash), AFTER the memcard save-load (so it isn't overwritten), and before any
  * match. sound_balance = 100 puts the SOUNDS<->MUSIC slider at all-sounds (music
- * off); OSSetSoundMode(0) forces mono. */
+ * off) and gm_801603B0 applies it to the mix; OSSetSoundMode(0) forces mono. */
 static bool tm_audio_set = false;
 
 /* Kiosk: hide/show the main menu's visuals. Its background (class 4, plink 5,
@@ -446,7 +446,7 @@ static void selectSet(u32 set_id)
 }
 
 /* The relay refused us over the shared secret (relay_status ST_BAD_SECRET,
- * decisions.md R15): tournament.cfg's secret= does not match the relay's. */
+ * decisions.md R15): lazyto_station.txt's secret= does not match the relay's. */
 static bool errIsSecret(void)
 {
     return !tm_err_link && tm_err_status == ST_BAD_SECRET;
@@ -662,10 +662,10 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
         /* Bar inside the panel's rim; the yellow edge 7 px in, so it does
          * not read as part of the rim. */
         f32 in = 3.0f;
-        lbButton_Box(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
-                     L_BAR_H, c_bar);
-        lbButton_Box(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
-                     muted ? c_muted : c_yel);
+        lbButton_Rect(tm_bar, L_LIST_X + in, y + L_BAR_DY, L_LIST_W - 2 * in,
+                      L_BAR_H, LB_SHAPE_BLOCK, c_bar);
+        lbButton_Rect(tm_text, L_LIST_X + 7.0f, y + L_BAR_DY, 4.0f, L_BAR_H,
+                      LB_SHAPE_BLOCK, muted ? c_muted : c_yel);
     }
     rightAt(L_TAG_L_R, y, s, c, p1);
     lineC(L_AXIS_X, y, L_VS_S, vs, "VS");
@@ -989,7 +989,7 @@ static void redraw(void)
         lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim,
               hostNetJoining()    ? "POWER CYCLE THE WII, THEN CHECK THE ROUTER"
               : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER'S SETTINGS"
-              : hostNoCard()      ? "PUT TOURNAMENT.CFG WITH A SECRET ON THE SD CARD"
+              : hostNoCard()      ? "UNZIP THE STATION'S ZIP ONTO THE CARD AGAIN"
               : tm_ph.relay_ip == 0 ? "IS THIS SETUP ON THE RELAY'S NETWORK?"
               : errIsSecret()     ? "CHECK THE SECRET ON THIS CARD"
                                   : "TELL THE TO IF THIS REPEATS");
@@ -1075,7 +1075,8 @@ static void sendStart(void)
 {
     struct start_set_req req;
     req.set_id = tm_sets[tm_chosen].set_id;
-    /* The kernel overwrites stream (and hdr.station) from tournament.cfg. */
+    /* Unused by the relay, which picks the stream station itself. The kernel
+     * stamps hdr.station from lazyto_station.txt. */
     req.stream = 0;
     req._pad[0] = req._pad[1] = req._pad[2] = 0;
 
@@ -1280,6 +1281,11 @@ void mnTourney_Think(HSD_GObj* gobj)
         }
         if (!(tm_ph.host_opts & HO_MUSIC_ON)) {
             gmMainLib_GetGamePrefs()->sound_balance = 100; /* music off */
+            /* The pref alone changes nothing until the mix is set from it:
+             * gm_801603B0 sets the music and sound volumes from
+             * sound_balance, as vanilla does at audio init and when the main
+             * menu reloads its save (mnMain_Scene_OnFrame). */
+            gm_801603B0();
         }
     }
 
@@ -1307,8 +1313,9 @@ void mnTourney_Think(HSD_GObj* gobj)
              * say so now. */
             fail("NETWORK IS OFF IN THE LOADER");
         } else if (hostNoCard()) {
-            fail((tm_ph.flags & PF_NO_CFG) ? "NO TOURNAMENT.CFG ON THE CARD"
-                                           : "NO SECRET IN TOURNAMENT.CFG");
+            /* The font has no underscore, so the file is "the station file". */
+            fail((tm_ph.flags & PF_NO_CFG) ? "NO STATION FILE ON THE CARD"
+                                           : "NO SECRET IN THE STATION FILE");
         } else if (buttons & MenuInput_Back) {
             sfxBack();
             exitToMainMenu();
@@ -1398,7 +1405,8 @@ void mnTourney_Think(HSD_GObj* gobj)
 }
 
 /* Force the venue's tournament state live each time we pass the main menu, so
- * it holds regardless of what the memory-card save has (decisions.md R12): all
+ * it holds regardless of what the memory-card save has (decisions.md, Stock
+ * Melee plus a module): all
  * characters unlocked, Stock mode, 4 stocks, 8:00, no items. Stages already
  * default to all-unlocked but we set the mask too for good measure. */
 static void forceKioskDefaults(void)

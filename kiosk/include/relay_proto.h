@@ -42,7 +42,7 @@ typedef unsigned long uint32_t;
 #define MSG_LEN                30  /* human-readable status text in relay_resp */
 #define ROUND_LEN              24  /* round name as the players see it, upper case: "WINNERS QUARTER-FINAL", "LOSERS ROUND 1", "GRAND FINAL RESET" (start.gg fullRoundText, cut to fit) */
 #define TAG_LEN                16  /* player tag */
-#define BEACON_PORT            29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; tournament.cfg has no relay address) */
+#define BEACON_PORT            29471  /* UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; lazyto_station.txt has no relay address) */
 #define BEACON_INTERVAL_MS     2000  /* the relay sends one relay_beacon per interval on every IPv4 interface */
 #define SECRET_LEN             16  /* relay shared secret, printable ASCII, NUL-padded (decisions.md R16) */
 #define AUTH_MAGIC_0           77  /* 'M', first byte of relay_auth */
@@ -81,7 +81,7 @@ enum relay_status {
     ST_BAD_VERSION   = 1,
     ST_SET_NOT_FOUND = 2,
     ST_SET_TAKEN     = 3,  /* started on another station */
-    ST_NOT_STREAM    = 4,  /* stream flag from non-stream station */
+    ST_NOT_STREAM    = 4,  /* no longer sent: the relay picks the stream station itself */
     ST_STARTGG_ERROR = 5,  /* upstream rejected; see status page */
     ST_RATE_LIMITED  = 6,
     ST_INTERNAL      = 7,
@@ -94,12 +94,12 @@ enum exi_cmd {
     EXI_RELAY_POLL = 241,  /* read {state, response buffer} */
 };
 
-/* bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, tournament.cfg) */
+/* bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, lazyto_station.txt) */
 enum exi_poll_flags {
     PF_NO_NETWORK  = 1,  /* the host will never have a network: the loader's Network option is off */
-    PF_NO_CFG      = 2,  /* no usable sd:/tournament.cfg */
-    PF_NO_SECRET   = 4,  /* tournament.cfg has no valid secret= */
-    PF_NO_BEAMER   = 16,  /* tournament.cfg says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello) */
+    PF_NO_CFG      = 2,  /* no usable sd:/lazyto_station.txt */
+    PF_NO_SECRET   = 4,  /* lazyto_station.txt has no valid secret= */
+    PF_NO_BEAMER   = 16,  /* lazyto_station.txt says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello) */
     PF_NET_JOINING = 8,  /* Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it */
 };
 
@@ -141,11 +141,11 @@ enum beamer_flags {
     BF_RELAY = 2,  /* has heard the relay's beacon; relay_ip and relay_port are valid */
 };
 
-/* what the host did with sd:/tournament.bin at game boot (Nintendont kernel LoadTournamentModule) */
+/* what the host did with sd:/lazyto_kiosk.bin at game boot (Nintendont kernel LoadTournamentModule) */
 enum module_state {
     MOD_PENDING     = 0,  /* no game booted yet */
     MOD_LOADED      = 1,
-    MOD_NOT_FOUND   = 2,  /* no sd:/tournament.bin */
+    MOD_NOT_FOUND   = 2,  /* no sd:/lazyto_kiosk.bin */
     MOD_BAD_FILE    = 3,  /* not a TMOD file */
     MOD_BAD_HEADER  = 4,  /* unsupported version, size or load address */
     MOD_GUARD       = 5,  /* guard word mismatch: the disc is not stock Melee 1.02 */
@@ -164,7 +164,7 @@ enum module_state {
 struct exi_poll_hdr {
     uint8_t  state;  /* enum exi_poll_state */
     uint8_t  flags;  /* exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0) */
-    uint16_t station;  /* tournament.cfg station; 0 in Dolphin (decisions.md R10) */
+    uint16_t station;  /* lazyto_station.txt station; 0 in Dolphin (decisions.md R10) */
     uint32_t relay_ip;  /* relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown */
     uint16_t relay_port;  /* relay TCP port; 0 = unknown */
     uint8_t  host_opts;  /* exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin) */
@@ -212,7 +212,7 @@ RELAY_STATIC_ASSERT(offsetof(struct relay_beacon, event_id) == 8, relay_beacon_e
 /* Relay shared secret (decisions.md R16). Not part of the game's messages: the
  * host of the fake EXI device (Nintendont kernel, Slippi Dolphin forwarder)
  * writes it on the TCP connection before the game's relay_hdr + payload, with
- * the secret from its own config (tournament.cfg secret=, Dolphin
+ * the secret from its own config (lazyto_station.txt secret=, Dolphin
  * SlippiRelaySecret). The relay compares the secret with its config in
  * constant time and answers a missing or wrong one with ST_BAD_SECRET without
  * acting on the request. Responses carry no relay_auth. Plaintext on the LAN:
@@ -243,7 +243,7 @@ struct telemetry_hdr {
     uint8_t  magic[2];  /* MAGIC_0, TELEMETRY_MAGIC_1 ('M','L') */
     uint8_t  version;  /* PROTO_VERSION */
     uint8_t  kind;  /* enum telemetry_kind */
-    uint16_t station;  /* tournament.cfg station */
+    uint16_t station;  /* lazyto_station.txt station */
     uint16_t len;  /* payload bytes after this header */
     uint32_t seq;
     uint32_t uptime_ms;  /* milliseconds since the kernel started */
@@ -337,7 +337,7 @@ struct relay_hdr {
     uint8_t  magic[2];  /* 'M','T' */
     uint8_t  version;  /* PROTO_VERSION */
     uint8_t  cmd;  /* enum relay_cmd */
-    uint16_t station;  /* from tournament.cfg */
+    uint16_t station;  /* from lazyto_station.txt */
     uint16_t len;  /* payload bytes following the header */
 };  /* 8 bytes */
 
@@ -404,7 +404,7 @@ RELAY_STATIC_ASSERT(offsetof(struct list_sets_resp, sets) == 4, list_sets_resp_s
 /* CMD_START_SET request payload. */
 struct start_set_req {
     uint32_t set_id;
-    uint8_t  stream;  /* from tournament.cfg */
+    uint8_t  stream;  /* unused: the game sends 0 and the relay ignores it (the stream station is set on the relay) */
     uint8_t  _pad[3];
 };  /* 8 bytes */
 
@@ -512,7 +512,7 @@ RELAY_STATIC_ASSERT(offsetof(struct game_start_req, costumes) == 16, game_start_
 
 /* Beamer mailbox sector BEAMER_MB_HELLO, written by the beamer (a Slippi
  * Beamer running the LazyTO firmware), read by the Nintendont kernel when
- * tournament.cfg says transport=beamer. The mailbox is BEAMER_MB_SECTORS
+ * lazyto_station.txt says transport=beamer. The mailbox is BEAMER_MB_SECTORS
  * sectors right after the beamer's replay partition, served from the beamer's
  * RAM: no filesystem covers them on either side. The kernel writes nothing to
  * the mailbox until this sector carries the magic and BEAMER_MB_VERSION. Not

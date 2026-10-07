@@ -6,7 +6,7 @@
 //
 //   npx tsx scripts/fake-beamer.ts --dir "%USERPROFILE%\Documents\Slippi" --station 0 --port 8085
 //
-// Then run the relay with beamerHttpPort 8085. Dolphin is station 0 (its
+// Then run the relay with beamerHttpPort 8085 (test/harness.ts). Dolphin is station 0 (its
 // forwarder stamps no station number), so the default is --station 0.
 // Only finished replays are listed (a .slp whose raw length is still 0 is
 // being written), newest 10, like a beamer's NUM-REPLAYS-SERVED.

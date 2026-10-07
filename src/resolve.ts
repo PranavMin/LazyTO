@@ -34,19 +34,19 @@
 import type { AdminTournament, StartggClient, TournamentDetail } from './startgg.js';
 
 /** Melee's videogame id and start.gg's singles event type. */
-export const MELEE_VIDEOGAME_ID = 1;
-export const SINGLES_EVENT_TYPE = 1;
+const MELEE_VIDEOGAME_ID = 1;
+const SINGLES_EVENT_TYPE = 1;
 
 /** Admin tournaments fetched per page while looking for the short URL. */
 export const ADMIN_PAGE_SIZE = 50;
 
 /** How far from now a weekly's start may be for the weekly fallback to take it. */
-export const WEEKLY_WINDOW_DAYS = 30;
+const WEEKLY_WINDOW_DAYS = 30;
 
 export interface ResolveInput {
   tournament: string; // short URL (e.g. "mybar") or full slug ("tournament/<slug>")
   eventName: string; // matched case-insensitively as a substring, e.g. "Melee Singles"
-  streamName: string; // matched case-insensitively and exactly
+  streamName: string; // matched case-insensitively and exactly; "" = no stream
   weeklyNamePrefix: string; // "" = no weekly fallback; else e.g. "My Bar Weekly #"
 }
 
@@ -61,8 +61,9 @@ export interface Resolved {
   eventSlug: string;
   eventHasSiblings: boolean; // the tournament has other events
   eventPhaseCount: number;
-  streamId: number;
-  streamName: string;
+  /** null when no stream is configured. */
+  streamId: number | null;
+  streamName: string | null;
 }
 
 export class ResolveError extends Error {
@@ -103,7 +104,17 @@ export function nearestWeekly(
   return best;
 }
 
-/** Page through the admin tournaments until one has this short URL; else, with a weekly prefix, the nearest weekly. */
+/** Every tournament the token's user administers (newest first, as start.gg lists them). */
+export async function listAdminTournaments(client: StartggClient): Promise<AdminTournament[]> {
+  const all: AdminTournament[] = [];
+  for (let page = 1; ; page++) {
+    const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
+    all.push(...nodes);
+    if (page >= totalPages || nodes.length === 0) return all;
+  }
+}
+
+/** The admin tournament that has this short URL; else, with a weekly prefix, the nearest weekly. */
 export async function findTournamentSlug(
   client: StartggClient,
   shortSlug: string,
@@ -111,14 +122,9 @@ export async function findTournamentSlug(
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<{ slug: string; foundBy: 'short URL' | 'nearest weekly' }> {
   const want = shortSlug.toLowerCase();
-  const all: AdminTournament[] = [];
-  for (let page = 1; ; page++) {
-    const { totalPages, nodes } = await client.getAdminTournaments(page, ADMIN_PAGE_SIZE);
-    all.push(...nodes);
-    const hit = nodes.find((t) => t.shortSlug?.toLowerCase() === want);
-    if (hit) return { slug: hit.slug, foundBy: 'short URL' };
-    if (page >= totalPages || nodes.length === 0) break;
-  }
+  const all = await listAdminTournaments(client);
+  const hit = all.find((t) => t.shortSlug?.toLowerCase() === want);
+  if (hit) return { slug: hit.slug, foundBy: 'short URL' };
   const seen = all.length;
   if (weeklyNamePrefix.length > 0) {
     const weekly = nearestWeekly(all, weeklyNamePrefix, nowSec);
@@ -136,18 +142,20 @@ export async function findTournamentSlug(
   );
 }
 
+/** The tournament's Melee singles events: the only ones the relay can run. */
+export function meleeSinglesEvents(t: TournamentDetail): TournamentDetail['events'] {
+  return t.events.filter(
+    (e) => e.videogame?.id === MELEE_VIDEOGAME_ID && e.type === SINGLES_EVENT_TYPE,
+  );
+}
+
 /** Exactly one Melee singles event whose name contains eventName. */
 export function pickEvent(
   t: TournamentDetail,
   eventName: string,
 ): TournamentDetail['events'][number] {
   const want = eventName.toLowerCase();
-  const matches = t.events.filter(
-    (e) =>
-      e.videogame?.id === MELEE_VIDEOGAME_ID &&
-      e.type === SINGLES_EVENT_TYPE &&
-      e.name.toLowerCase().includes(want),
-  );
+  const matches = meleeSinglesEvents(t).filter((e) => e.name.toLowerCase().includes(want));
   if (matches.length === 1) return matches[0]!;
   const listed = t.events
     .map((e) => `"${e.name}" (id ${e.id}, type ${e.type}, game ${e.videogame?.id ?? '?'})`)
@@ -183,7 +191,7 @@ export async function resolveEvent(
     : await findTournamentSlug(client, input.tournament, input.weeklyNamePrefix, nowSec);
   const t = await client.getTournament(found.slug);
   const event = pickEvent(t, input.eventName);
-  const stream = pickStream(t, input.streamName);
+  const stream = input.streamName === '' ? null : pickStream(t, input.streamName);
   return {
     foundBy: found.foundBy,
     tournamentName: t.name,
@@ -194,7 +202,7 @@ export async function resolveEvent(
     eventSlug: event.slug,
     eventHasSiblings: t.events.length > 1,
     eventPhaseCount: event.phases?.length ?? 1,
-    streamId: Number(stream.id),
-    streamName: stream.streamName,
+    streamId: stream ? Number(stream.id) : null,
+    streamName: stream ? stream.streamName : null,
   };
 }

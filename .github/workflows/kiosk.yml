@@ -1,26 +1,18 @@
 name: kiosk
 
-# Build-checks the kiosk module so a change that breaks kiosk/ fails the PR.
-# CI has no vanilla main.dol (a Nintendo file), so it runs
-# `build_module.py --check`: compile, link, symbol/region/hook-target/gecko
-# checks, no DOL checks and no tournament.bin. The shippable module is still
-# built by hand with the DOL (docs/kiosk.md).
+# Builds the kiosk module, lazyto_kiosk.bin, so a change that breaks kiosk/
+# fails the PR, and keeps the module as the `lazyto-kiosk-bin` artifact.
+# release.yml calls this workflow on every push to main and every v* tag to
+# put the module in the bundle. No Nintendo file is needed: build_module.py
+# takes the stock 1.02 facts it checks (DOL sections, guard word) from the
+# decomp (docs/kiosk.md).
 #
-# melee/'s `ninja tools` cannot run here: ninja first regenerates build.ninja,
-# which needs `dtk dol split` and so the DOL. The step below instead runs only
-# the download commands that build.ninja lists for the three tools the module
-# build uses (ninja -t commands does not regenerate the manifest).
+# The decomp's compilers and sjiswrap come from
+# kiosk/tools/fetch_decomp_tools.py, the same script developers run.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "kiosk/**"
-      - "protocol.yaml"
-      - "generated/**"
-      - "melee"        # submodule bump
-      - "Nintendont"   # submodule bump (gecko codesets)
-      - ".github/workflows/kiosk.yml"
+  workflow_call:   # release.yml
+  workflow_dispatch:
   pull_request:
     paths:
       - "kiosk/**"
@@ -51,21 +43,17 @@ jobs:
         with:
           path: |
             melee/build/compilers
-            melee/build/binutils
             melee/build/tools
-          key: kiosk-melee-tools-${{ runner.os }}-${{ steps.melee.outputs.sha }}
-      - name: Download the compilers, binutils and sjiswrap
-        if: steps.tools.outputs.cache-hit != 'true'
-        working-directory: melee
-        shell: pwsh
-        run: |
-          python configure.py --non-matching
-          # ninja makes an output's directory before running its command; we run the
-          # commands ourselves, so make it here (download_tool.py writes sjiswrap.exe into it).
-          New-Item -ItemType Directory -Force build/tools | Out-Null
-          python -m ninja -t commands build/compilers build/binutils build/tools/sjiswrap.exe | ForEach-Object {
-            cmd /c $_
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          }
-      - name: Build-check the module (no main.dol)
-        run: python kiosk/tools/build_module.py --check
+          key: kiosk-melee-tools-v2-${{ runner.os }}-${{ steps.melee.outputs.sha }}
+      - name: Fetch the compilers and sjiswrap (kept from the cache when present)
+        run: python kiosk/tools/fetch_decomp_tools.py
+      - name: Developer switches are off in the sources (build_module.py --demo sets them)
+        shell: bash
+        run: "! grep -rnE '#define (TM_DEMO_AUTOSTART|LB_TOURNEY_DEMO_CLAIM)[[:space:]]+[1-9]' kiosk/src"
+      - name: Build the module
+        run: python kiosk/tools/build_module.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lazyto-kiosk-bin
+          path: kiosk/build/lazyto_kiosk.bin
+          if-no-files-found: error

@@ -1,6 +1,7 @@
-// zip.ts -- a minimal ZIP writer for the set archives (archive.ts): deflated
-// entries, UTF-8 names, no ZIP64 (a set is a few replays of a few MB). The
-// relay has no dependencies beyond Node, and Node has deflate but no zip.
+// zip.ts -- a minimal ZIP writer for the SD-card zips (cards.ts) and the set
+// archives (archive.ts): deflated entries, UTF-8 names, no ZIP64 (a card's
+// files or a set's replays are a few MB). The relay has no dependencies beyond
+// Node, and Node has deflate but no zip.
 // Format: PKWARE APPNOTE.TXT sections 4.3.7 (local header), 4.3.12 (central
 // directory header) and 4.3.16 (end of central directory).
 

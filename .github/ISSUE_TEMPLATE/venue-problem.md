@@ -17,6 +17,6 @@ labels: bug
 
 **Versions**
 - Set list top-right (module hash, date, loader build):
-- Relay: `ssh pi@relay.local journalctl -u lazyto-relay -n 1 -o cat` first line, or the release tag:
+- Relay: the version in the status page's footer (`LazyTO ...`):
 
 **How many Wiis, and did it affect all of them?**

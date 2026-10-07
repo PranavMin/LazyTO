@@ -54,8 +54,8 @@ bool lbRelayExi_Request(u8 cmd, const void* payload, u16 len)
     req_buf.hdr.version = RELAY_PROTO_VERSION;
     req_buf.hdr.cmd = cmd;
     /* The game does not know the station; the Nintendont kernel / Dolphin
-     * forwarder stamps station (and start_set_req.stream) from
-     * tournament.cfg before the request reaches the relay. */
+     * forwarder stamps station from lazyto_station.txt before the
+     * request reaches the relay. */
     req_buf.hdr.station = 0;
     req_buf.hdr.len = len;
     if (len != 0) {

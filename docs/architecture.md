@@ -41,7 +41,7 @@ It runs on the venue's existing hardware: internet-connected Wiis, one Raspberry
 ```
  ┌──────────────── Wii (one per station) ────┐
  │  Melee 1.02, stock disc image (PowerPC)   │
- │   + tournament.bin, loaded at boot        │
+ │   + lazyto_kiosk.bin, loaded at boot        │
  │   ├─ set list menu                        │
  │   ├─ CSS score banner, auto-score         │
  │   └─ lbrelayexi.c ──EXI──┐                │
@@ -72,13 +72,13 @@ LazyTO has three parts, each in its own repository:
 
 | Part | Repository | Runs on |
 |------|------------|---------|
-| Kiosk module `tournament.bin` | fork of doldecomp/melee | the Wii's PowerPC, inside stock Melee 1.02 |
+| Kiosk module `lazyto_kiosk.bin` | fork of doldecomp/melee | the Wii's PowerPC, inside stock Melee 1.02 |
 | LazyTO Nintendont | fork of project-slippi/Nintendont | the Wii's ARM core |
 | Relay `lazyto-relay` | this repository | a Raspberry Pi |
 
-### Kiosk module (tournament.bin)
+### Kiosk module (lazyto_kiosk.bin)
 
-Melee has no networking. The kiosk is a small position-fixed module, `tournament.bin` (about 81 KB), built from `kiosk/` in this repo by `kiosk/tools/build_module.py` against the unmodified Melee decompilation. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
+Melee has no networking. The kiosk is a small position-fixed module, `lazyto_kiosk.bin` (about 81 KB), built from `kiosk/` in this repo by `kiosk/tools/build_module.py` against the unmodified Melee decompilation. The Wii runs the venue's stock Melee 1.02 disc image. At boot the loader copies the module to the top of MEM1 and applies a few dozen word patches (scene and menu table pointers, two branch hijacks, one hijacked menu row). Nothing else about the game changes, so Slippi recording, USB hotswap and the venue's own codesets (UCF, stage striking and so on) work exactly as on any Slippi Nintendont.
 
 The module file format:
 
@@ -155,9 +155,9 @@ The game never blocks. It polls once per frame. All buffers are static. The comm
 
 LazyTO Nintendont is Slippi Nintendont plus four additions in the kernel. Its loader is otherwise the venue's normal Slippi Nintendont.
 
-1. **Config.** At boot it reads `sd:/tournament.cfg` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no tournament.cfg".
-2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/tournament.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
-3. **Relay EXI device.** On a request it copies the buffer, stamps the station number (and the stream flag on START_SET) from `tournament.cfg`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
+1. **Config.** At boot it reads `sd:/lazyto_station.txt` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no station file".
+2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/lazyto_kiosk.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
+3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from `lazyto_station.txt`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
 4. **Discovery.** While idle, the relay thread listens on UDP 29471 for the relay's beacon and takes the source address plus the advertised TCP port. If it hears nothing it sends a beacon request to UDP 29472 and gets a unicast beacon back.
 5. **Telemetry.** Once it knows the relay, the kernel sends UDP datagrams to port 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
 
@@ -169,6 +169,11 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 | Module | Responsibility |
 |--------|----------------|
+| `app.ts` | The process: web server first, then the night's event by mode (setup, starting, failed, running) |
+| `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
+| `setup.ts` | Setup wizard and settings page |
+| `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
+| `cards.ts` | The SD-card zips: the bundle's Wii files plus `lazyto_station.txt` and the loader's settings (`zip.ts` writes them) |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
@@ -178,17 +183,19 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `startgg.ts` | GraphQL client, rate limiter, retry on 5xx only |
 | `state.ts` | In-memory station to set map |
 | `audit.ts` | Append-only JSONL log |
-| `status.ts` | Status page on 29473 |
+| `status.ts` | The status page and the TO's actions on it |
+| `admin.ts` | The status page's TO actions: free a station, per-set best-of |
 | `chars.ts` | Melee character id to start.gg character id |
 | `stages.ts` | Melee stage id to start.gg stage id |
-| `config.ts` | Loads and validates the config |
+| `config.ts` | The settings file: one field table, strict values, optional fields with defaults |
+| `format.ts` | Best-of per set (`setFormat`) |
 | `beamer.ts` | Finds each station's Slippi Beamer by its announce; reads its replays over HTTP (experimental, [beamer.md](beamer.md)) |
 | `archive.ts` | Matches replays to games and writes one labelled zip per finished set (experimental, [beamer.md](beamer.md)) |
-| `slp.ts`, `zip.ts`, `names.ts` | Replay parsing and display-name stamping, the zip writer, the archive's file-name templates |
+| `slp.ts`, `names.ts` | Replay parsing and display-name stamping, the archive's file-name templates |
 
 ## Wire protocol
 
-[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/relay_proto.h` (for the module and the kernel) and `generated/wire.ts` (for the relay), and CI fails on drift. This section is a summary.
+[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary.
 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.
@@ -199,7 +206,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | Command | Request | Relay does |
 |---------|---------|------------|
 | `CMD_LIST_SETS` | nothing | Returns up to 56 `set_entry` rows (72 bytes each), this station's set first, then earliest round first |
-| `CMD_START_SET` | set id, stream flag | Checks, then `markSetInProgress`, then `assignStream` if stream |
+| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station |
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
@@ -207,7 +214,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 The game list is up to five 8-byte `game_result` records: winner slot, both characters, stage, and each player's stocks and costume. Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected.
 
-The game always sends station 0 and stream 0. The host stamps both from `tournament.cfg`, and the relay trusts what it receives.
+The game always sends station 0. The host stamps it from `lazyto_station.txt`, and the relay trusts what it receives.
 
 UDP messages (not on the TCP wire):
 
@@ -225,43 +232,50 @@ UDP messages (not on the TCP wire):
 | `ST_BAD_VERSION` | Protocol version mismatch |
 | `ST_SET_NOT_FOUND` | Not in the cache |
 | `ST_SET_TAKEN` | Claimed by another station, or started by hand on start.gg |
-| `ST_NOT_STREAM` | Stream flag from a station that is not the stream station |
+| `ST_NOT_STREAM` | Not sent any more: the relay decides the stream by station (kept in the protocol) |
 | `ST_STARTGG_ERROR` | start.gg refused or failed; see the status page |
 | `ST_RATE_LIMITED` | No rate-limit token within 2 s |
-| `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no tournament.cfg") |
+| `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no station file") |
 | `ST_BAD_SECRET` | `relay_auth` missing or wrong |
 
 ## Relay internals
 
 ### Startup and event discovery
 
-Startup validates every config field and exits non-zero on any problem. There are no defaults.
+The web server on 29473 starts first and stays up (`src/app.ts`). The relay is then in one of four modes:
+
+| Mode | When | The page shows |
+|------|------|----------------|
+| setup | no valid settings yet | the setup wizard, guarded by a one-time setup code |
+| starting | settings saved | "finding tonight's event" |
+| failed | the event couldn't be found or started: bad token, a short URL on no tournament, start.gg or the internet down, the clock not set yet | the reason, with Retry; it also retries after 30 s, 60 s, then every 2 min |
+| running | the event resolved and the cache loaded | the status page; TCP, beacon and telemetry are up |
+
+The settings live in `/var/lib/lazyto/config.json` (`src/config.ts`), written by the setup page:
 
 | Field | Meaning |
 |-------|---------|
-| `startggEndpoint` | GraphQL URL (the real API, or `test/fake-startgg.ts` in a rehearsal) |
 | `token` | start.gg token with admin rights on the tournament |
 | `tournament` | a start.gg short URL, or a full slug `tournament/<slug>` |
 | `eventName` | matched case-insensitively against the tournament's Melee singles events |
-| `streamName` | the stream to assign the stream station's sets to |
-| `weeklyNamePrefix` | `""` for none; otherwise the numbered-weekly fallback below |
-| `secret` | shared secret, 8 to 16 of `A-Z a-z 0-9 - _` |
-| `streamStation` | the station number of the stream setup |
-| `setFormat` | `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
-| `tcpPort`, `httpPort` | 29470, 29473 |
-| `auditDir` | where audit logs go |
+| `secret` | the Wii secret, 8 to 16 of `A-Z a-z 0-9 - _`, generated on the first save |
+| `adminPassword` | the TO's password for the settings and the status page's actions, 8 to 64 printable characters, never the same as `secret` |
+| `weeklyNamePrefix` | optional, `""`: the numbered-weekly fallback below, derived from the chosen tournament's name |
+| `streamName` | optional, `""` for no stream: the stream the stream station's sets go on |
+| `streamStation` | optional, 1: the station number of the stream setup |
+| `setFormat` | optional, `startgg`: each set's best-of as start.gg has it; `top8q`: Bo3, then Bo5 from the top-8 qualifiers (Winners Quarter-Final and the losers round two before Losers Quarter-Final) onward, worked out from the bracket's round numbers per phase: with a Top 8 phase, the last winners and losers rounds of the phase before it are the qualifiers. In-person events have no per-round setting on start.gg, so every set there says 5. |
 
-`npm run push` (`scripts/push.ts`) writes the file from `.env`. The relay turns names into ids once at startup, because ids change every week and names do not.
+Values are checked strictly. Every field beyond the first five is optional with a default, and unknown fields are ignored, so a newer or older build always accepts the file and an auto-update never stalls a Pi. The ports (29470, 29473) and paths are fixed. The relay turns names into ids at each start, because ids change every week and names do not.
 
-- **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament needs no weekly push.
+- **Short URL:** found among the token owner's admin tournaments. A TO who moves the short URL to each week's tournament changes nothing on the relay.
 - **Numbered-weekly fallback:** if `weeklyNamePrefix` is set and no admin tournament carries the short URL, the relay takes the admin tournament named `<prefix><number>` whose start is nearest to now, within 30 days (for example a weekly named "LazyTO Weekly #N"). The startup log says which rule matched.
-- **Full slug:** looked up directly. This is the only way to reach an unpublished tournament.
+- **Full slug:** looked up directly. This is the only way to reach an unpublished tournament; the setup page takes its link.
 
-The event is the one Melee singles event whose name contains `eventName`. The stream is the one named `streamName`. Zero or several matches is a startup failure that lists what was found. A restart re-resolves. The status page header names the tournament and event, so a stale week is visible.
+The event is the one Melee singles event whose name contains `eventName`. The stream is the one named `streamName`. Zero or several matches is a failed start that lists what was found. Saving settings applies them in place: the event stops and starts again, and claims come back from the audit log. The status page header names the tournament and event, so a stale week is visible.
 
 ### Set cache
 
-The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` query. Sets in an unstarted pool have string "preview" ids that do not fit the protocol's 32-bit set id, so the cache drops them and the status page warns "start all pools on start.gg".
+The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` query. Sets in an unstarted pool have string "preview" ids that do not fit the protocol's 32-bit set id, so the cache never lists them. When a preview set has both entrants (typically a top 8 phase nobody started), the cache starts its pool on start.gg, once per pool per run; the pool's sets come back with numeric ids on the next refresh. If start.gg refuses, the status page warns "start it on start.gg" and the relay does not try again.
 
 ### Station state
 
@@ -282,12 +296,15 @@ A station in `IN_SET` that lists again (after a reboot) gets its own set first w
 | startup (short URL) | `currentUser.tournaments(filter: {tournamentView: "admin"})`, paged |
 | startup | `tournament(slug)` → events, streams |
 | cache refresh | `event(id).sets(filters: {state: [1,2]}, perPage: 100)` |
+| cache refresh, ready preview set | `markSetInProgress(previewId)`, then `resetSet(realId)`: starts the pool |
 | START_SET | `markSetInProgress`, then `assignStream` on the stream station |
 | REPORT_SCORE | `reportBracketSet(setId, gameData)` |
 | END_SET | `reportBracketSet(setId, winnerId, gameData)` |
 | ABANDON_SET | `resetSet(setId)` |
 
 Per game, characters go out as `selections` and the stage as `stageId`. Stocks and costume go out as `entrant1Score`/`entrant2Score` = `(costume + 1) * 100 + stocks`, which start.gg shows as stocks and set pages render as colour plus stock icons.
+
+`markSetInProgress` on a preview id starts the whole pool and answers with the set's new numeric id; the pool's rounds are renumbered from 1. `resetSet` answers "Set not found" for a preview id (probe, 2026-10-02).
 
 `resetSet` does not clear a stream assignment. After an abandon on the stream station, the TO clears the assignment by hand.
 
@@ -301,17 +318,19 @@ Every request, response, refusal and upstream call is appended as one JSON line 
 
 ### Status page
 
-A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. No client script, no login (anyone on the network can view it).
+A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. No client script. Anyone on the network can view it; its actions need `adminPassword` (HTTP Basic auth, any user name), and a POST from another site is refused.
 
 - Per station: set, score, last action and its age, the status the player saw, and the station's telemetry (module state, recent log lines, last crash).
 - Every failed start.gg call with its message, until the TO clicks "ack". Ack only hides the flag.
-- Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, the preview-set warning, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
+- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it, because the protocol never sends a Wii earlier games.
+- **Waiting sets** with their best-of and a button to switch Bo3/Bo5 or go back to `setFormat`'s answer. Only for sets no station holds, since a Wii learns best-of when it starts a set. Overrides are `bestof` events in the audit log and replay at startup.
+- Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, a pool the relay could not start, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
 
 ## Error handling
 
 | Failure | Where seen | Behaviour |
 |---------|------------|-----------|
-| No `tournament.cfg` | Wii | "no tournament.cfg". Station unusable until fixed. |
+| No `lazyto_station.txt` | Wii | "NO STATION FILE ON THE CARD". Station unusable until fixed. |
 | Wrong or missing secret | Wii + status page | RELAY SECRET MISMATCH. Counted on the status page. |
 | No beacon heard | Wii | NO RELAY FOUND after 10 s. A searches again. |
 | Relay unreachable | Wii | Times out after 3 s. A retries. TO checks the Pi and network. |
@@ -330,54 +349,50 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 - The stock Melee 1.02 disc image on USB or SD, as at any Slippi local.
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
-- On the SD card root:
-  - `tournament.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
-  - `tournament.cfg`: per card.
+- On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
+  - `apps/LazyTO/`: the loader.
+  - `lazyto_kiosk.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
+  - `lazyto_nincfg.bin`: the loader's settings, Network and Auto Boot on. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
+  - `lazyto_station.txt`: per card.
 
 ```
 station=3
-stream=0
 secret=<the relay's secret>
 ```
 
-`stream=1` goes on exactly one card. The relay refuses a stream START_SET from any station other than `streamStation`, so a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
+The relay decides the stream by station number (`streamStation`), so no card says it is the stream station and a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
 
 ### Pi
 
 A Raspberry Pi (5, 4 or Zero 2 W) on Raspberry Pi OS Lite 64-bit, on the venue Wi-Fi (Ethernet works the same). Step by step: [pi-setup.md](pi-setup.md).
 
+Everything a Pi runs comes from one bundle per commit, `lazyto.tgz` (`.github/workflows/release.yml`): the relay (`dist/`, `deploy/`) and the Wii files (`wii/apps/LazyTO/`, the loader built from the pinned Nintendont commit, and `wii/lazyto_kiosk.bin`). Every push to `main` republishes it on the moving prerelease `main-build`; a `v*` tag drafts a release with it. Each Pi follows one update channel, `/var/lib/lazyto/update-channel`: `release` (the newest full release, the default), `main` (`main-build`) or `off`.
+
 | File | Role |
 |------|------|
-| `scripts/push.ts` (`npm run push`) | Run from a clone on any OS with Node 22 and ssh: builds, writes `config.json` from `.env`, copies the bundle, runs the installer over ssh. Only needed to change the config or push a dev build; code updates itself (deploy/update.sh). |
-| `deploy/install.sh` | On the Pi: pinned Node 22 in `/opt/node`, Wi-Fi power saving off, system user `relay`, code in `/opt/lazyto`, config in `/etc/lazyto/config.json`, installs and restarts the unit. Idempotent. |
-| `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure, waits for time sync. |
-| `deploy/uninstall.sh` | Removes what install.sh added; audit logs are kept unless `--purge`. |
+| `deploy/install.sh` | The install command, also a release asset: pinned Node 22 in `/opt/node`, Wi-Fi power saving off, system user `relay`, the update channel (`--channel`), the bundle into `/opt/lazyto` (downloaded, or `--bundle <file>`), then starts the unit and prints the setup page's address and setup code. Running it again keeps the settings. |
+| `deploy/update.sh` | Before every relay start: the channel's bundle when its VERSION differs from the installed one, verified by SHA-256 and checked against the settings by the new build's `check-config.js`, then swapped in. `--from <dir>` is the swap alone, which install.sh uses. |
+| `deploy/lazyto-relay.service` | systemd unit, runs as `relay`, restarts on failure. |
+| `deploy/uninstall.sh` | Removes what install.sh added, settings included; audit logs are kept unless `--purge`. |
 | `deploy/add-wifi.sh` | Saves another Wi-Fi network. |
-| `scripts/smoke.ts` | One LIST_SETS and a status page fetch against a running relay. |
 
-Logs go to journald. Audit logs go to `/var/lib/lazyto/<eventId>.jsonl`.
+Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
 ### Network
 
-The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once with `scripts/smoke.ts` from a laptop on the same network.
+The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once by opening the status page from a phone on the venue Wi-Fi.
 
 The secret travels in plain text. It keeps passers-by out, not someone capturing the Wi-Fi traffic.
 
-### Per-tournament checklist
-
-1. Power on the Pi (or restart the relay). Check the status page header names tonight's tournament and event.
-2. Start every pool and phase on start.gg. Unstarted pools have preview sets the relay cannot show; the status page warns until this is done.
-3. Check each card's station number matches the station label, and exactly one card has `stream=1`.
-4. Boot one Wii and confirm the set list loads.
+The checklist for each tournament night is in [night-of.md](night-of.md).
 
 ## Development and testing
 
-- **Protocol first.** Change `protocol.yaml`, run `python tools/gen_protocol.py`, and copy `relay_proto.h` to the forks. `tools/check_protocol.py` compiles the header and compares every size and offset with the TS encoder.
+- **Protocol first.** Change `protocol.yaml` and run `python tools/gen_protocol.py`, which writes `generated/wire.ts` and both header copies. `tools/check_protocol.py` regenerates them in memory and fails on any difference; the generator itself refuses implicit padding and any size that disagrees with `protocol.yaml`.
 - **Relay tests.** `npm test`: codec round-trips, the character and stage tables, and integration tests against `test/fake-startgg.ts` covering every row of the error table. Tests never touch the real API.
 - **Load.** `scripts/sim-wii.ts` drives 12 fake stations through list, start, score and end for 10 minutes and checks the upstream call rate.
-- **Real API.** Only `scripts/probe.ts` touches start.gg, using `.env`, against an unpublished test tournament.
-- **Kiosk.** A development setup can load `tournament.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
-- **CI.** GitHub Actions runs `npm test` and the build on every push to main and on pull requests.
+- **Kiosk.** A development setup can load `lazyto_kiosk.bin` into an emulator that implements the same EXI device, so menu work does not need a Wii. Hardware is the final check.
+- **CI.** `test.yml` (format, shellcheck, `npm test`, build) and `kiosk.yml` (the module, when kiosk files change) run on pull requests. `release.yml` runs on every push to main and every `v*` tag: the tests, the module, the loader, the bundle, then `main-build` or a draft release.
 
 ## Status
 

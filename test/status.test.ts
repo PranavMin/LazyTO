@@ -1,68 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { StatusServer, STALE_CACHE_MS } from '../src/status.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
-import { makeFake, FIXTURE_TOKEN, FIXTURE_EVENT_ID } from './fake-startgg.js';
-import { WiiClient, game, TEST_SECRET } from './wii-client.js';
-import { StationTelemetry } from '../src/telemetry.js';
-import { telemetryDatagram, statusPayload, crashPayload } from './telemetry.test.js';
+import { connect, type Socket } from 'node:net';
+import { rmSync } from 'node:fs';
+import { STALE_CACHE_MS, renderStatus } from '../src/status.js';
+import { WiiClient, game } from './wii-client.js';
+import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
-import { RecordingArchive } from './archive-stub.js';
+import { startHarness, TEST_PASSWORD } from './harness.js';
+import { entrant } from './fake-startgg.js';
 
-const nullAudit: AuditSink = { record() {} };
+function basic(password: string): string {
+  return `Basic ${Buffer.from(`to:${password}`).toString('base64')}`;
+}
 
 test('status page', async (t) => {
-  const fake = makeFake();
-  await fake.start();
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  const tcp = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit: nullAudit,
-    archive: new RecordingArchive(),
-    streamStation: 1,
-    streamId: 1358079,
-    secret: TEST_SECRET,
-  });
-  await tcp.listen(0, '127.0.0.1');
-  const telemetry = new StationTelemetry({ secret: TEST_SECRET });
-  const status = new StatusServer({
-    state,
-    cache,
-    startgg,
-    streamStation: 1,
-    eventLabel: `LazyTO Test Tournament · Melee Singles! (7:30 Start) (${FIXTURE_EVENT_ID})`,
-    beacon: {
-      status: () => ({
-        targets: ['192.168.1.255'],
-        sent: 1,
-        lastSentAt: Date.now(),
-        lastError: null,
-      }),
-    },
-    tcp,
-    telemetry,
-    archive: { status: () => ({ inProgress: [], recent: [], watches: [] }) },
-    beamers: { status: () => ({ beamers: [], unnamed: 0, bad: 0 }) },
-  });
-  await status.listen(0, '127.0.0.1');
-  const statusUrl = `http://127.0.0.1:${status.address().port}`;
-  t.after(async () => {
-    await status.close();
-    await tcp.close();
-    await fake.close();
-  });
+  const h = await startHarness();
+  t.after(h.close);
+  const { fake, statusUrl } = h;
+  const { cache, state } = h.ev;
+  const tcp = h.ev.tcp;
+  const telemetry = h.ev.telemetry;
+  const view = h.view;
 
   await t.test('Wii consoles: module status, log tail, full log page', async () => {
     let html = await (await fetch(statusUrl)).text();
@@ -147,10 +105,11 @@ test('status page', async (t) => {
     assert.match(html, /<meta name="viewport"/, 'phone-readable');
     assert.match(
       html,
-      /<meta http-equiv="refresh" content="5">/,
+      /<meta http-equiv="refresh" content="5;url=\/">/,
       'the only client-side behaviour is the meta refresh',
     );
     assert.doesNotMatch(html, /<script/, 'no client JS');
+    assert.match(html, /--card:/, 'the page carries the shared card stylesheet (PAGE_CSS)');
   });
 
   // Drive real traffic: the stream station plays a set to 2-1, another
@@ -164,6 +123,11 @@ test('status page', async (t) => {
   fake.failNext('reportBracketSet', '5xx', 3);
   await wii4.reportScore(107949995, [game(1)]);
 
+  // The preview pool gets a ready set that start.gg refuses to start (R8).
+  fake.getSet('preview_3292311_1_1').slots = [entrant(9), entrant(10)];
+  fake.failNext('markSetInProgress', 'gqlError', 1, 'not an admin');
+  await cache.refresh();
+
   await t.test('renders stations, sets, scores, actions, flags, and cache info', async () => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /1 ★/, 'stream station is starred');
@@ -175,7 +139,11 @@ test('status page', async (t) => {
       /✗ reportBracketSet failed: start\.gg HTTP 503 after 3 attempts \(\d+s ago\)/,
       'failed upstream call, message, and age',
     );
-    assert.match(html, /preview-id set\(s\) dropped/, 'R8 warning is shown');
+    assert.match(
+      html,
+      /pool 3292311 has a ready set but could not be started/,
+      'R8 warning is shown',
+    );
     assert.match(html, /Cache: 4 sets \(2 selectable, 2 on stations\), refreshed \d+s ago/);
     assert.match(html, /Upstream: \d+ calls last 60s/);
     assert.doesNotMatch(html, /cache is stale/);
@@ -185,7 +153,10 @@ test('status page', async (t) => {
     const html = await (await fetch(statusUrl)).text();
     assert.match(html, /✗ REPORT_SCORE \d+s ago — ST_STARTGG_ERROR: start\.gg error - retry/);
     // Station 1's last action succeeded: no marker.
-    assert.match(html, /<td>1 ★<\/td>.*<td>REPORT_SCORE \d+s ago<\/td>/);
+    assert.match(
+      html,
+      /<span class="st">1 ★<\/span>.*<div class="line">REPORT_SCORE \d+s ago<\/div>/,
+    );
   });
 
   await t.test('a rejected (4xx) call shows the start.gg message verbatim', async () => {
@@ -209,14 +180,25 @@ test('status page', async (t) => {
     const before = state.flags().length;
     assert.ok(before >= 3);
     const id = state.flags()[0]!.id;
-    const res = await fetch(`${statusUrl}/ack?id=${id}`, { method: 'POST', redirect: 'manual' });
+    const anon = await fetch(`${statusUrl}/ack?id=${id}`, { method: 'POST', redirect: 'manual' });
+    assert.equal(anon.status, 401, 'ack needs the TO password like the other actions');
+    assert.equal(state.flags().length, before);
+    const res = await fetch(`${statusUrl}/ack?id=${id}`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { authorization: basic(TEST_PASSWORD) },
+    });
     assert.equal(res.status, 303);
     assert.equal(state.flags().length, before - 1);
     assert.ok(!(await (await fetch(statusUrl)).text()).includes('HTTP 503 after 3 attempts'));
   });
 
   await t.test('acking an unknown flag is a 404', async () => {
-    const res = await fetch(`${statusUrl}/ack?id=999`, { method: 'POST', redirect: 'manual' });
+    const res = await fetch(`${statusUrl}/ack?id=999`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { authorization: basic(TEST_PASSWORD) },
+    });
     assert.equal(res.status, 404);
   });
 
@@ -237,9 +219,52 @@ test('status page', async (t) => {
   await t.test('a cache older than STALE_CACHE_MS is flagged', async (tt) => {
     tt.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     tt.mock.timers.tick(STALE_CACHE_MS + 5_000);
-    const html = status.render();
+    const html = renderStatus(view);
     assert.match(html, /⚠ cache is stale \(last refresh \d+s ago/);
     tt.mock.timers.reset();
-    assert.doesNotMatch(status.render(), /cache is stale/);
+    assert.doesNotMatch(renderStatus(view), /cache is stale/);
   });
 });
+
+/** A raw client socket, connected, with a promise for when the relay drops it. */
+async function openSocket(port: number): Promise<{ socket: Socket; dropped: Promise<void> }> {
+  const socket = connect(port, '127.0.0.1');
+  socket.on('error', () => {});
+  const dropped = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+  await new Promise((resolve) => socket.once('connect', resolve));
+  return { socket, dropped };
+}
+
+// Before close() dropped them, these connections held it open forever and
+// systemd had to kill the relay on every restart (timeout here instead).
+test(
+  'close() drops open browser connections instead of waiting for them',
+  { timeout: 5000 },
+  async () => {
+    const h = await startHarness();
+    const web = h.app.web;
+    const port = web.address().port;
+
+    // A phone between meta refreshes: one keep-alive socket that has fetched the
+    // page, one its browser opened ahead for the next refresh, and one cut off
+    // part way through its request headers.
+    const keptAlive = await openSocket(port);
+    let page = '';
+    keptAlive.socket.on('data', (chunk: Buffer) => (page += chunk.toString('utf8')));
+    keptAlive.socket.write('GET / HTTP/1.1\r\nHost: relay\r\nConnection: keep-alive\r\n\r\n');
+    while (!page.includes('</html>')) await new Promise((resolve) => setTimeout(resolve, 10));
+    const preconnected = await openSocket(port);
+    const halfSent = await openSocket(port);
+    halfSent.socket.write('GET / HTTP/1.1\r\nHost: relay\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const start = Date.now();
+    await web.close();
+    assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
+    await Promise.all([keptAlive.dropped, preconnected.dropped, halfSent.dropped]);
+    // The status server is closed above; shut the rest down without closing it twice.
+    await h.ev.stop();
+    await h.fake.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  },
+);

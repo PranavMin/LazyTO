@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Build the tournament module: the kiosk TUs compiled with the decomp's MWCC,
 linked at a fixed address against the VANILLA GALE01 v1.02 symbol map, packed
-with the hook table into kiosk/build/tournament.bin for the LazyTO loader. The
+with the hook table into kiosk/build/lazyto_kiosk.bin for the LazyTO loader. The
 game ISO stays stock Melee; see docs/architecture.md.
 
 The kiosk's own sources live in kiosk/src and kiosk/include. Everything else
 comes from the unmodified Melee decompilation in the melee/ submodule: its
-headers, its compilers (set up by `python configure.py --non-matching` there
-once), config/GALE01/symbols.txt and the vanilla main.dol in orig/.
+headers, its compilers (kiosk/tools/fetch_decomp_tools.py fetches them once),
+config/GALE01/symbols.txt and config/GALE01/splits.txt.
 
+    python kiosk/tools/fetch_decomp_tools.py    # once
     python kiosk/tools/build_module.py          # from the repo root
-    python kiosk/tools/build_module.py --check  # CI: no main.dol, writes no module
 
---check compiles, links and runs every check that does not need main.dol
-(symbols, region, hook targets, gecko collisions). It never opens the DOL, so
-it skips the vanilla-address check of each hook and the guard word, and it
-writes no tournament.bin. It is a mode you ask for: without it a missing DOL
-stops the build.
+No Nintendo file is used, so CI builds the same lazyto_kiosk.bin
+(.github/workflows/kiosk.yml). The two facts of stock 1.02 the build checks
+come from the decomp, which pins that DOL by SHA-1 (config/GALE01/build.sha1):
+every hook address must fall inside a DOL section as splits.txt lays them out,
+and the guard word is the constant GUARD_WORD.
 
 Output file format (all big-endian):
     "TMOD" u32 version=1  u32 load_addr  u32 blob_len  u32 n_patches
@@ -45,11 +45,10 @@ KIOSK = Path(__file__).resolve().parent.parent      # kiosk/
 REPO = KIOSK.parent                                  # the LazyTO repo
 DECOMP = REPO / "melee"                              # doldecomp/melee submodule
 OUT_DIR = KIOSK / "build" / "obj"
-DOL = DECOMP / "orig" / "GALE01" / "sys" / "main.dol"
 SYMBOLS = DECOMP / "config" / "GALE01" / "symbols.txt"
 HOOKS = KIOSK / "tools" / "module_hooks.txt"
 GECKO_DIR = REPO / "Nintendont" / "kernel" / "gecko"
-OUTPUT = KIOSK / "build" / "tournament.bin"
+OUTPUT = KIOSK / "build" / "lazyto_kiosk.bin"
 
 # Where the module lives: the top of MEM1, carved off the game's arena. The
 # IPL/apploader places the FST at 0x817FFFFF - max_fst_size (0x817F8AC0 on a
@@ -63,6 +62,8 @@ OUTPUT = KIOSK / "build" / "tournament.bin"
 LOAD_ADDR = 0x817E0000
 REGION_END = 0x817F8AC0  # FST start on a 1.02 disc; loaders also assert *0x34 >= end
 GUARD_ADDR = 0x8016D800  # gm_Scene_Vs_OnFrame's first instruction (not patched)
+GUARD_WORD = 0x7C0802A6  # mflr r0: that instruction in stock 1.02 (read once from the decomp-pinned DOL)
+SPLITS = DECOMP / "config" / "GALE01" / "splits.txt"
 
 TUS = [KIOSK / "src" / "melee" / t for t in (
     "mn/mntourney.c",
@@ -73,15 +74,16 @@ TUS = [KIOSK / "src" / "melee" / t for t in (
     "lb/lbwordmark.c",
     "lb/lbcrash.c",
 )]
-# Codesets the venue enables (Nintendont MeleeCodes + Slippi core).
-CODESETS = ["g_core.bin", "g_crash_output.bin", "g_ucf_084.bin", "g_ucf.bin",
-            "g_mods_tournament.bin", "g_mods_stealth.bin", "g_stages_stadium.bin",
-            "g_stages_all.bin"]
+# Developer switches for a headless Dolphin run (docs/kiosk.md). The sources
+# keep them at 0; --demo turns them on for one build and marks its version.
+DEMO_FLAGS = {
+    "start": ["-DTM_DEMO_AUTOSTART=1", "-DLB_TOURNEY_DEMO_CLAIM=1"],
+    "confirm": ["-DTM_DEMO_AUTOSTART=2"],
+}
 
 MWCC = DECOMP / "build" / "compilers" / "GC" / "1.2.5n" / "mwcceppc.exe"
 SJISWRAP = DECOMP / "build" / "tools" / "sjiswrap.exe"
 MWLD = DECOMP / "build" / "compilers" / "GC" / "1.3.2" / "mwldeppc.exe"
-NM = DECOMP / "build" / "binutils" / "powerpc-eabi-nm.exe"
 
 # The DOL build's C flags (build.ninja, rule mwcc_sjis) plus: no small data
 # (the module sits far from r13/r2). The kiosk's own
@@ -96,8 +98,7 @@ CFLAGS = [
     "std", "-warn", "off", "-requireprotos",
     "-i", str(KIOSK / "src"), "-i", str(KIOSK / "include"),
     "-i", "src", "-i", "src/MSL",
-    "-i", "include", "-i", "libs/dolphin/include", "-i", "libs/doldecomp/include",
-    "-i", "build/GALE01/include",
+    "-i", "libs/dolphin/include", "-i", "libs/doldecomp/include",
     "-lang=c", "-O4,p", "-DNDEBUG=1", "-inline", "auto", "-sym", "off",
     "-sdata", "0", "-sdata2", "0",
 ]
@@ -126,18 +127,18 @@ def load_symbols():
     return syms
 
 
-def write_version_inc():
+def write_version_inc(demo):
     """kiosk/src/melee/lb/lbmodule_version.inc: the module's own version for the set
-    list's top-right corner: short git hash (+ when the tree is dirty) and the
-    build date. Rewritten only when the text changes, so an unchanged tree does
-    not recompile."""
+    list's top-right corner: short git hash (+ when the tree is dirty), the
+    build date, and DEMO on a --demo build. Rewritten only when the text
+    changes, so an unchanged tree does not recompile."""
     import datetime
     try:
         h = subprocess.run(["git", "rev-parse", "--short=7", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
         dirty = subprocess.run(["git", "status", "--porcelain", "--", "kiosk/src", "kiosk/include", "kiosk/tools"], cwd=REPO, capture_output=True, text=True).stdout.strip() != ""
     except Exception:
         h, dirty = "nogit", False
-    text = f"{h}{'+' if dirty else ''} {datetime.date.today().isoformat()}"
+    text = f"{h}{'+' if dirty else ''} {datetime.date.today().isoformat()}{' DEMO' if demo else ''}"
     inc = KIOSK / "src" / "melee" / "lb" / "lbmodule_version.inc"
     body = f'/* generated by tools/build_module.py */\n#define TM_MODULE_VERSION "{text}"\n'
     if not inc.exists() or inc.read_text(encoding="utf-8") != body:
@@ -145,25 +146,62 @@ def write_version_inc():
     return text
 
 
-def compile_tus():
+def compile_tus(extra_flags):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     objs = []
     for tu in TUS:
         obj = OUT_DIR / (Path(tu).stem + ".o")
-        run([str(SJISWRAP), str(MWCC)] + CFLAGS + ["-c", str(tu), "-o", str(obj)])
+        run([str(SJISWRAP), str(MWCC)] + CFLAGS + extra_flags + ["-c", str(tu), "-o", str(obj)])
         objs.append(obj)
     return objs
 
 
+def elf_sections(d):
+    """The section headers of an ELF file's bytes (each a 10-tuple) and the
+    section-name string table's index."""
+    assert d[:4] == b"\x7fELF"
+    shoff = struct.unpack(">I", d[0x20:0x24])[0]
+    shentsize, shnum, shstrndx = struct.unpack(">HHH", d[0x2E:0x34])
+    secs = [struct.unpack(">IIIIIIIIII", d[shoff + i * shentsize: shoff + i * shentsize + 40])
+            for i in range(shnum)]
+    return secs, shstrndx
+
+
+def elf_symbols(d, secs):
+    """(name, value, info, shndx) of every named symbol in the symbol table."""
+    sym = [s for s in secs if s[1] == 2][0]  # SHT_SYMTAB
+    strtab = secs[sym[6]]
+    out = []
+    for i in range(sym[5] // 16):
+        o = sym[4] + i * 16
+        n, v, size, info, other, shndx = struct.unpack(">IIIBBH", d[o: o + 16])
+        name = d[strtab[4] + n: d.index(b"\0", strtab[4] + n)].decode()
+        if name:
+            out.append((name, v, info, shndx))
+    return out
+
+
+SHN_UNDEF, SHN_ABS = 0, 0xFFF1
+STB_WEAK = 2
+STT_SECTION, STT_FILE = 3, 4
+
+
 def externals(objs):
+    """Symbols the objects use and none of them defines, which the vanilla
+    symbol map must supply; and every symbol they define. The same sets
+    `nm` gives as U and as its defined kinds: weak, section, file and
+    absolute symbols count as neither."""
     undef, defined = set(), set()
     for o in objs:
-        for line in run([str(NM), str(o)]).splitlines():
-            p = line.split()
-            if len(p) == 2 and p[0] == "U":
-                undef.add(p[1])
-            elif len(p) == 3 and p[1] in "TDBRSGtdbrsgC":
-                defined.add(p[2])
+        d = o.read_bytes()
+        secs, _ = elf_sections(d)
+        for name, _, info, shndx in elf_symbols(d, secs):
+            if info & 0xF in (STT_SECTION, STT_FILE) or info >> 4 == STB_WEAK:
+                continue
+            if shndx == SHN_UNDEF:
+                undef.add(name)
+            elif shndx != SHN_ABS:
+                defined.add(name)
     return sorted(undef - defined), defined
 
 
@@ -212,11 +250,7 @@ def link(objs, lcf):
 
 def read_elf(elf):
     d = elf.read_bytes()
-    assert d[:4] == b"\x7fELF"
-    shoff = struct.unpack(">I", d[0x20:0x24])[0]
-    shentsize, shnum, shstrndx = struct.unpack(">HHH", d[0x2E:0x34])
-    secs = [struct.unpack(">IIIIIIIIII", d[shoff + i * shentsize: shoff + i * shentsize + 40])
-            for i in range(shnum)]
+    secs, shstrndx = elf_sections(d)
     shstr = secs[shstrndx]
 
     def name(off):
@@ -236,37 +270,41 @@ def read_elf(elf):
     blob = bytearray(hi - lo)
     for addr, data, _ in parts:
         blob[addr - lo: addr - lo + len(data)] = data
-    # symbols
-    sym = [s for s in secs if s[1] == 2][0]
-    strtab = secs[sym[6]]
-    symbols = {}
-    for i in range(sym[5] // 16):
-        o = sym[4] + i * 16
-        n, v, size, info, other, shndx = struct.unpack(">IIIBBH", d[o: o + 16])
-        nm = d[strtab[4] + n: d.index(b"\0", strtab[4] + n)].decode()
-        if shndx != 0 and nm:
-            symbols[nm] = v
+    symbols = {name: v for name, v, _, shndx in elf_symbols(d, secs) if shndx != SHN_UNDEF}
     return lo, bytes(blob), symbols, parts
 
 
-def dol_word(addr):
-    d = DOL.read_bytes()
-    offs = struct.unpack(">18I", d[0:0x48])
-    addrs = struct.unpack(">18I", d[0x48:0x90])
-    sizes = struct.unpack(">18I", d[0x90:0xD8])
-    for o, a, sz in zip(offs, addrs, sizes):
-        if sz and a <= addr < a + sz:
-            return struct.unpack(">I", d[o + (addr - a): o + (addr - a) + 4])[0]
-    die(f"0x{addr:08X} is not inside the vanilla DOL")
+def dol_sections():
+    """The DOL's loaded sections as the decomp's splits.txt lays them out:
+    {name: (start, end)} over every file, .bss/.sbss excluded (not in the DOL
+    file). The ends stop short of each section's alignment padding, so a hook
+    in padding is refused too."""
+    sections = {}
+    for line in SPLITS.read_text().splitlines():
+        m = re.match(r"\s+(\S+)\s+start:0x([0-9A-Fa-f]+) end:0x([0-9A-Fa-f]+)", line)
+        if not m or m.group(1) in (".bss", ".sbss", ".sbss2"):
+            continue
+        a, b = int(m.group(2), 16), int(m.group(3), 16)
+        lo, hi = sections.get(m.group(1), (a, b))
+        sections[m.group(1)] = (min(lo, a), max(hi, b))
+    if not sections:
+        die(f"no sections read from {SPLITS}")
+    return sections
+
+
+def in_dol_section(addr, sections):
+    return any(lo <= addr and addr + 4 <= hi for lo, hi in sections.values())
 
 
 def gecko_touches():
-    """Every address a venue codeset writes or hooks."""
+    """Every address a codeset a venue can enable writes or hooks: each of
+    Nintendont's kernel/gecko/g_*.bin (the MeleeCodes options and Slippi core)."""
     touched = {}
-    for name in CODESETS:
-        p = GECKO_DIR / name
-        if not p.exists():
-            die(f"venue codeset {p} missing (git submodule update --init)")
+    codesets = sorted(GECKO_DIR.glob("g_*.bin"))
+    if not codesets:
+        die(f"no codesets in {GECKO_DIR} (git submodule update --init Nintendont)")
+    for p in codesets:
+        name = p.name
         b = p.read_bytes()
         i = 0
         while i + 8 <= len(b):
@@ -291,23 +329,24 @@ def gecko_touches():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build kiosk/build/tournament.bin.")
-    ap.add_argument("--check", action="store_true",
-                    help="build-check without main.dol: skip the DOL checks, write no module")
-    check = ap.parse_args().check
+    ap = argparse.ArgumentParser(description="Build kiosk/build/lazyto_kiosk.bin.")
+    ap.add_argument("--demo", nargs="?", const="start", choices=sorted(DEMO_FLAGS),
+                    help="a module for a headless Dolphin run (docs/kiosk.md): start "
+                         "(the default) confirms the first set and fakes a port claim, "
+                         "confirm only opens the confirm pane; never for an SD card")
+    args = ap.parse_args()
 
-    needs = (SYMBOLS, MWCC, SJISWRAP, MWLD, NM) if check else (DOL, SYMBOLS, MWCC, SJISWRAP, MWLD, NM)
-    for need in needs:
+    for need in (SYMBOLS, SPLITS, MWCC, SJISWRAP, MWLD):
         if not need.exists():
-            die(f"{need} missing: run `git submodule update --init`, put the vanilla "
-                "main.dol in melee/orig/GALE01/sys/, and run `python configure.py "
-                "--non-matching` and `python -m ninja` in melee/ once")
-    print("module version:", write_version_inc())
+            die(f"{need} missing: run `git submodule update --init`, then "
+                "`python kiosk/tools/fetch_decomp_tools.py`")
+    sections = dol_sections()
+    print("module version:", write_version_inc(args.demo))
     syms = load_symbols()
     hooks = parse_hooks()
     hook_syms = {t for k, _, t in hooks if k in ("ptr", "branch")}
 
-    objs = compile_tus()
+    objs = compile_tus(DEMO_FLAGS[args.demo] if args.demo else [])
     ext, defined = externals(objs)
     for s in hook_syms:
         if s not in defined:
@@ -333,8 +372,8 @@ def main():
             patches.append((addr, 0x48000000 | delta))
         else:
             die("bad hook kind " + kind)
-        if not check:
-            dol_word(addr)  # must be a vanilla DOL address
+        if not in_dol_section(addr, sections):
+            die(f"hook address 0x{addr:08X} is not inside a DOL section (splits.txt)")
 
     touched = gecko_touches()
     for addr, _ in patches:
@@ -345,14 +384,7 @@ def main():
         die("gecko codesets write inside the module region: " +
             ", ".join(f"0x{a:08X} {touched[a]}" for a in inside[:5]))
 
-    if check:
-        print(f"check: module 0x{lo:08X}-0x{end:08X} ({len(blob)} bytes, "
-              f"{REGION_END - end} spare), {len(ext)} externals, {len(patches)} patches")
-        print("check: hook addresses and the guard word NOT verified (no main.dol); "
-              "no tournament.bin written")
-        return
-
-    guard_word = dol_word(GUARD_ADDR)
+    guard_word = GUARD_WORD
     out = bytearray(b"TMOD")
     out += struct.pack(">IIIIII", 1, lo, len(blob), len(patches), GUARD_ADDR, guard_word)
     for addr, val in patches:

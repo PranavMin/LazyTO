@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "status-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "scripts/preview-status.ts", "--port=29480"],
+      "port": 29480
+    }
+  ]
+}

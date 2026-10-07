@@ -1,6 +1,6 @@
 // Integration tests for the TCP server: every relay-side row of the
 // architecture.md error table, plus the happy paths. The first two rows
-// of that table (no tournament.cfg, relay unreachable) are Wii-side
+// of that table (no lazyto_station.txt, relay unreachable) are Wii-side
 // behaviors with no relay code to test; the closest relay-side property --
 // a connection that is not our protocol gets dropped, not answered -- is
 // covered here. The relay-restart row is covered in audit.test.ts, where
@@ -10,31 +10,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
 import { RelayStatus, RelayCmd, MAX_SETS, encodeStartSetReq } from '../generated/wire.js';
-import { RelayTcpServer, type AuditSink } from '../src/tcp.js';
-import { SetCache } from '../src/cache.js';
-import { StationState } from '../src/state.js';
-import { StartggClient } from '../src/startgg.js';
-import {
-  makeFake,
-  defaultFixture,
-  FIXTURE_TOKEN,
-  FIXTURE_EVENT_ID,
-  entrant,
-  type FakeSet,
-} from './fake-startgg.js';
-import { WiiClient, rawRequest, game, gameStartReq, TEST_SECRET } from './wii-client.js';
-import { RecordingArchive } from './archive-stub.js';
+import { entrant, FIXTURE_STREAM_ID, type FakeSet } from './fake-startgg.js';
+import { rawRequest, game, gameStartReq } from './wii-client.js';
+import { startHarness, STREAM_STATION } from './harness.js';
 
-const STREAM_STATION = 1;
-const STREAM_ID = 1358079;
+const STREAM_ID = FIXTURE_STREAM_ID;
 const SET = 107949994; // Alpha vs Bravo, WQF, bo5
-
-class ArrayAudit implements AuditSink {
-  events: Record<string, unknown>[] = [];
-  record(event: Record<string, unknown>): void {
-    this.events.push(event);
-  }
-}
 
 async function setup(
   opts: {
@@ -42,45 +23,13 @@ async function setup(
     limits?: { capacity: number; refillPerMinute: number; maxWaitMs: number };
   } = {},
 ) {
-  const fake = makeFake(opts.sets);
-  await fake.start();
-  const startgg = new StartggClient({
-    endpoint: fake.url,
-    token: FIXTURE_TOKEN,
-    retryDelaysMs: [0, 0],
-    limits: opts.limits,
-  });
-  const cache = new SetCache(startgg, FIXTURE_EVENT_ID, 'startgg');
-  await cache.refresh();
-  const state = new StationState();
-  const audit = new ArrayAudit();
-  const archive = new RecordingArchive();
-  const server = new RelayTcpServer({
-    cache,
-    state,
-    startgg,
-    audit,
-    archive,
-    streamStation: STREAM_STATION,
-    streamId: STREAM_ID,
-    secret: TEST_SECRET,
-  });
-  await server.listen(0, '127.0.0.1');
-  const port = server.address().port;
+  const h = await startHarness(opts);
   return {
-    fake,
-    archive,
-    startgg,
-    cache,
-    state,
-    audit,
-    server,
-    port,
-    wii: (station: number, stream: 0 | 1 = 0) => new WiiClient(port, station, stream),
-    close: async () => {
-      await server.close();
-      await fake.close();
-    },
+    ...h,
+    cache: h.ev.cache,
+    state: h.ev.state,
+    server: h.ev.tcp,
+    port: h.ev.tcp.address().port,
   };
 }
 
@@ -150,17 +99,14 @@ test('full set lifecycle on a non-stream station', async (t) => {
     assert.equal(env.state.get(3)!.setId, SET);
   });
 
-  await t.test(
-    'the started set disappears from another station and is taken (section 8 row 3)',
-    async () => {
-      const other = env.wii(4);
-      const { sets } = await other.listSets();
-      assert.ok(!sets.some((s) => s.set_id === SET));
-      const r = await other.startSet(SET);
-      assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
-      assert.equal(r.resp.msg, 'started on station 3');
-    },
-  );
+  await t.test('the started set disappears from another station and is taken', async () => {
+    const other = env.wii(4);
+    const { sets } = await other.listSets();
+    assert.ok(!sets.some((s) => s.set_id === SET));
+    const r = await other.startSet(SET);
+    assert.equal(r.resp.status, RelayStatus.ST_SET_TAKEN);
+    assert.equal(r.resp.msg, 'started on station 3');
+  });
 
   await t.test(
     'REPORT_SCORE translates winner slots to entrant ids and sends characters + stage (decisions.md R13)',
@@ -247,24 +193,34 @@ test('full set lifecycle on a non-stream station', async (t) => {
   });
 });
 
-test('stream station rules', async (t) => {
+test('the stream is decided by station, not by start_set_req.stream', async (t) => {
   const env = await setup();
   t.after(env.close);
 
-  await t.test('stream flag from a non-stream station is refused (ST_NOT_STREAM)', async () => {
-    const r = await env.wii(4).startSet(SET, 1);
-    assert.equal(r.resp.status, RelayStatus.ST_NOT_STREAM);
-    assert.equal(env.fake.getSet(SET).state, 1, 'nothing went upstream');
+  await t.test('stream 1 from another station starts the set, off stream', async () => {
+    const r = await env.wii(4, 1).startSet(SET, 1);
+    assert.equal(r.resp.status, RelayStatus.ST_OK);
+    assert.equal(env.fake.getSet(SET).state, 2);
+    assert.equal(env.fake.getSet(SET).stream, null);
   });
 
-  await t.test('stream station start assigns the configured stream', async () => {
-    const r = await env.wii(STREAM_STATION, 1).startSet(SET, 1);
+  await t.test('the stream station goes on stream even with stream 0', async () => {
+    const r = await env.wii(STREAM_STATION, 0).startSet(107949995, 0);
     assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(SET).stream!.id, STREAM_ID);
+    assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);
   });
 });
 
-test('assignStream fails after markSetInProgress (section 8 row 4)', async (t) => {
+test('with no stream configured, nothing is put on stream', async (t) => {
+  const env = await startHarness({ stream: false });
+  t.after(env.close);
+  const r = await env.wii(STREAM_STATION, 1).startSet(SET, 1);
+  assert.equal(r.resp.status, RelayStatus.ST_OK);
+  assert.equal(env.fake.callsFor('assignStream').length, 0);
+  assert.match(await (await fetch(env.statusUrl)).text(), /no stream · refreshes/);
+});
+
+test('assignStream fails after markSetInProgress', async (t) => {
   const env = await setup();
   t.after(env.close);
 
@@ -285,7 +241,7 @@ test('assignStream fails after markSetInProgress (section 8 row 4)', async (t) =
   assert.equal(score.resp.status, RelayStatus.ST_OK);
 });
 
-test('upstream 5xx handling (section 8 row 5)', async (t) => {
+test('upstream 5xx handling', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(5);
@@ -317,7 +273,7 @@ test('upstream 5xx handling (section 8 row 5)', async (t) => {
   );
 });
 
-test('upstream 4xx: set completed by the TO (section 8 row 6, R6)', async (t) => {
+test('upstream 4xx: set completed by the TO (decisions.md R6)', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(6);
@@ -338,11 +294,31 @@ test('upstream 4xx: set completed by the TO (section 8 row 6, R6)', async (t) =>
   assert.equal(env.state.get(6), undefined);
 });
 
-test('rate limited request gets ST_RATE_LIMITED (section 8 row 7)', async (t) => {
-  // A 2-token bucket refilling one token a minute: the initial cache
-  // refresh and the first start each take one; the next upstream call
-  // cannot get a token inside the 50 ms budget.
-  const env = await setup({ limits: { capacity: 2, refillPerMinute: 1, maxWaitMs: 50 } });
+test('a ready set in an unstarted top 8 reaches the Wii (decisions.md R8)', async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  const wii = env.wii(6);
+
+  // Winners side of the feeder is done: two players land in the preview pool.
+  const preview = env.fake.getSet('preview_3292311_1_1');
+  preview.slots = [entrant(9), entrant(10)];
+  await env.cache.refresh(); // starts the pool on start.gg
+  assert.equal(typeof preview.id, 'number', 'the pool has numeric ids now');
+  await env.cache.refresh(); // and lists them
+
+  const { sets } = await wii.listSets();
+  const row = sets.find((s) => s.set_id === preview.id);
+  assert.ok(row, 'the top 8 set is on the list');
+  assert.equal(row.p1_tag, 'India');
+  assert.equal((await wii.startSet(preview.id as number)).resp.status, RelayStatus.ST_OK);
+  assert.equal(preview.state, 2);
+});
+
+test('rate limited request gets ST_RATE_LIMITED', async (t) => {
+  // A 3-token bucket refilling one token a minute: finding the event at
+  // startup, the initial cache refresh and the first start each take one;
+  // the next upstream call cannot get a token inside the 50 ms budget.
+  const env = await setup({ limits: { capacity: 3, refillPerMinute: 1, maxWaitMs: 50 } });
   t.after(env.close);
 
   const first = await env.wii(3).startSet(SET);
@@ -352,7 +328,7 @@ test('rate limited request gets ST_RATE_LIMITED (section 8 row 7)', async (t) =>
   assert.equal(second.resp.msg, 'rate limited; retry');
 });
 
-test('station reboot mid-set (section 8 row 8)', async (t) => {
+test('station reboot mid-set', async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(7);
@@ -371,7 +347,7 @@ test('station reboot mid-set (section 8 row 8)', async (t) => {
   assert.equal(r.resp.status, RelayStatus.ST_OK);
   assert.equal(r.resp.msg, 'resumed');
   assert.equal(env.fake.calls.length, upstreamBefore, 'resume makes no upstream call');
-  assert.equal(env.state.get(7)!.games.length, 2, 'games reloaded from the cache');
+  assert.equal(env.state.get(7)!.games.length, 2, 'the claim keeps its games');
 });
 
 test('claim guards', async (t) => {
@@ -425,48 +401,6 @@ test('claim guards', async (t) => {
       ]);
     },
   );
-});
-
-test('abandon (section 5.6)', async (t) => {
-  const env = await setup();
-  t.after(env.close);
-  const wii = env.wii(10);
-
-  await t.test('abandoning an unplayed set resets it upstream and frees it', async () => {
-    await wii.startSet(SET);
-    const r = await wii.abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(SET).state, 1);
-    assert.equal(env.state.get(10), undefined);
-    await env.cache.refresh();
-    const { sets } = await wii.listSets();
-    assert.ok(sets.some((s) => s.set_id === SET));
-  });
-
-  await t.test('abandoning a set with reported games is a TO decision', async () => {
-    await wii.startSet(SET);
-    await wii.reportScore(SET, [game(1)]);
-    const r = await wii.abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
-    assert.equal(r.resp.msg, 'set has games - ask TO');
-    assert.equal(env.fake.getSet(SET).state, 2, 'set untouched upstream');
-  });
-
-  await t.test('abandoning a set the station does not hold', async () => {
-    const r = await env.wii(11).abandonSet(SET);
-    assert.equal(r.resp.status, RelayStatus.ST_SET_NOT_FOUND);
-  });
-
-  await t.test('abandoning a stream set leaves the stream assigned upstream', async () => {
-    // Verified live 2026-09-20 (architecture.md "start.gg calls"): resetSet does not
-    // clear a stream assignment; only the TO can, by hand.
-    const streamWii = env.wii(STREAM_STATION, 1);
-    await streamWii.startSet(107949995, 1);
-    const r = await streamWii.abandonSet(107949995);
-    assert.equal(r.resp.status, RelayStatus.ST_OK);
-    assert.equal(env.fake.getSet(107949995).state, 1);
-    assert.equal(env.fake.getSet(107949995).stream!.id, STREAM_ID);
-  });
 });
 
 test('LIST_SETS caps at the wire limit of MAX_SETS rows', async (t) => {
@@ -525,20 +459,6 @@ test('a wrong secret is refused with ST_BAD_SECRET and nothing happens upstream 
   }
 });
 
-test('a host that sends no relay_auth at all is told so, within its own framing', async () => {
-  const env = await setup();
-  try {
-    const r = await rawRequest(env.port, 5, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
-      secret: null,
-    });
-    assert.equal(r.resp.status, RelayStatus.ST_BAD_SECRET);
-    assert.equal(r.resp.msg, 'no relay secret sent');
-    assert.equal(r.hdr.station, 5);
-  } finally {
-    await env.close();
-  }
-});
-
 test('the right secret goes through (every other test here uses it)', async () => {
   const env = await setup();
   try {
@@ -548,6 +468,18 @@ test('the right secret goes through (every other test here uses it)', async () =
   } finally {
     await env.close();
   }
+});
+
+test('close() drops a connection that never sends its request', { timeout: 5000 }, async () => {
+  const env = await setup();
+  const socket = connect(env.port, '127.0.0.1');
+  socket.on('error', () => {});
+  const dropped = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+  await new Promise((resolve) => socket.once('connect', resolve));
+  const start = Date.now();
+  await env.close();
+  assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
+  await dropped;
 });
 
 // ---- CMD_GAME_START on the wire ----
@@ -566,7 +498,14 @@ test("CMD_GAME_START reaches the archive for the station's own set only", async 
     .gameStart(gameStartReq(107949994, 1, { e1: 2, e2: 0, c1: 9, c2: 2 }));
   assert.equal(other.resp.status, RelayStatus.ST_SET_NOT_FOUND);
   assert.deepEqual(
-    env.archive.calls.map((c) => c.hook),
-    ['setStarted', 'gameStarted'],
+    env
+      .auditEvents()
+      .filter((e) => e.type === 'game_start')
+      .map((e) => [e.station, e.game]),
+    [[3, 1]],
+  );
+  assert.deepEqual(
+    env.ev.archive.status().inProgress.map((s) => [s.setId, s.station, s.starts]),
+    [[107949994, 3, 1]],
   );
 });
