@@ -6,6 +6,13 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 
 The first public beta. Everything below is the work leading up to it, by date.
 
+## 2026-10-07
+
+- **The set list no longer freezes when scrolled.** Melee's text buffers grow 128 bytes at a time, each step a new block, and its allocator never merges freed memory: the first draw of a full list took 23 KB of the menu's 30 KB pool, and each scroll step re-made every text from scratch, so a few seconds of scrolling a long list (16 sets at a venue on 2026-10-06; reproduced in Dolphin with 20) ran the pool out and halted the game ("Memory Empty", no crash report). The list's texts now get their full-size buffers once and are emptied in place on every redraw, so the pool stays flat; the character select and in-match overlays also keep their texts.
+- **Tags without sponsors.** Stations show a player's gamerTag ("Mang0"), not start.gg's display name with the sponsor prefix ("C9 | Mang0"). A team keeps its name.
+- Four error-screen hints were too long for Melee's 128-byte text buffer and could crash those screens; they are shorter now (`POWER CYCLE, CHECK THE ROUTER`, `TURN ON NETWORK IN THE LOADER`, `UNZIP THE STATION ZIP AGAIN`, `IS THE RELAY ON THIS WI-FI?`).
+- Developer: `build_module.py --demo scroll` scrolls the set list by itself, for a scroll soak run in Dolphin; `scripts/preview-status.ts --entrants=<file>` serves a list built from an entrant file.
+
 ## 2026-10-03
 
 - **Music off works from boot.** With the loader's Music option off, the kiosk now silences music as soon as the set list is up; before, it only set the preference, and music kept playing until the Options page was visited.

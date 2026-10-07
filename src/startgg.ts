@@ -49,8 +49,16 @@ export interface UpstreamSet {
   fullRoundText: string;
   totalGames: number;
   phaseGroup: { id: number; phase: { phaseOrder: number } }; // phases number their rounds from 1 again (format.ts)
-  slots: { entrant: { id: number; name: string } | null }[];
+  slots: { entrant: UpstreamEntrant | null }[];
   stream: { id: number } | null;
+}
+
+/** name is the display name with the sponsor prefix ("C9 | Mang0"); a singles
+ * entrant's one participant carries the bare gamerTag. */
+export interface UpstreamEntrant {
+  id: number;
+  name: string;
+  participants?: { gamerTag: string | null }[] | null;
 }
 
 /** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
@@ -106,7 +114,7 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
         fullRoundText
         totalGames
         phaseGroup { id phase { phaseOrder } }
-        slots { entrant { id name } }
+        slots { entrant { id name participants { gamerTag } } }
         stream { id }
       }
     }

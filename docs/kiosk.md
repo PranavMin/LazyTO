@@ -52,16 +52,17 @@ and a local one from the same commit differ only in the version text (hash and b
 
 ## Developer flags
 
-Two compile-time switches exist for development runs with no controller, such as a Dolphin
-session capturing screenshots. The sources keep both at `0`, and CI fails otherwise. A build
+Three compile-time switches exist for development runs with no controller, such as a Dolphin
+session capturing screenshots. The sources keep all three at `0`, and CI fails otherwise. A build
 with `python kiosk/tools/build_module.py --demo` turns them on for that build only and adds
 `DEMO` to the module's version text, which the set list shows. CI never builds with `--demo`,
 so no bundle or station zip carries one.
 
-| Flag | File | `--demo` (start) | `--demo confirm` |
-|---|---|---|---|
-| `TM_DEMO_AUTOSTART` | `src/melee/mn/mntourney.c` | `1`: the set list auto-confirms and starts its first set two seconds after it is up | `2`: only opens the confirm pane |
-| `LB_TOURNEY_DEMO_CLAIM` | `src/melee/lb/lbtourney.c` | `1`: fakes an L + R claim by port 3 after 150 CSS frames and treats port 1 as human | `0` |
+| Flag | File | `--demo` (start) | `--demo confirm` | `--demo scroll` |
+|---|---|---|---|---|
+| `TM_DEMO_AUTOSTART` | `src/melee/mn/mntourney.c` | `1`: the set list auto-confirms and starts its first set two seconds after it is up | `2`: only opens the confirm pane | `0` |
+| `LB_TOURNEY_DEMO_CLAIM` | `src/melee/lb/lbtourney.c` | `1`: fakes an L + R claim by port 3 after 150 CSS frames and treats port 1 as human | `0` | `0` |
+| `TM_DEMO_SCROLL` | `src/melee/mn/mntourney.c` | `0` | `0` | `6`: the set list moves its cursor one row every 6 frames, to the end and back, for a scroll soak test |
 
 ## Generated files
 

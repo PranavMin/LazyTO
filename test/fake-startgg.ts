@@ -31,7 +31,8 @@ import type { AddressInfo } from 'node:net';
 
 export interface FakeEntrant {
   id: number;
-  name: string;
+  name: string; // the display name, sponsor prefix included ("C9 | Mang0")
+  participants?: { gamerTag: string | null }[]; // default: one, gamerTag = name
 }
 
 export interface FakeGame {
@@ -238,7 +239,11 @@ export class FakeStartgg {
         id: set.phaseGroupId ?? FIXTURE_POOL,
         phase: { phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER },
       },
-      slots: set.slots.map((e) => ({ entrant: e ? { id: e.id, name: e.name } : null })),
+      slots: set.slots.map((e) => ({
+        entrant: e
+          ? { id: e.id, name: e.name, participants: e.participants ?? [{ gamerTag: e.name }] }
+          : null,
+      })),
       games: set.games.length
         ? set.games.map((g) => ({ id: g.id, orderNum: g.orderNum, winnerId: g.winnerId }))
         : null, // the real API returns null, not [], for a set with no games

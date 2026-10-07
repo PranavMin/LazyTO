@@ -10,7 +10,7 @@
 
 import { ROUND_LEN } from '../generated/wire.js';
 import { bestOfFor, bracketShape, type SetFormat } from './format.js';
-import type { StartggClient, UpstreamSet } from './startgg.js';
+import type { StartggClient, UpstreamEntrant, UpstreamSet } from './startgg.js';
 
 export interface CachedSet {
   id: number; // fits uint32
@@ -36,6 +36,15 @@ const WORD_ABBREV: Record<string, string> = {
   'quarter-final': 'QF',
   'semi-final': 'SF',
 };
+
+/** The tag a station shows: a singles entrant's gamerTag without its sponsor
+ * prefix ("Mang0", not "C9 | Mang0"), which also leaves room in the 16-char
+ * wire field. A team, or an entrant with no usable gamerTag, keeps its name. */
+export function playerTag(e: UpstreamEntrant): string {
+  const p = e.participants;
+  const tag = p?.length === 1 ? p[0]?.gamerTag?.trim() : '';
+  return tag || e.name;
+}
 
 /** "Winners Round 2" -> "WR2", "Losers Quarter-Final" -> "LQF", "Grand Final Reset" -> "GFR". */
 export function abbreviateRound(fullRoundText: string): string {
@@ -126,8 +135,8 @@ export class SetCache {
             shape,
           ),
         ),
-        p1: { id: e1.id, tag: e1.name },
-        p2: { id: e2.id, tag: e2.name },
+        p1: { id: e1.id, tag: playerTag(e1) },
+        p2: { id: e2.id, tag: playerTag(e2) },
       });
     }
 
