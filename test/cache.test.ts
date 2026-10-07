@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SetCache, abbreviateRound, wireRoundName } from '../src/cache.js';
+import { SetCache, abbreviateRound, playerTag, wireRoundName } from '../src/cache.js';
 import { StartggClient } from '../src/startgg.js';
 import {
   makeFake,
@@ -279,4 +279,29 @@ test('wireRoundName: upper case, cut to the wire field', () => {
   assert.equal(wireRoundName('Grand Final Reset'), 'GRAND FINAL RESET');
   assert.equal(wireRoundName('Some Custom Round Name Here Too'), 'SOME CUSTOM ROUND NAME H');
   assert.equal(wireRoundName('Winners Quarter-Final').length <= 24, true);
+});
+
+test('playerTag: the gamerTag without the sponsor, a team keeps its name', () => {
+  const tag = (gamerTag: string | null) => ({ gamerTag });
+  assert.equal(playerTag({ id: 1, name: 'ACME | Zephyr', participants: [tag('Zephyr')] }), 'Zephyr');
+  assert.equal(playerTag({ id: 1, name: 'Zephyr', participants: [tag('Zephyr')] }), 'Zephyr');
+  assert.equal(
+    playerTag({ id: 1, name: 'Zephyr / Quill', participants: [tag('Zephyr'), tag('Quill')] }),
+    'Zephyr / Quill',
+  );
+  assert.equal(playerTag({ id: 1, name: 'ACME | Zephyr', participants: [tag('  ')] }), 'ACME | Zephyr');
+  assert.equal(playerTag({ id: 1, name: 'ACME | Zephyr', participants: [tag(null)] }), 'ACME | Zephyr');
+  assert.equal(playerTag({ id: 1, name: 'ACME | Zephyr', participants: null }), 'ACME | Zephyr');
+  assert.equal(playerTag({ id: 1, name: 'ACME | Zephyr' }), 'ACME | Zephyr');
+});
+
+test('set cache: a sponsored entrant is listed by its gamerTag', async (t) => {
+  const sets = defaultFixture();
+  sets[0]!.slots[0] = { ...entrant(1), name: 'Long Sponsor | Alpha', participants: [{ gamerTag: 'Alpha' }] };
+  const fake = makeFake(sets);
+  await fake.start();
+  t.after(() => fake.close());
+  const c = new SetCache(makeClient(fake.url), FIXTURE_EVENT_ID, 'top8q');
+  await c.refresh();
+  assert.equal(c.get(107949994)!.p1.tag, 'Alpha');
 });

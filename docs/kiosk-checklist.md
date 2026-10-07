@@ -97,8 +97,8 @@ Legend: each item is something *you* verify by eye on the running build.
       400-set fake (56 shown, the wire cap).*
 - [ ] **Cold boot waits for the beacon, never errors on it:** with the relay up, the list
       appears without an intermediate error; with the relay down, `LOOKING FOR THE RELAY`
-      pulses for 10 s, then `NO RELAY FOUND` / `NO BEACON HEARD FOR 10 SECONDS` / `IS THIS
-      SETUP ON THE RELAY'S NETWORK?` with a red `NOT FOUND` dot; A searches again. *The
+      pulses for 10 s, then `NO RELAY FOUND` / `NO BEACON HEARD FOR 10 SECONDS` / `IS THE
+      RELAY ON THIS WI-FI?` with a red `NOT FOUND` dot; A searches again. *The
       kernel/forwarder answer a request sent before their first beacon with a synthetic
       "no relay found yet" (decisions.md R15); the module peeks `exi_poll_hdr.relay_ip` first
       (`lbRelayExi_Peek`) and only then sends LIST_SETS. In Dolphin the beacon listener
@@ -223,7 +223,7 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       Melee boots, and the Tournament screen pulses `JOINING THE WI-FI` with the pane dot
       `NO WI-FI`; B still returns to the menu. When the join completes the search continues
       on its own (`LOOKING FOR THE RELAY`, then the list). After 60 s without it: `THIS WII
-      COULD NOT JOIN THE WI-FI / POWER CYCLE THE WII, THEN CHECK THE ROUTER`. With Network
+      COULD NOT JOIN THE WI-FI / POWER CYCLE, CHECK THE ROUTER`. With Network
       off in the loader: `NETWORK IS OFF IN THE LOADER` immediately. *Poll flag
       `PF_NET_JOINING` from Nintendont host build 2, whose kernel runs `NCDInit()` on its own
       thread; `TM_JOIN_FRAMES` in mntourney.c. Dolphin sends flags 0, so this is hardware-only.*

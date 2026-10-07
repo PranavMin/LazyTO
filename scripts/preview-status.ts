@@ -18,10 +18,15 @@
 //       also a real relay on the LAN (beacon, telemetry, TCP 29470) that a
 //       development Dolphin can find and play against; Dolphin's
 //       SlippiRelaySecret must match --secret (default: the test secret)
+//   --entrants=<file.json> (with --network)
+//       only Winners Round 1 sets between the entrants in the file, in seed
+//       order (1 vs N, 2 vs N-1, ...): a long list of real-looking tags for a
+//       set-list soak run. The file is probe.ts --entrants output (private
+//       tools) or any {"entrants": [{"name": "..."}]}; no Wii starts a set
 //   --wii=<dir> (any of the above)
 //       a bundle's wii/ folder (unpacked lazyto.tgz), so the SD cards page
 //       serves real zips; without it, the page says there are no Wii files
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TelemetryKind, ModuleState } from '../generated/wire.js';
@@ -44,12 +49,13 @@ const network = process.argv.includes('--network');
 const secret = /--secret=(\S+)/.exec(args)?.[1];
 const wiiDir = /--wii=(\S+)/.exec(args)?.[1];
 const pageKind = /--page=(\w+)/.exec(args)?.[1] ?? 'running';
+const entrantsFile = /--entrants=(\S+)/.exec(args)?.[1];
 if (!['running', 'setup', 'failed'].includes(pageKind)) {
   console.error(`preview-status: --page is running, setup or failed, not ${pageKind}`);
   process.exit(2);
 }
 
-const sets: FakeSet[] = defaultFixture();
+let sets: FakeSet[] = defaultFixture();
 for (let i = 0; i < 6; i++) {
   sets.push({
     id: 107960000 + i,
@@ -61,6 +67,30 @@ for (let i = 0; i < 6; i++) {
     games: [],
     stream: null,
   });
+}
+
+if (entrantsFile) {
+  const list: { name: string; participants?: { gamerTag: string | null }[] }[] = JSON.parse(
+    readFileSync(entrantsFile, 'utf8'),
+  ).entrants;
+  sets = [];
+  for (let i = 0; i < Math.floor(list.length / 2); i++) {
+    const a = list[i]!;
+    const b = list[list.length - 1 - i]!;
+    sets.push({
+      id: 108000000 + i,
+      state: 1,
+      round: 1,
+      fullRoundText: 'Winners Round 1',
+      totalGames: 3,
+      slots: [
+        { id: 20000 + i, name: a.name, participants: a.participants },
+        { id: 30000 + i, name: b.name, participants: b.participants },
+      ],
+      games: [],
+      stream: null,
+    });
+  }
 }
 
 if (pageKind !== 'running') {
@@ -102,6 +132,14 @@ if (pageKind !== 'running') {
     wiiDir,
   });
 
+  if (!entrantsFile) await startDemoSets(h);
+  console.log(`status preview: ${h.statusUrl}/  (TO password: ${TEST_PASSWORD})`);
+  if (network) {
+    console.log(`relay on the LAN: tcp :29470, beacon and telemetry on (Ctrl+C stops it)`);
+  }
+}
+
+async function startDemoSets(h: Awaited<ReturnType<typeof startHarness>>): Promise<void> {
   await h.wii(1, 1).startSet(107949994, 1);
   await h.wii(1, 1).reportScore(107949994, [game(1), game(2)]);
   await h.wii(2).startSet(107949995);
@@ -130,9 +168,5 @@ if (pageKind !== 'running') {
       ),
       from,
     );
-  }
-  console.log(`status preview: ${h.statusUrl}/  (TO password: ${TEST_PASSWORD})`);
-  if (network) {
-    console.log(`relay on the LAN: tcp :29470, beacon and telemetry on (Ctrl+C stops it)`);
   }
 }
