@@ -83,7 +83,9 @@ test('slp: ports, stage and length from a Wii-shaped replay; display names stamp
   const info = parseSlp(slp);
   assert.deepEqual(info.version, [3, 13, 0]);
   assert.equal(info.stage, BF);
-  assert.equal(info.lastFrame, 5000);
+  assert.equal(info.lastFrame, 5000, 'the last Frame Bookend');
+  assert.equal(info.startAt, '2026-10-07T20:15:02');
+  assert.equal(info.complete, true);
   assert.deepEqual(
     info.ports.map((p) => p.type),
     [0, 3, 0, 3],
@@ -111,9 +113,12 @@ test('slp: a finished replay is complete with its last stocks; an interrupted on
   assert.equal(parseSlp(whole.subarray(0, whole.length - 40)).complete, false, 'cut short');
 });
 
-test('slp: punctuation goes full-width like Replay Reporter, non-ASCII becomes ?, 15 characters at most', () => {
+test('slp: Shift-JIS display names, punctuation full-width like Replay Reporter, 15 characters at most', () => {
   assert.deepEqual([...displayNameBytes('M2K!').subarray(0, 6)], [0x4d, 0x32, 0x4b, 0x81, 0x49, 0]);
-  assert.deepEqual([...displayNameBytes('Zaín').subarray(0, 5)], [0x5a, 0x61, 0x3f, 0x6e, 0]);
+  // í has no Shift-JIS code: "?", which goes full-width like any "?".
+  assert.deepEqual([...displayNameBytes('Zaín').subarray(0, 6)], [0x5a, 0x61, 0x81, 0x48, 0x6e, 0]);
+  // ソ is 83 5C: its second byte is "\" in ASCII, and stays as it is.
+  assert.deepEqual([...displayNameBytes('ソ!').subarray(0, 5)], [0x83, 0x5c, 0x81, 0x49, 0]);
   assert.equal(
     displayNameBytes('ABCDEFGHIJKLMNOPQRST').toString('latin1').split('\0')[0],
     'ABCDEFGHIJKLMNO',

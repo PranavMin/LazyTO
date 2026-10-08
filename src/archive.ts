@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { NO_PORT, type GameResult } from '../generated/wire.js';
 import type { CachedSet } from './cache.js';
 import type { Folder, RawStore, StoredReplay } from './rawstore.js';
-import { parseSlp, withDisplayNames, humanPorts, type SlpInfo } from './slp.js';
+import { parseSlp, withDisplayNames, playerPorts, type SlpInfo } from './slp.js';
 import { buildZip, type ZipEntry } from './zip.js';
 import {
   fillName,
@@ -524,7 +524,7 @@ function entrantPorts(g: GameResult): [number, number] | null {
  * decided) stocks on their port, wherever the report knows them.
  */
 export function contentMismatch(g: GameResult, info: SlpInfo): string | null {
-  if (humanPorts(info).length === 0) return 'no human player';
+  if (playerPorts(info).length === 0) return 'no player';
   if (g.stage !== 0 && g.stage !== info.stage) return `stage ${info.stage}, reported ${g.stage}`;
   const ports = entrantPorts(g);
   if (!ports) return null;
@@ -535,7 +535,9 @@ export function contentMismatch(g: GameResult, info: SlpInfo): string | null {
   ];
   for (const [entrant, port, char, costume, stocks] of known) {
     const p = info.ports.find((q) => q.port === port);
-    if (!p || p.type !== 0) return `no player on port ${port + 1} (entrant ${entrant})`;
+    if (!p || (p.type !== 0 && p.type !== 1)) {
+      return `no player on port ${port + 1} (entrant ${entrant})`;
+    }
     if (char !== 0xff && p.character !== char) return `port ${port + 1} character`;
     if (costume !== 0xff && p.costume !== costume) return `port ${port + 1} costume`;
     const left = info.stocks[port];
