@@ -77,4 +77,10 @@ bool lbRelayExi_Peek(struct exi_poll_hdr* out);
  * Response()->hdr.cmd echoes what they sent. */
 void lbRelayExi_Abort(void);
 
+/* The beamer's SD card cannot take the next replay: full, or a fault
+ * (exi_poll_hdr.beamer_storage, STORE_FILLING excepted: that one is the TO's
+ * to handle between sets). The set list and the CSS say REPLAYS NOT SAVING;
+ * play goes on. 0 (fine or unknown) in Dolphin. */
+bool lbRelayExi_NotSaving(const struct exi_poll_hdr* ph);
+
 #endif
