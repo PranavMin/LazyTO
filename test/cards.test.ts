@@ -85,7 +85,7 @@ test('buildZip round-trips names, empty files and binary data', () => {
   for (const e of entries) assert.deepEqual(files.get(e.name), e.data);
 });
 
-test('loaderSettings is the NIN_CFG the loader saves: version 0xD, Network, Auto Boot, the game, UCF', () => {
+test('loaderSettings is the NIN_CFG the loader saves: version 0xE, Network, Auto Boot, the game, UCF, Gameplay Both', () => {
   const b = loaderSettings();
   assert.equal(b.length, NIN_CFG_SIZE);
   assert.equal(b.readUInt32BE(0x00), NIN_CFG_MAGIC);
@@ -104,7 +104,11 @@ test('loaderSettings is the NIN_CFG the loader saves: version 0xD, Network, Auto
   assert.equal(b[0x118], 2, 'memory card: 251 blocks');
   assert.equal(b.readUInt32BE(0x11c), 0, 'game on SD');
   const codes = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => b.readUInt32BE(0x120 + 4 * i));
-  assert.deepEqual(codes, [2, 1, 2, 1, 1, 1, 1, 1], 'Melee codes at their defaults: UCF on');
+  assert.deepEqual(
+    codes,
+    [2, 1, 2, 1, 1, 4, 1, 1],
+    'Melee codes at their defaults (UCF on) except Gameplay: Both (LGL and anti-wobbling)',
+  );
   assert.equal(b.readUInt32BE(0x140), 0);
 });
 

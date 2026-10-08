@@ -137,7 +137,8 @@ Legend: each item is something *you* verify by eye on the running build.
 
 Everything in this section is Nintendont's `kernel/gecko/*.bin` applied to the stock DOL
 (`g_ucf_084.bin`, `g_mods_tournament.bin`: neutral spawns, stage striking, stealth nametag
-hide, D-pad rumble toggle) - on hardware by the venue's MeleeCodes toggles, in Dolphin by the
+hide, D-pad rumble toggle; `g_gameplay_both.bin`: LGL and anti-wobbling, set by the station
+cards since 2026-10-07) - on hardware by the venue's MeleeCodes toggles, in Dolphin by the
 same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbneutralspawn.c`) and the
 `mnstagesel.c`/`ifnametag.c` edits live only on tag `shifted-dol-final`. History of why they existed: `melee fork, docs/history/ucf-investigation.md`,
 `melee fork, docs/history/ucf-readdressing.md`, `melee fork, docs/history/venue-codes-readdressing.md`, and the changelog's 2026-09-21 and 2026-09-24 entries.
@@ -195,13 +196,33 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 - [ ] **Auto-score at game end (v37).** Finish a game (KO or time-out) and, back on
       the CSS, the score line already counts it, `SENDING... / SCORE SENT` runs, and the
       status shows `GAME n TO <TAG>` for 5 s. *Read from the vanilla GS_VS exit data's
-      MatchEnd (outcome + per-slot standings) in `lbTourney_MatchExit`, applied on the
-      first CSS frame. Winner = more stocks, else less percent. Not scored, with the reason
-      in the banner: LRA+Start (`NO CONTEST - NOT SCORED`), a handwarmer, not exactly
-      two human players (`AUTO-SCORE NEEDS 2 PLAYERS`), no L + R claim from one of the two
-      who played (`HOLD L+R TO AUTO-SCORE`), exact tie (`TIE - SCORE IT MANUALLY`). The C-stick binds remain for
+      MatchEnd (outcome, per-slot standings, the game's own `winners[]`/`n_winners`) in
+      `lbTourney_MatchExit`, applied on the first CSS frame. Winner = the game's: with the
+      card's Gameplay: Both (LGL) that is the player ahead on stocks, then less percent,
+      unless that player is over the ledge-grab limit and the other is not (since 2026-10-07;
+      before, the kiosk recomputed stocks then percent itself). Not scored, with the reason in
+      the banner: LRA+Start (`NO CONTEST - NOT SCORED`), a handwarmer, not exactly two
+      players or a CPU in the game (`AUTO-SCORE NEEDS 2 PLAYERS`), Team battle on (`TEAMS ON -
+      SCORE BY HAND`), no L + R claim from one of the two who played (`HOLD L+R TO
+      AUTO-SCORE`), both over the limit with one ahead (`BOTH OVER LGL - SCORE BY HAND`), a
+      time-out tied on stocks but not on percent on a card with Gameplay Off or Wobbling
+      (`LGL OFF - SCORE BY HAND`). The C-stick binds remain for
       corrections - do NOT also flick after an auto-scored game (undo with Z + C-down if
       you did).*
+- [ ] **Ledge-grab limit (2026-10-07):** a time-out where the player ahead on stocks has
+      grabbed the ledge more than the limit (45 at 8:00; it scales with the timer, 5 at
+      1:00) and the other has not: the other player is scored, the banner
+      reads `GAME n TO <TAG> - LGL`, and the start.gg game has the characters and stage but
+      no per-game score. Both over the limit with one ahead: `BOTH OVER LGL - SCORE BY
+      HAND`, nothing appended. *LGL is a codeset (`g_gameplay_both.bin`); the module only
+      reads `winners[]`. A Dolphin run without Gameplay: Both in its ini plays with the
+      limit off and shows `LGL OFF` instead.*
+- [ ] **Tiebreak game (2026-10-07):** an exact tie at a time-out (nobody moves, 0% each) or
+      a double KO on the last stocks: the game plays LGL's tiebreak (1 stock, 0%, 3:00), and
+      back on the CSS the score counts ONE game, to the tiebreak's winner (`GAME n TO
+      <TAG>`). A tiebreak that ties again: `TIE - SCORE IT MANUALLY`, nothing appended.
+      *Scored by `lbTourney_TiebreakExit` (`ptr 0x803DA968`, the GS_SUDDEN_DEATH exit),
+      armed only by a set game's tie.*
 - [ ] **Characters and stage reported (v38):** after an auto-scored game the start.gg
       set's game row shows both characters and the stage (check the set page or the
       relay audit log). *Filled from `MatchEnd.player_standings[].ckind` per entrant and

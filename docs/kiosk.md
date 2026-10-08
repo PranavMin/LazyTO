@@ -96,7 +96,7 @@ in the full-DOL patch pass). A development setup in Dolphin uses an equivalent l
 
 One line per patch: `ptr <addr> <symbol>` (write the module symbol's address), `branch <addr>
 <symbol>` (write `b symbol` over a vanilla function's first instruction), `word <addr> <hex>`.
-Today: scene-table rows (GS_MENU exit, GS_VS frame/exit, GS_CSS frame/exit, GS_SSS enter), the main-menu
+Today: scene-table rows (GS_MENU exit, GS_VS frame/exit, GS_SUDDEN_DEATH exit, GS_CSS frame/exit, GS_SSS enter), the main-menu
 think, the hijacked Trophies row (kind 3: think, description indices, selection count,
 anim/start_frame, panel-animation rows, light-colour jump-table entries), `bootOnLoad` and
 `mn_8022C010` branches. The builder decodes every Nintendont codeset in `kernel/gecko/` and
@@ -110,7 +110,10 @@ after the module and would win silently.
 - Vanilla addresses only, from `symbols.txt`; verify a hook is really reached (inlining! the
   light-colour function was inlined at both real call sites - 2026-09-24).
 - Nothing the venue's codesets already do is re-implemented here: UCF, neutral spawns,
-  striking, stealth tags and the rumble toggle are theirs. Music and mono are not in any
+  striking, stealth tags and the rumble toggle are theirs, and so are the ledge-grab limit, the
+  time-out percent tiebreak and the 1-stock tiebreak game (Gameplay: Both, LGL and
+  anti-wobbling): auto-score reads the game's own winner.
+  Music and mono are not in any
   codeset: the kiosk sets them from the loader's Music and Audio options (`host_opts`) once the
   set list is up.
 - Per-build QA: `kiosk-checklist.md`.
