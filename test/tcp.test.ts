@@ -599,8 +599,20 @@ test('CMD_BEAMER_SYNC speaks BEAMER_SYNC_VERSION, not PROTO_VERSION, and makes n
     });
     assert.equal(ok.hdr.version, BEAMER_SYNC_VERSION, 'the reply carries the sync version');
     assert.equal(ok.hdr.cmd, RelayCmd.CMD_BEAMER_SYNC);
-    assert.equal(ok.resp.status, RelayStatus.ST_INTERNAL);
-    assert.equal(ok.resp.msg, 'beamer sync not handled yet');
+    assert.equal(ok.resp.status, RelayStatus.ST_OK);
+    assert.equal(ok.resp.msg, 'synced');
+    assert.equal(ok.payload.length, 52, 'a beamer_sync_resp with no answers');
+    const truncated = await rawRequest(
+      env.port,
+      3,
+      RelayCmd.CMD_BEAMER_SYNC,
+      sync.subarray(0, 60),
+      {
+        version: BEAMER_SYNC_VERSION,
+      },
+    );
+    assert.equal(truncated.resp.status, RelayStatus.ST_INTERNAL);
+    assert.equal(truncated.resp.msg, 'bad payload');
     const v2 = await rawRequest(env.port, 3, RelayCmd.CMD_BEAMER_SYNC, sync, {
       version: PROTO_VERSION,
     });

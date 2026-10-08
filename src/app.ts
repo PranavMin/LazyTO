@@ -23,7 +23,15 @@ import { randomInt } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localAddresses } from './beacon.js';
-import { STARTGG_ENDPOINT, configPath, loadConfig, saveConfig, type Config } from './config.js';
+import {
+  STARTGG_ENDPOINT,
+  configPath,
+  defaultArchiveDir,
+  loadConfig,
+  saveConfig,
+  type Config,
+} from './config.js';
+import type { RawStoreOptions } from './rawstore.js';
 import { startEvent, type RunningEvent } from './relay.js';
 import { resolveEvent, type Resolved } from './resolve.js';
 import { StartggClient, type StartggClientOptions } from './startgg.js';
@@ -52,8 +60,16 @@ export interface AppOptions {
   host?: string;
   /** Beacon and telemetry; off in tests. */
   network?: boolean;
-  /** The stations' beamers' HTTP port (default BEAMER_HTTP_PORT); tests point it at test/fake-beamer.ts. */
-  beamerHttpPort?: number;
+  /**
+   * The archive folder: raw replays, unmatched/, archive.json and the set
+   * zips (rawstore.ts, archive.ts). Default Documents/LazyTO
+   * (config.ts defaultArchiveDir); the desktop app passes its Documents
+   * folder's, tests a temporary one.
+   */
+  archiveDir?: string;
+  /** Tests stand in a full disk and shorten the download stall timeout. */
+  rawStore?: RawStoreOptions;
+  stallMs?: number;
   /** start.gg's GraphQL URL; tests point it at the fake. */
   startggEndpoint?: string;
   startggOptions?: Pick<StartggClientOptions, 'limits' | 'retryDelaysMs'>;
@@ -264,11 +280,13 @@ export class App {
         host: this.opts.host,
         network: this.opts.network,
         archive: {
+          dir: this.opts.archiveDir ?? defaultArchiveDir(),
           setName: config.archiveSetName,
           gameName: config.archiveGameName,
           event: resolved,
         },
-        beamerHttpPort: this.opts.beamerHttpPort,
+        rawStore: this.opts.rawStore,
+        stallMs: this.opts.stallMs,
       });
       if (gen !== this.generation) {
         await ev.stop();
@@ -283,12 +301,21 @@ export class App {
         streamStation,
         eventLabel: `${resolved.tournamentName} · ${resolved.eventName} (${resolved.eventId})`,
         beacon: running.beacon ?? {
-          status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }),
+          status: () => ({
+            targets: [],
+            sent: 0,
+            firstSentAt: null,
+            lastSentAt: null,
+            lastError: null,
+            lastErrorCode: null,
+          }),
         },
         tcp: running.tcp,
         telemetry: running.telemetry,
         archive: running.archive,
         beamers: running.beamers,
+        collector: running.collector,
+        store: running.store,
         admin: running.admin,
         addresses: this.addresses(),
         version: this.version,
@@ -396,7 +423,7 @@ export class App {
     return page(
       `${banner}<div class="card bad"><p><b class="warn">Not running.</b> ${escapeHtml(m.reason)}</p>` +
         `<p class="muted">Tried ${age(m.at)} ago${next !== null ? `; trying again in ${next} s` : ''}. ` +
-        `The Wiis show NO RELAY FOUND until this is fixed.</p>` +
+        `The beamers hear no relay until this is fixed.</p>` +
         `<div class="acts"><form method="post" action="/retry"><button class="primary">Retry now</button></form>` +
         `<a class="btnlink" href="/setup">Settings</a></div></div>${where}`,
       { refreshSeconds: 10 },

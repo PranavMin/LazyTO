@@ -5,10 +5,8 @@
 // the secret's SECRET_LEN bytes exactly as relay_auth carries them
 // (NUL-padded), over the request's nonce, then its station_id, then the
 // reply payload after the hmac field. The beamer firmware computes the same;
-// test/protocol-frozen.test.ts pins a vector both sides check.
-//
-// Which answers to give (collection, acks) is not built yet: tcp.ts answers a
-// sync without a payload, so nothing is acked.
+// test/protocol-frozen.test.ts pins a vector both sides check. Which answers
+// to give is collect.ts's.
 
 import { createHmac } from 'node:crypto';
 import {

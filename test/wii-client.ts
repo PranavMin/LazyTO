@@ -43,7 +43,13 @@ export function rawRequest(
   station: number,
   cmd: number,
   payload: Uint8Array = new Uint8Array(0),
-  { version = PROTO_VERSION, host = '127.0.0.1', timeoutMs = 3000, secret = TEST_SECRET } = {},
+  {
+    version = PROTO_VERSION,
+    host = '127.0.0.1',
+    timeoutMs = 3000,
+    secret = TEST_SECRET,
+    localAddress = undefined as string | undefined,
+  } = {},
 ): Promise<WireReply> {
   const auth = encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
   const req = Buffer.concat([
@@ -58,7 +64,8 @@ export function rawRequest(
     payload,
   ]);
   return new Promise((resolve, reject) => {
-    const socket = connect({ port, host });
+    // A Wii's request reaches the relay from its beamer's address: tests give a second beamer 127.0.0.2.
+    const socket = connect({ port, host, localAddress });
     const chunks: Buffer[] = [];
     socket.setTimeout(timeoutMs, () => {
       socket.destroy();
@@ -89,12 +96,15 @@ export class WiiClient {
     private readonly stream: 0 | 1 = 0,
     private readonly host = '127.0.0.1',
     private readonly secret: string = TEST_SECRET,
+    /** The address of the beamer this Wii's requests come through. */
+    private readonly localAddress?: string,
   ) {}
 
   private request(cmd: number, payload?: Uint8Array): Promise<WireReply> {
     return rawRequest(this.port, this.station, cmd, payload, {
       host: this.host,
       secret: this.secret,
+      localAddress: this.localAddress,
     });
   }
 

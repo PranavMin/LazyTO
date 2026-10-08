@@ -1,21 +1,27 @@
-// fake-beamer.ts -- stand in for a station's Slippi Beamer on a dev machine,
-// so the set archive (src/archive.ts) can be exercised with Dolphin before
-// any beamer hardware exists. It serves the replays in a folder (Dolphin's
-// Slippi replay folder) with the beamer's HTTP API and announces itself the
-// way a beamer does, as "Station <n>", whenever a finished replay appears.
+// fake-beamer.ts -- stand in for a station's LazyTO beamer on a dev machine,
+// so the relay's collection (src/collect.ts, src/rawstore.ts, the set
+// archive) can be exercised with Dolphin before beamer hardware: it syncs
+// with the relay every 10 s the way the firmware does (CMD_BEAMER_SYNC,
+// signed reply checked, acks kept in memory) and serves the replays in a
+// folder (Dolphin's Slippi replay folder) over the beamer's HTTP API.
 //
-//   npx tsx scripts/fake-beamer.ts --dir "%USERPROFILE%\Documents\Slippi" --station 0 --port 8085
+//   npx tsx scripts/fake-beamer.ts --dir "%USERPROFILE%\Documents\Slippi" --address 192.168.1.67
 //
-// Then run the relay with beamerHttpPort 8085 (test/harness.ts). Dolphin is station 0 (its
-// forwarder stamps no station number), so the default is --station 0.
-// Only finished replays are listed (a .slp whose raw length is still 0 is
-// being written), newest 10, like a beamer's NUM-REPLAYS-SERVED.
+// --address is this machine's LAN address, the one the development Dolphin's
+// requests reach the relay from: the relay ties a Wii's reports to the
+// beamer that syncs from the same address. --relay (default the same
+// address) and --relay-port (29470) are where the relay listens; --secret
+// is the relay's Wii secret (default the test secret); --station 0 is
+// Dolphin's (its forwarder stamps no number). Nothing is ever erased from
+// the folder: the acks only show what a beamer would delete at its next
+// cold boot. Dolphin sends replay_id 0, so nothing binds to a set; replays
+// land in the archive folder's unmatched/.
 
-import { createSocket } from 'node:dgram';
-import { openSync, readSync, closeSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { FakeBeamer, announceDatagram } from '../test/fake-beamer.js';
-import { ANNOUNCE_GROUP, ANNOUNCE_PORT } from '../src/beamer.js';
+import { SyncAnswerKind, SyncKind } from '../generated/wire.js';
+import { localAddresses } from '../src/beacon.js';
+import { FakeBeamer } from '../test/fake-beamer.js';
 
 function arg(name: string, fallback?: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -25,57 +31,44 @@ function arg(name: string, fallback?: string): string {
 }
 
 const dir = arg('dir');
+const address = arg('address', localAddresses()[0]);
+const relay = arg('relay', address);
+const relayPort = Number(arg('relay-port', '29470'));
 const station = Number(arg('station', '0'));
-const port = Number(arg('port', '8085'));
-const to = arg('to', ANNOUNCE_GROUP); // 127.0.0.1 if multicast does not loop back here
-const SERVED = 10;
 
-/** The raw element's length is written when the replay is finished. */
-function finished(path: string): boolean {
-  const fd = openSync(path, 'r');
-  try {
-    const b = Buffer.alloc(15);
-    return readSync(fd, b, 0, 15, 0) === 15 && b.readUInt32BE(11) !== 0;
-  } finally {
-    closeSync(fd);
-  }
+/** A replay's raw length is written when it is finished; 0 means Dolphin is still recording it. */
+function kind(data: Buffer): SyncKind {
+  return data.length >= 15 && data.readUInt32BE(11) !== 0 ? SyncKind.SK_FINISHED : SyncKind.SK_LIVE;
 }
 
-const beamer = new FakeBeamer();
-await beamer.listen(port, '0.0.0.0');
-const sock = createSocket('udp4');
-const announced = new Set<string>();
+const beamer = new FakeBeamer(Number(arg('seed', '1')), station, address);
+beamer.secret = arg('secret', beamer.secret);
+await beamer.listen();
 
 function scan(): void {
-  const files = readdirSync(dir)
-    .filter((f) => /^[A-Za-z0-9_.-]+\.slp$/.test(f))
-    .map((f) => ({ f, path: join(dir, f), mtime: statSync(join(dir, f)).mtimeMs }))
-    .filter((x) => finished(x.path))
-    .sort((a, b) => a.mtime - b.mtime)
-    .slice(-SERVED);
-  beamer.files.length = 0;
-  for (const x of files) {
-    beamer.files.push({ name: x.f, read: () => readFileSync(x.path) });
-    if (!announced.has(x.f)) {
-      announced.add(x.f);
-      sock.send(announceDatagram(station, 'game_finished', x.f), ANNOUNCE_PORT, to);
-      console.log(`announced ${x.f}`);
-    }
+  for (const f of readdirSync(dir).filter((n) => /^[A-Za-z0-9_-]+\.slp$/.test(n))) {
+    const data = readFileSync(join(dir, f));
+    const known = beamer.files.find((x) => x.name === f);
+    if (!known || known.data.length !== data.length) beamer.add(f, data, kind(data));
   }
 }
 
-// Everything already in the folder counts as announced: the relay learns
-// this beamer's address from the keepalive below.
-for (const f of readdirSync(dir)) announced.add(f);
-scan();
-setInterval(scan, 2000);
-// A real beamer only announces on game events; this one also says hello every
-// 10 s so a relay started later learns where it is.
-setInterval(
-  () => sock.send(announceDatagram(station, 'game_started', 'hello.slp'), ANNOUNCE_PORT, to),
-  10_000,
-);
-sock.send(announceDatagram(station, 'game_started', 'hello.slp'), ANNOUNCE_PORT, to);
+async function tick(): Promise<void> {
+  scan();
+  try {
+    const r = await beamer.sync(relayPort, relay);
+    const wanted = r.answers.filter((a) => a.answer === SyncAnswerKind.SA_WANTED).length;
+    console.log(
+      `sync: ${r.verified ? 'verified' : `NOT verified (status ${r.status} ${r.msg})`}, ` +
+        `${r.answers.length} listed, ${wanted} wanted, ${r.acked.length} acked, ${beamer.acks.size} acked in all`,
+    );
+  } catch (e) {
+    console.log(`sync failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 console.log(
-  `fake beamer "Station ${station}" serving ${dir} on http://0.0.0.0:${port}/SLIPPI/, announcing to ${to}:${ANNOUNCE_PORT}`,
+  `fake beamer, station ${station}, serving ${dir} on http://${address}:${beamer.httpPort()}/SLIPPI/, syncing with ${relay}:${relayPort}`,
 );
+await tick();
+setInterval(() => void tick(), 10_000);

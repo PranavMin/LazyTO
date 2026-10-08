@@ -1,26 +1,38 @@
 // Synthetic .slp files for the archive tests: just enough of the format for
-// src/slp.ts (Event Payloads, a 3.13-sized Game Start, a Game End, metadata
-// with lastFrame), shaped like a Wii (Nintendont) replay.
+// src/slp.ts (Event Payloads, a 3.13-sized Game Start, post-frame updates
+// with stocks, a Game End, metadata with lastFrame), shaped like a Wii
+// (Nintendont) replay.
 
 const GAME_START_SIZE = 0x2bc; // payload bytes after the command byte, as Nintendont 3.13 writes
+const POST_FRAME_SIZE = 0x34; // enough for stocks remaining at 0x21
 
 export interface FixturePort {
   character: number; // external id
   costume: number;
 }
 
-/** ports: index = port 0-3; null = empty. */
+/**
+ * ports: index = port 0-3; null = empty. stocks: each port's stocks at the
+ * last frame (one post-frame update per port), none by default. complete
+ * false: an interrupted recording (raw length 0, no Game End, no metadata).
+ */
 export function makeSlp(opts: {
   stage: number;
   ports: (FixturePort | null)[];
   lastFrame?: number;
+  stocks?: (number | null)[];
+  complete?: boolean;
 }): Buffer {
+  const complete = opts.complete ?? true;
   const payloads = Buffer.from([
     0x35,
-    1 + 3 * 2,
+    1 + 3 * 3,
     0x36,
     GAME_START_SIZE >> 8,
     GAME_START_SIZE & 0xff,
+    0x38,
+    0x00,
+    POST_FRAME_SIZE,
     0x39,
     0x00,
     0x02,
@@ -37,11 +49,22 @@ export function makeSlp(opts: {
     gs[0x66 + 0x24 * i] = p ? 0 : 3;
     gs[0x68 + 0x24 * i] = p ? p.costume : 0;
   }
-  const gameEnd = Buffer.from([0x39, 2, 0]);
-  const raw = Buffer.concat([payloads, gs, gameEnd]);
+  const frames = (opts.stocks ?? []).flatMap((s, port) => {
+    if (s === null || s === undefined) return [];
+    const f = Buffer.alloc(1 + POST_FRAME_SIZE);
+    f[0] = 0x38;
+    f.writeInt32BE(opts.lastFrame ?? 3600, 1);
+    f[5] = port;
+    f[6] = 0; // not a follower
+    f[0x21] = s;
+    return [f];
+  });
+  const gameEnd = complete ? Buffer.from([0x39, 2, 0]) : Buffer.alloc(0);
+  const raw = Buffer.concat([payloads, gs, ...frames, gameEnd]);
   const header = Buffer.alloc(15);
   Buffer.from([0x7b, 0x55, 0x03, 0x72, 0x61, 0x77, 0x5b, 0x24, 0x55, 0x23, 0x6c]).copy(header);
-  header.writeUInt32BE(raw.length, 11);
+  header.writeUInt32BE(complete ? raw.length : 0, 11);
+  if (!complete) return Buffer.concat([header, raw]);
   const lf = Buffer.alloc(4);
   lf.writeInt32BE(opts.lastFrame ?? 3600);
   const meta = Buffer.concat([
