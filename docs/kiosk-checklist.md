@@ -70,7 +70,9 @@ Legend: each item is something *you* verify by eye on the running build.
       sits under an amber `PLAYING HERE` header of its own); the cursor row yellow on a
       translucent light-blue bar with a yellow left edge; the right pane shows the
       highlighted set (round, tags, BEST OF n, READY / PLAYING HERE, `A START` or
-      `A RESUME` for the set already running here); hints
+      `A RESUME` for the set already running here); top right, on the header row, a white
+      `STATION n` (`STATION -` while the beamer has no number, `STATION 0` in Dolphin) with
+      the small dim version text (`hash date  WII n`) above it, in every view; hints
       `Z FRIENDLIES  Y REFRESH  B MENU` centred between the panel's bottom corner boxes.
       *Every position is a `L_*` constant at the top of mntourney.c; measured centring
       via `lbButton_Measure`, never by eye. Both panes are rounded translucent navy
@@ -109,7 +111,7 @@ Legend: each item is something *you* verify by eye on the running build.
       the pane with both tags and `A YES  B BACK`, the hint bar says CHECK BOTH TAGS FIRST;
       a dead relay shows `NO LINK TO THE RELAY` + the message (`THE RELAY DID NOT ANSWER`,
       `CONNECT TO THE LAPTOP FAILED`, ...) + `YOUR LIST IS STILL HERE` or `NO SETS LOADED
-      YET` + the hint, and the pane shows `STATION n / RELAY / a.b.c.d / PORT p` with a red
+      YET` + the hint, and the pane shows `RELAY / a.b.c.d / PORT p` with a red
       `NO LINK` dot. A relay-reported error says `THE RELAY SAID NO` / `REFUSED`; a
       shared-secret mismatch `RELAY SECRET MISMATCH` / `THE BEAMER HAS ANOTHER SECRET` /
       `BAD SECRET` (decisions.md R16); a second beamer on a taken number `TWO BEAMERS ARE

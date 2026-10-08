@@ -111,10 +111,12 @@ The Wii boots straight into the set list. The menu hijacks the main menu's Troph
 | View | What it shows |
 |------|---------------|
 | Searching | Waits for the beamer and the relay, in this order: WAITING FOR THE BEAMER (the kernel's "starting"), THIS BEAMER HAS NO NUMBER (until its button is pressed), BEAMER JOINING THE WI-FI (up to 60 s), LOOKING FOR THE RELAY (up to 10 s, then BEAMER HEARS NO RELAY). Anything no wait cures is an error at once. |
-| Loading | LOADING SETS, plus station number and the relay's address and port. |
+| Loading | LOADING SETS, plus the relay's address and port. |
 | Set list | Two panes. Left: "tag VS tag" rows grouped under round names, earliest round first. Right: the highlighted set (round, tags, best of, A START or A RESUME). |
 | Confirm | START THIS SET? A starts it and opens the CSS. B goes back. |
 | Error | What is wrong, picked by code from the host's poll header ([kiosk.md](kiosk.md)): the beamer (none, its reason, no number, no secret, its Wi-Fi), the relay (not heard, no link, timeout), or the relay's own answer (RELAY SECRET MISMATCH, TWO BEAMERS ARE STATION n, THE RELAY SAID NO with its message). A retries. |
+
+Every view shows STATION n at the top right in white (STATION - while the beamer has no number), with the module's version and the host's build small and dim above it.
 
 Set list controls: up/down move, left/right page, L/R first-letter filter, X jumps to this station's set, Y refreshes, Z enters friendlies (CSS with no set), B goes to the main menu.
 

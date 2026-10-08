@@ -1044,23 +1044,39 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
 }
 
 /* Filter pill on the left, position on the right, scroll-up cue. */
-/* Version text, top-right at the header row: the module's git hash and build
- * date (lbmodule_version.inc, written by tools/build_module.py), then the
- * host's build when it reports one (exi_poll_hdr.host_build, 0 = unknown:
- * Dolphin). Small and dim: for the TO checking a dozen Wiis, not for players. */
+/* Top right, drawn in every state: STATION n on the header row, at the
+ * floor size and in white, so a player or the TO reads which station a Wii
+ * is from across the room. The number is the beamer's (exi_poll_hdr), so
+ * STATION - while it has none; Dolphin says 0 (decisions.md R10). Above it,
+ * small and dim, the version text: the module's git hash and build date
+ * (lbmodule_version.inc, written by tools/build_module.py), then the host's
+ * build when it reports one (exi_poll_hdr.host_build, 0 = unknown: Dolphin),
+ * for the TO checking a dozen Wiis. The station never reaches left of the
+ * pane's box, so it stays clear of the header's position and cue (x <= 382). */
 #include "../lb/lbmodule_version.inc"
 #define L_VER_X 578.0f /* right edge: the CSS hint's, inside the safe area */
+#define L_VER_Y 56.0f  /* its line ends 2 px above the station's glyphs */
 #define L_VER_S 0.40f
+#define L_STN_S 0.70f
 
-static void drawVersion(void)
+static void drawCorner(void)
 {
     char buf[48];
-    char* p = putStr(buf, TM_MODULE_VERSION);
+    char* p;
+    f32 s;
+    if ((tm_ph.flags & (PF_NO_BEAMER | PF_NO_STATION)) != 0) {
+        putStr(buf, "STATION -");
+    } else {
+        putInt(putStr(buf, "STATION "), tm_ph.station);
+    }
+    s = fitText(buf, L_STN_S, L_HEAD_S, L_VER_X - L_PANE_BOX_X);
+    rightAt(L_VER_X, L_HEAD_Y, s, &c_white, buf);
+    p = putStr(buf, TM_MODULE_VERSION);
     if (tm_ph.host_build != 0) {
         p = putStr(p, "  WII ");
         putInt(p, (int) tm_ph.host_build);
     }
-    rightAt(L_VER_X, L_HEAD_Y, L_VER_S, &c_dim2, buf);
+    rightAt(L_VER_X, L_VER_Y, L_VER_S, &c_dim2, buf);
 }
 
 static void drawHeader(void)
@@ -1184,23 +1200,18 @@ static void paneNotSaving(f32 y)
     dotLabel(L_PANE_X, y, s, &c_red, buf);
 }
 
-/* STATION n / RELAY / a.b.c.d from the poll header the host fills; the
- * number is the beamer's, so STATION - while it has none. */
-static void paneWhereAmI(f32 y)
+/* RELAY / a.b.c.d / PORT p from the poll header the host fills, once the
+ * beamer has heard the relay's beacon. The station number is the top right
+ * corner's (drawCorner), in every view. */
+static void paneRelay(f32 y)
 {
     char buf[24];
     char* p;
     u32 ip = tm_ph.relay_ip;
-    if ((tm_ph.flags & (PF_NO_BEAMER | PF_NO_STATION)) != 0) {
-        putStr(buf, "STATION -");
-    } else {
-        putInt(putStr(buf, "STATION "), tm_ph.station);
-    }
-    lineC(L_PANE_X, y, L_HINT_S, &c_dim2, buf);
     if (ip == 0) {
         return;
     }
-    lineC(L_PANE_X, y + 24.0f, L_HINT_S, &c_dim2, "RELAY");
+    lineC(L_PANE_X, y, L_HINT_S, &c_dim2, "RELAY");
     p = putInt(buf, (int) (ip >> 24));
     p = putStr(p, ".");
     p = putInt(p, (int) ((ip >> 16) & 0xFF));
@@ -1208,9 +1219,9 @@ static void paneWhereAmI(f32 y)
     p = putInt(p, (int) ((ip >> 8) & 0xFF));
     p = putStr(p, ".");
     putInt(p, (int) (ip & 0xFF));
-    lineC(L_PANE_X, y + 48.0f, 0.45f, &c_dim2, buf);
+    lineC(L_PANE_X, y + 24.0f, 0.45f, &c_dim2, buf);
     putInt(putStr(buf, "PORT "), tm_ph.relay_port);
-    lineC(L_PANE_X, y + 72.0f, 0.45f, &c_dim2, buf);
+    lineC(L_PANE_X, y + 48.0f, 0.45f, &c_dim2, buf);
 }
 
 /* The pane in three groups: context (round, best-of), matchup (tag / VS /
@@ -1225,7 +1236,7 @@ static void drawPane(void)
     case TM_LIST:
         if (tm_nview == 0) {
             lineC(L_PANE_X, 126.0f, L_HINT_S, &c_dim2, "NO SETS");
-            paneWhereAmI(174.0f);
+            paneRelay(174.0f);
             if (lbRelayExi_NotSaving(&tm_ph)) {
                 paneNotSaving(308.0f);
             }
@@ -1277,16 +1288,16 @@ static void drawPane(void)
         }
         break;
     case TM_SEARCHING:
-        paneWhereAmI(126.0f);
+        paneRelay(126.0f);
         dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_amb, searchLabel());
         break;
     case TM_LOADING:
-        paneWhereAmI(126.0f);
+        paneRelay(126.0f);
         break;
     case TM_ERROR: {
         struct tm_why w;
         whyFailed(&w);
-        paneWhereAmI(126.0f);
+        paneRelay(126.0f);
         dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_red, w.label);
         break;
     }
@@ -1323,9 +1334,10 @@ static void redraw(void)
     paneBox(L_PANE_BOX_X, L_PANE_BOX_Y, L_PANE_BOX_W, L_PANE_BOX_H, c_scrim,
             true);
     /* The LazyTO title is the wordmark sprite (lbWordmark_Show), which
-     * lives across redraws. The version text is drawn in every state, so a
-     * station that cannot reach the relay still says which build it runs. */
-    drawVersion();
+     * lives across redraws. The corner is drawn in every state, so a
+     * station that cannot reach the relay still says which station it is
+     * and which build it runs. */
+    drawCorner();
 
     switch (tm_state) {
     case TM_SEARCHING: {

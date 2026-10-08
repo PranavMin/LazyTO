@@ -6,6 +6,10 @@ Dated progress, newest first. How things work now is in [architecture.md](archit
 
 The first public beta. Everything below is the work leading up to it, by date.
 
+## 2026-10-08
+
+- **Every Wii says its station at the top right** (kiosk). `STATION n` sits in white on the set list's header row, in every view, so a player or the TO reads it at a glance; `STATION -` while the beamer has no number. The version text moves above it, still small and dim, and the side pane no longer repeats the number above the relay's address.
+
 ## 2026-10-07
 
 - **Fixes from the redesign's review** (not yet run on hardware). `relay_auth` now carries a key derived from the secret, never the secret: a beamer sends it to whoever sent the last beacon, and the secret signs the sync replies that let a beamer erase, so one forged beacon could have erased replays nobody kept. It needs the matching beamer firmware, and the Dolphin forwarder must derive the key too. The beamer holding a station keeps it across a relay restart, so the newcomer of two beamers on one number can no longer take its set by speaking first. An archive error (a full or vanished disk, a deleted `.sets`, a rename OneDrive refuses) no longer fails a Wii request that start.gg already took; before, a failed `END_SET` left the station stuck on a finished set. Such errors now show on the status page.
