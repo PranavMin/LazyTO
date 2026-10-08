@@ -14,12 +14,18 @@ import {
   SET_FIELDS,
 } from '../src/names.js';
 import { BeamerDirectory, stationNumber } from '../src/beamer.js';
-import { SetArchive, hasRecord, type ArchiveEvent } from '../src/archive.js';
+import {
+  SetArchive,
+  hasRecord,
+  fileStamp,
+  replayStamp,
+  type ArchiveEvent,
+} from '../src/archive.js';
 import type { CachedSet } from '../src/cache.js';
-import { NO_PORT } from '../generated/wire.js';
+import type { GameResult } from '../generated/wire.js';
 import { FakeBeamer, announceDatagram } from './fake-beamer.js';
 import { makeSlp, displayNameAt } from './slp-fixture.js';
-import { game, gameStartReq } from './wii-client.js';
+import { game } from './wii-client.js';
 
 const FOX = 2;
 const MARTH = 9;
@@ -187,7 +193,6 @@ async function setup(
 }
 
 // Entrant 1 (Alpha) on port 3 as Marth, entrant 2 (Bravo) on port 1 as Fox.
-const PORTS = { e1: 2, e2: 0, c1: MARTH, c2: FOX };
 function replay(stage: number, lastFrame = 3600): Buffer {
   return makeSlp({
     stage,
@@ -196,34 +201,51 @@ function replay(stage: number, lastFrame = 3600): Buffer {
   });
 }
 
-test('a set with a handwarmer and two games becomes one labelled zip', async (t) => {
+// A replay id is the match's gameStartTime in Unix seconds; the Wii names the
+// file after it (protocol.yaml game_result.replay_id).
+const T0 = Date.UTC(2026, 9, 7, 20, 15, 2) / 1000;
+const MAC = '0017AB12CD34';
+function replayName(id: number): string {
+  return `Game_${MAC}_${replayStamp(id)}.slp`;
+}
+
+/** An auto-scored game as the kiosk reports it: ports from the L + R claim and the replay id. */
+function played(winner: 1 | 2, replayId: number, stage = BF): GameResult {
+  return game(winner, MARTH, FOX, stage, [0xff, 0xff], [0, 0], {
+    p1_port: 2,
+    p2_port: 0,
+    replay_id: replayId,
+  });
+}
+
+test('replay ids: the file-name stamp is the id read as UTC', () => {
+  assert.equal(replayStamp(T0), '20261007T201502');
+  assert.equal(fileStamp(replayName(T0)), '20261007T201502');
+  assert.equal(fileStamp('Game_20261007T201502.slp'), '20261007T201502');
+  assert.equal(fileStamp('notes.txt'), null);
+});
+
+test('a set of two games becomes one labelled zip; a replay no game names is left alone', async (t) => {
   const { dir, beamer, archive, audit } = await setup(t);
 
-  beamer.add('Game_old.slp', replay(BF)); // from before tonight: the baseline ignores it
-  await archive.tick();
-
+  beamer.add(replayName(T0 - 600), replay(BF)); // a friendly before the set
   archive.setStarted(3, cachedSet(500));
+  beamer.add(replayName(T0), replay(BF));
+  archive.scored(500, [played(1, T0)]);
   await archive.tick();
-  archive.gameStarted(3, gameStartReq(500, 1, { ...PORTS, handwarmer: true }));
-  beamer.add('Game_hw.slp', replay(BF, 600));
-  await archive.tick();
-  archive.gameStarted(3, gameStartReq(500, 1, PORTS));
-  beamer.add('Game_g1.slp', replay(BF));
-  await archive.tick();
-  archive.scored(500, [game(1)]);
-  archive.gameStarted(3, gameStartReq(500, 2, { ...PORTS, stage: FD }));
-  beamer.add('Game_g2.slp', replay(FD, 4200));
-  archive.setEnded(500, [game(1), game(1)]);
+  beamer.add(replayName(T0 + 300), replay(FD, 4200));
+  archive.setEnded(500, [played(1, T0), played(1, T0 + 300, FD)]);
   await archive.tick();
 
-  const binds = audit
-    .filter((e) => e.type === 'archive_bind')
-    .map((e) => [e.replay, e.game, e.handwarmer]);
+  const binds = audit.filter((e) => e.type === 'archive_bind').map((e) => [e.replay, e.game]);
   assert.deepEqual(binds, [
-    ['Game_hw.slp', 1, true],
-    ['Game_g1.slp', 1, false],
-    ['Game_g2.slp', 2, false],
+    [replayName(T0), 1],
+    [replayName(T0 + 300), 2],
   ]);
+  assert.equal(audit.filter((e) => e.type === 'archive_mismatch').length, 0);
+  const fetched = beamer.requests;
+  await archive.tick();
+  assert.equal(beamer.requests, fetched, 'nothing left to fetch: the friendly is never downloaded');
 
   const zipName = 'My Bar Weekly #60 - WSF - Alpha vs Bravo.zip';
   assert.ok(existsSync(join(dir, zipName)), `zips: ${readdirSync(dir).join(', ')}`);
@@ -276,36 +298,48 @@ test('a set with a handwarmer and two games becomes one labelled zip', async (t)
   assert.equal(archive.status().recent[0]!.games, 2);
 });
 
-test('an undone game played again: the zip takes the second try', async (t) => {
+test('an undone game played again: the zip takes the replay the new report names', async (t) => {
   const { dir, beamer, archive } = await setup(t);
-  await archive.tick();
   archive.setStarted(3, cachedSet(501));
+  beamer.add(replayName(T0), replay(BF, 1000));
+  archive.scored(501, [played(2, T0)]);
   await archive.tick();
-  archive.gameStarted(3, gameStartReq(501, 1, PORTS));
-  beamer.add('Game_a.slp', replay(BF, 1000));
+  beamer.add(replayName(T0 + 200), replay(BF, 2000)); // undone, played again
+  archive.scored(501, [played(2, T0 + 200)]);
   await archive.tick();
-  archive.gameStarted(3, gameStartReq(501, 1, PORTS)); // undone, replayed
-  beamer.add('Game_b.slp', replay(BF, 2000));
-  await archive.tick();
-  archive.gameStarted(3, gameStartReq(501, 2, PORTS));
-  beamer.add('Game_c.slp', replay(BF, 3000));
-  archive.setEnded(501, [game(2), game(2)]);
+  beamer.add(replayName(T0 + 400), replay(BF, 3000));
+  archive.setEnded(501, [played(2, T0 + 200), played(2, T0 + 400)]);
   await archive.tick();
   const files = unzip(readFileSync(join(dir, 'My Bar Weekly #60 - WSF - Alpha vs Bravo.zip')));
   const g1 = files.get('Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp')!;
   assert.equal(parseSlp(g1).lastFrame, 2000);
 });
 
+test('a game undone and scored again with the same replay keeps it, without a second download', async (t) => {
+  const { dir, beamer, archive, audit } = await setup(t);
+  archive.setStarted(3, cachedSet(508));
+  beamer.add(replayName(T0), replay(BF, 1000));
+  archive.scored(508, [played(1, T0)]);
+  await archive.tick();
+  archive.scored(508, []); // undo
+  archive.scored(508, [played(2, T0)]); // scored again, the other way
+  const fetched = beamer.requests;
+  archive.setEnded(508, [played(2, T0)]);
+  await archive.tick();
+  assert.equal(beamer.requests, fetched, 'bound from the stored copy');
+  assert.equal(audit.filter((e) => e.type === 'archive_bind').length, 2);
+  const files = unzip(readFileSync(join(dir, 'My Bar Weekly #60 - WSF - Alpha vs Bravo.zip')));
+  assert.equal(
+    parseSlp(files.get('Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp')!).lastFrame,
+    1000,
+  );
+});
+
 test('a replay that never arrives: archived after the timeout without it', async (t) => {
   const { dir, beamer, archive } = await setup(t, { finalizeTimeoutMs: 0 });
-  await archive.tick();
   archive.setStarted(3, cachedSet(502));
-  await archive.tick();
-  archive.gameStarted(3, gameStartReq(502, 1, PORTS));
-  beamer.add('Game_1.slp', replay(BF));
-  await archive.tick();
-  archive.gameStarted(3, gameStartReq(502, 2, PORTS));
-  archive.setEnded(502, [game(1), game(1)]);
+  beamer.add(replayName(T0), replay(BF));
+  archive.setEnded(502, [played(1, T0), played(1, T0 + 300)]);
   await archive.tick();
   const r = archive.status().recent[0]!;
   assert.deepEqual(r.missing, [2]);
@@ -314,15 +348,22 @@ test('a replay that never arrives: archived after the timeout without it', async
   assert.equal(files.size, 2); // context.json + game 1
 });
 
+test('a game reported without a replay (replay_id 0) does not hold the set up', async (t) => {
+  const { beamer, archive } = await setup(t);
+  archive.setStarted(3, cachedSet(506));
+  beamer.add(replayName(T0), replay(BF));
+  archive.setEnded(506, [played(1, T0), played(1, 0)]);
+  await archive.tick();
+  const r = archive.status().recent[0]!;
+  assert.equal(r.setId, 506, 'archived without waiting for the timeout');
+  assert.deepEqual(r.missing, [2]);
+});
+
 test('no L + R claim: replays still archived, unlabelled, without context.json', async (t) => {
   const { dir, beamer, archive } = await setup(t);
-  await archive.tick();
   archive.setStarted(3, cachedSet(503));
-  await archive.tick();
-  archive.gameStarted(3, { ...gameStartReq(503, 1, PORTS), e1_port: NO_PORT, e2_port: NO_PORT });
-  beamer.add('Game_1.slp', replay(BF));
-  await archive.tick();
-  archive.setEnded(503, [{ ...game(1), p1_char: 0xff, p2_char: 0xff }]);
+  beamer.add(replayName(T0), replay(BF));
+  archive.setEnded(503, [game(1, 0xff, 0xff, BF, [0xff, 0xff], [0xff, 0xff], { replay_id: T0 })]);
   await archive.tick();
   const files = unzip(readFileSync(join(dir, 'My Bar Weekly #60 - WSF - Alpha vs Bravo.zip')));
   assert.deepEqual([...files.keys()], ['Game 1 - Alpha () vs Bravo () - BF.slp']);
@@ -330,14 +371,25 @@ test('no L + R claim: replays still archived, unlabelled, without context.json',
   assert.match(archive.status().recent[0]!.note, /no context.json/);
 });
 
+test('a replay that disagrees with its report is still bound, and flagged', async (t) => {
+  const { beamer, archive, audit } = await setup(t);
+  archive.setStarted(3, cachedSet(507));
+  beamer.add(replayName(T0), replay(BF));
+  archive.setEnded(507, [played(1, T0, FD)]); // reported on FD, the replay is on BF
+  await archive.tick();
+  assert.deepEqual(
+    audit.filter((e) => e.type === 'archive_mismatch').map((e) => [e.setId, e.game, e.replay]),
+    [[507, 1, replayName(T0)]],
+  );
+  assert.equal(archive.status().recent[0]!.games, 1);
+});
+
 test('a busy beamer is retried after Retry-After; a relay restart mid-set picks the record back up', async (t) => {
   const { dir, beamer, beamers, archive } = await setup(t);
-  await archive.tick();
   archive.setStarted(3, cachedSet(504));
-  await archive.tick();
-  archive.gameStarted(3, gameStartReq(504, 1, PORTS));
   beamer.busy = true;
-  beamer.add('Game_1.slp', replay(BF));
+  beamer.add(replayName(T0), replay(BF));
+  archive.scored(504, [played(1, T0)]);
   await archive.tick();
   assert.equal(archive.status().inProgress[0]!.bound, 0);
 
@@ -353,9 +405,9 @@ test('a busy beamer is retried after Retry-After; a relay restart mid-set picks 
     audit: { record: () => {} },
     pollMs: 60_000,
   });
-  await again.tick(); // first look at the beamer: the set still waits, so its files count
+  await again.tick();
   assert.equal(again.status().inProgress[0]!.bound, 1);
-  again.setEnded(504, [game(1)]);
+  again.setEnded(504, [played(1, T0)]);
   await again.tick();
   assert.ok(existsSync(join(dir, 'Alpha vs Bravo.zip')));
 });
@@ -363,7 +415,7 @@ test('a busy beamer is retried after Retry-After; a relay restart mid-set picks 
 test('an abandoned set leaves nothing behind', async (t) => {
   const { dir, archive } = await setup(t);
   archive.setStarted(3, cachedSet(505));
-  archive.gameStarted(3, gameStartReq(505, 1, PORTS));
+  archive.scored(505, [played(1, T0)]);
   archive.setAbandoned(505);
   assert.equal(hasRecord(dir, 505), false);
   assert.equal(archive.status().inProgress.length, 0);
@@ -371,7 +423,7 @@ test('an abandoned set leaves nothing behind', async (t) => {
 
 // ---- the whole relay: a Wii plays a set over TCP, the archive pulls from a fake beamer ----
 
-test('end to end: START_SET, GAME_STARTs, reports and END_SET over TCP produce the zip', async (t) => {
+test('end to end: START_SET, reports with replay ids and END_SET over TCP produce the zip', async (t) => {
   const { RelayTcpServer } = await import('../src/tcp.js');
   const { SetCache } = await import('../src/cache.js');
   const { StationState } = await import('../src/state.js');
@@ -421,9 +473,8 @@ test('end to end: START_SET, GAME_STARTs, reports and END_SET over TCP produce t
   assert.equal((await wii.startSet(SET)).resp.status, RelayStatus.ST_OK);
   await archive.tick();
   for (let n = 1; n <= 3; n++) {
-    assert.equal((await wii.gameStart(gameStartReq(SET, n, PORTS))).resp.status, RelayStatus.ST_OK);
-    beamer.add(`Game_${n}.slp`, replay(BF, 1000 * n));
-    const games = Array.from({ length: n }, () => game(1));
+    beamer.add(replayName(T0 + 300 * n), replay(BF, 1000 * n));
+    const games = Array.from({ length: n }, (_, i) => played(1, T0 + 300 * (i + 1)));
     if (n < 3) assert.equal((await wii.reportScore(SET, games)).resp.status, RelayStatus.ST_OK);
     else assert.equal((await wii.endSet(SET, games)).resp.status, RelayStatus.ST_OK);
     await archive.tick();

@@ -20,8 +20,13 @@ protocol versions shows `NO SETS LOADED YET`.
    This writes `generated/wire.ts` and both header copies. Never edit any of them by hand.
 3. Update relay code in `src/`. Import from `generated/wire.ts`; never copy it.
 4. Update kiosk code. Check size limits:
-   - EXI request payload cap is 48 bytes (`lbrelayexi.h` and kernel `RelayEXI.c` must agree).
+   - EXI request payload cap is `EXI_PAYLOAD_MAX` (88 bytes in v2); `lbrelayexi.h` and kernel
+     `RelayEXI.c` both use the constant.
    - Keep `exi_poll_hdr` layout stable; the module asserts its offsets.
+   - Never edit a FROZEN struct (protocol.yaml header): beamers parse them and have no
+     over-the-air update. `test/protocol-frozen.test.ts` pins their bytes.
+   - The beamer firmware (`components/beamer_lazyto/include/`) carries a copy of the header; a
+     mailbox change is a `BEAMER_MB_VERSION` bump and a firmware update.
 5. Update the kernel in the submodule. A submodule checkout is detached, so first:
    ```bash
    git -C Nintendont switch LazyTO
@@ -45,7 +50,9 @@ protocol versions shows `NO SETS LOADED YET`.
      A locally built loader stops at "Preparing IOS58 Kernel" on a real Wii.
    - Relay: restart any running relay on the new build. The Pi updates itself from `main`.
    - Module: new `lazyto_kiosk.bin` on every card (each station's zip from the relay).
-   - Dolphin's relay forwarder is length-driven and needs no rebuild.
+   - Dolphin's relay forwarder (PranavMin/Ishiiruka, `LazyTO`) compiles its own copy of
+     `relay_proto.h`: copy the new one and rebuild it when `exi_poll_hdr`, `relay_auth` or
+     `relay_beacon` change. Requests and replies pass through it by length.
 
 Record the decision in `docs/decisions.md` if it changes the contract, and add a
 `docs/changelog.md` line.

@@ -17,25 +17,23 @@ The set archive works with either transport, as long as each station has a beame
 
 ## Set archive
 
-1. **Game start.** On the first frame of every match, the kiosk sends `CMD_GAME_START`
-   (protocol.yaml `game_start_req`). It carries:
-   - the set and game number, and whether it is a handwarmer;
-   - the stage;
-   - per port, the character and costume;
-   - which ports entrant 1 and entrant 2 are on, from the L + R claim.
+Protocol v2 ([protocol-v2.md](protocol-v2.md)) names each game's replay. Until the kiosk reads the
+record gate, it reports `replay_id` 0 for every game, and the archive binds no replay.
 
-   It is fire and forget: the kiosk never shows the answer.
+1. **The game names its replay.** Each `game_result` in a score report carries the entrants' CSS
+   ports (from the L + R claim) and `replay_id`, the match's Slippi `gameStartTime`. The
+   replay is `Game_<Wii MAC>_<replay_id as UTC YYYYMMDDTHHMMSS>.slp`. `CMD_GAME_START` is gone.
 2. **Finding the beamers.** A beamer multicasts a short JSON message on every game start and end,
    naming itself "Station N" (set with its button). The relay takes the station's beamer address
-   from that message (`src/beamer.ts`).
+   from that message (`src/beamer.ts`). The beamer sync (protocol v2) will replace this.
 3. **Pulling replays.** While a station has a set, the relay polls its beamer's `GET /SLIPPI/`
-   every 5 s and downloads each new replay.
-4. **Matching.** Each replay is bound to the earliest unmatched game start of that station that
-   came before it and has the same ports, characters, costumes and stage. Handwarmers are
-   matched too, so they cannot be taken for the next game, but they never go in the zip
+   every 5 s and downloads the file of each reported game it has no replay for yet. Other files
+   are left alone.
+4. **Matching.** By `replay_id` only. The replay's stage, characters and costumes are checked
+   against the report, and a mismatch is logged (`archive_mismatch`) but still bound
    (`src/archive.ts`).
-5. **Writing the zip.** At `CMD_END_SET` the relay waits until every scored game has its replay,
-   or 3 minutes have passed. Then it writes `<dataDir>/archive/<archiveSetName>.zip`, which contains:
+5. **Writing the zip.** At `CMD_END_SET` the relay waits until every scored game with a replay id
+   has its replay, or 3 minutes have passed. Then it writes `<dataDir>/archive/<archiveSetName>.zip`, which contains:
    - `context.json`, written only when every game had an L + R claim;
    - one `<archiveGameName>.slp` per game, with the tags in the replay's display-name fields.
      Replay Reporter and Slippi Launcher show those names.
@@ -47,12 +45,17 @@ Notes:
   `config.json` and the setup page keeps them. An unknown field is a settings error.
   Example: `My Bar {number} - {round_short} - {p1} vs {p2}` gives
   `My Bar 60 - WSF - Cody vs Zain.zip`.
-- **A game played again after an undo** replaces the first try in the zip.
+- **A game played again after an undo** replaces the first try in the zip: the new report
+  carries the new match's id.
 - **The status page** has a "Beamers and set archives" section showing each beamer, the sets in
   progress, and the zips written.
 - **State survives a relay restart.** It lives in `<dataDir>/archive/.sets` and `.raw`.
 
 ### Trying it without a beamer (Dolphin)
+
+Dolphin has no record gate, so under protocol v2 its games report `replay_id` 0 and this run
+writes no zip. The steps below are the v1 procedure, kept for when the Dolphin forwarder learns
+replay ids.
 
 1. Build the kiosk on this branch (`python kiosk/tools/build_module.py`) and run it in the
    Dolphin development setup (docs/development.md).
@@ -75,7 +78,8 @@ Notes:
 - **What the Wii does.** The kernel writes each request into the mailbox. That is the same bytes
   it would send over TCP, `relay_auth` included. It then polls for the beamer's answer. The
   beamer forwards the bytes to the relay over Wi-Fi and finds the relay by its beacon, as a Wii
-  does. The relay does not change at all.
+  does. The relay does not change at all. (Mailbox v1. In v2 the beamer holds the station number
+  and the secret and writes `relay_auth` itself: [protocol-v2.md](protocol-v2.md).)
 - **Setup.** Put `transport=beamer` in `lazyto_station.txt`, turn the loader's Network option off,
   and turn Slippi replays on with the game on SD.
 - **Kiosk messages.** The kiosk shows `PF_NO_BEAMER` when no LazyTO beamer answers.

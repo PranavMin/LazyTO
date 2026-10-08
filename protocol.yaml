@@ -1,11 +1,20 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 Kegstand Jesus (PranavMin)
+#
 # protocol.yaml — single source of truth for the Wii <-> relay wire protocol.
 #
-# This file is architecture.md in machine-readable form. Everything on the
-# wire is defined here and nowhere else. Generated outputs (do not edit them):
+# This file and the files generated from it are under the MIT licence (see
+# LICENSE-MIT), so the beamer firmware (MIT) can compile the generated header;
+# the rest of LazyTO is GPL-2.0-only. docs/protocol-v2.md is the implementer's
+# guide to version 2. Everything on the wire is defined here and nowhere else.
+# Generated outputs (do not edit them):
 #
 #   generated/wire.ts                 encode/decode module for the relay
 #   kiosk/include/relay_proto.h       C header for the kiosk module
 #   Nintendont/kernel/relay_proto.h   the same header for the Nintendont kernel
+#
+# The beamer firmware (PranavMin/slippi-beamer, components/beamer_lazyto) and the
+# Dolphin development forwarder (PranavMin/Ishiiruka) carry copies of the header.
 #
 # Regenerate:  python tools/gen_protocol.py
 # Verify:      python tools/check_protocol.py   (CI fails on drift)
@@ -17,9 +26,16 @@
 #     padding; padding is always an explicit _pad field.
 #   - Each struct declares its expected size; the generator errors if the
 #     computed layout disagrees.
+#
+# FROZEN layouts. Beamers have no over-the-air update, so what a beamer parses
+# never changes with PROTO_VERSION: relay_beacon (a beamer checks its magic and
+# length only, never its version), relay_auth, relay_hdr, relay_resp, the value
+# of CMD_BEAMER_SYNC, beamer_sync_req, sync_file, beamer_sync_resp and
+# sync_answer. A change to any of them is a new BEAMER_SYNC_VERSION or a new
+# beacon, never an edit. test/protocol-frozen.test.ts pins their bytes.
 
 protocol:
-  version: 1
+  version: 2
   magic: "MT"          # first two bytes of every message
   endian: big
 
@@ -29,7 +45,7 @@ constants:
     doc: "games per set (best of 5)"
   MAX_SETS:
     value: 56
-    doc: "cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 12 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4040 bytes = 56 rows of 72)"
+    doc: "cap on set_entry rows in a LIST_SETS response; 56 is the most that fits the game's 4 KB poll buffer (4096 - 16 exi_poll_hdr - 8 hdr - 32 resp - 4 fixed = 4036 bytes; 56 rows of 72 = 4032)"
   MSG_LEN:
     value: 30
     doc: "human-readable status text in relay_resp"
@@ -39,15 +55,24 @@ constants:
   TAG_LEN:
     value: 16
     doc: "player tag"
+  EXI_PAYLOAD_MAX:
+    value: 88
+    doc: "largest request payload the game hands the host after relay_hdr (report_score_req / end_set_req); the kiosk's request buffer and the kernel's EXI staging buffer are both this size"
+  RELAY_REPLY_MAX:
+    value: 4080
+    doc: "longest reply (relay_hdr + relay_resp + payload) the relay may send a Wii: the game's 4096-byte poll buffer after the 16-byte exi_poll_hdr. The beamer's response sectors hold 4084; a host treats a longer reply as malformed"
   BEACON_PORT:
     value: 29471
-    doc: "UDP port the relay broadcasts relay_beacon to and every station listens on (decisions.md R15: stations find the relay; lazyto_station.txt has no relay address)"
+    doc: "UDP port the relay broadcasts relay_beacon to and every beamer (and the Dolphin forwarder) listens on (decisions.md R15)"
   BEACON_INTERVAL_MS:
     value: 2000
     doc: "the relay sends one relay_beacon per interval on every IPv4 interface"
+  BEACON_STALE_S:
+    value: 10
+    doc: "a beamer_hello whose beacon_age_s is above this is a stale beacon: the kernel sets PF_RELAY_STALE (five beacons missed)"
   SECRET_LEN:
     value: 16
-    doc: "relay shared secret, printable ASCII, NUL-padded (decisions.md R16)"
+    doc: "relay shared secret, printable ASCII, NUL-padded (decisions.md R16); in v2 it lives on the beamer (CONFIG/config.txt LAZYTO-SECRET), never on the Wii"
   AUTH_MAGIC_0:
     value: 0x4D
     doc: "'M', first byte of relay_auth"
@@ -56,7 +81,7 @@ constants:
     doc: "'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so"
   TELEMETRY_PORT:
     value: 29472
-    doc: "UDP port on the relay that stations send telemetry datagrams to (kernel log lines and the module's load status), at the address the beacon came from"
+    doc: "UDP port on the relay that beamers forward telemetry datagrams to (kernel log lines and the module's load status) and send beacon requests to, at the address the beacon came from"
   TELEMETRY_MAGIC_1:
     value: 0x4C
     doc: "'L', second byte of telemetry_hdr ('M','L')"
@@ -75,9 +100,21 @@ constants:
   CRASH_STACK_DEPTH:
     value: 8
     doc: "LR saves walked up the crashed stack in crash_report"
+  RECORD_GATE_PPC:
+    value: 0xD3003200
+    doc: "PPC uncached MEM2 address of the record_gate (64 bytes, two 32-byte cache lines); free as far as the code shows, to be confirmed on hardware (docs/redesign.md Plan, phase 1). Not used by Dolphin."
+  RECORD_GATE_ARM:
+    value: 0x13003200
+    doc: "the same record_gate as the Nintendont kernel addresses it"
+  RECORD_THIS_MATCH:
+    value: 0x4D545231
+    doc: "'MTR1': record_gate.want while the kiosk wants the match whose Game Start is being sent recorded; any other value means do not record"
+  RECORD_GATE_HOST_BUILD:
+    value: 7
+    doc: "the first Nintendont host_build (exi_poll_hdr.host_build) with the record gate; the kiosk touches RECORD_GATE_PPC only when host_build is at least this (Dolphin sends 0)"
   NO_PORT:
     value: 0xFF
-    doc: "game_start_req: no port (nobody holds the L + R claim) or no human player on that port"
+    doc: "game_result: the CSS port of an entrant is unknown (a game scored by hand without an L + R claim)"
   BEAMER_SECTOR_SIZE:
     value: 512
     doc: "sector size of the beamer mailbox (the beamer reports its SD card's 512-byte sectors)"
@@ -89,33 +126,51 @@ constants:
     doc: "mailbox sector of beamer_hello (beamer to Wii)"
   BEAMER_MB_REQ:
     value: 1
-    doc: "mailbox sector of the request: beamer_req_hdr + relay_auth + relay_hdr + payload (Wii to beamer)"
+    doc: "mailbox sector of the request: beamer_req_hdr + relay_hdr + payload, no relay_auth (Wii to beamer)"
   BEAMER_MB_RESP:
     value: 2
     doc: "first mailbox sector of the response: beamer_resp_hdr + the relay's reply (beamer to Wii)"
   BEAMER_MB_RESP_SECTORS:
     value: 8
-    doc: "sectors the response spans: 4096 - 12 = 4084 reply bytes, the game's poll buffer after exi_poll_hdr"
+    doc: "sectors the response spans: 4096 - 12 = 4084 reply bytes, of which a Wii takes at most RELAY_REPLY_MAX"
   BEAMER_MB_TELE:
     value: 10
-    doc: "first mailbox sector of a telemetry datagram: beamer_tele_hdr + relay_auth + telemetry_hdr + payload (Wii to beamer)"
+    doc: "first mailbox sector of a telemetry datagram: beamer_tele_hdr + telemetry_hdr + payload, no relay_auth (Wii to beamer)"
   BEAMER_MB_TELE_SECTORS:
     value: 2
-    doc: "sectors a telemetry datagram spans (relay_auth 20 + telemetry_hdr 16 + TELEMETRY_TEXT_MAX 480 does not fit one)"
+    doc: "sectors a telemetry datagram may span (beamer_tele_hdr 12 + telemetry_hdr 16 + TELEMETRY_TEXT_MAX 480 = 508 fits the first; the second is kept from mailbox v1)"
   BEAMER_MB_VERSION:
+    value: 2
+    doc: "mailbox layout version in beamer_hello. 2 (2026-10-07): beamer_hello v2, station and secret on the beamer, requests and telemetry without relay_auth"
+  BEAMER_FW_MIN:
+    value: 2
+    doc: "the lowest beamer_hello.fw_build a v2 kernel accepts (mailbox v2, the beacon checked by magic and length, the scan fix, the sync); below it the kernel reports NB_OLD_FIRMWARE"
+  BEAMER_SYNC_VERSION:
     value: 1
-    doc: "mailbox layout version in beamer_hello"
+    doc: "FROZEN. relay_hdr.version of a CMD_BEAMER_SYNC request and of its reply, in place of PROTO_VERSION: the sync layout never changes with the Wii protocol"
+  SYNC_MAX_FILES:
+    value: 16
+    doc: "most sync_file entries in one beamer_sync_req (and sync_answer entries in its reply)"
+  SYNC_NAME_LEN:
+    value: 40
+    doc: "file name bytes in sync_file: Game_<12 hex MAC>_<YYYYMMDDTHHMMSS>.slp is 37. A beamer never syncs a longer name (it is counted, never acked, never erased)"
+  SYNC_ID_LEN:
+    value: 16
+    doc: "bytes of a beamer's station_id (its StationId, derived from the MAC; /status shows it as a UUID) and of an archive_id"
+  SHA256_LEN:
+    value: 32
+    doc: "bytes of a SHA-256 digest and of an HMAC-SHA256"
 
 enums:
   relay_cmd:
-    doc: "request/response command, echoed back in the response header"
+    doc: "request/response command, echoed back in the response header. 6 (CMD_GAME_START, v1) is retired: never reuse it"
     values:
       CMD_LIST_SETS:    {value: 1}
       CMD_START_SET:    {value: 2}
       CMD_REPORT_SCORE: {value: 3}
       CMD_END_SET:      {value: 4}
-      CMD_ABANDON_SET:  {value: 5, doc: "player-initiated \"wrong set\"; relay resets it"}
-      CMD_GAME_START:   {value: 6, doc: "a game of the current set (or a handwarmer) has started; the relay remembers who plays on which port, so it can match and label the replay. Fire and forget: the kiosk does not show the answer"}
+      CMD_ABANDON_SET:  {value: 5, doc: "player-initiated \"wrong set\"; never sent, and the relay does not handle it"}
+      CMD_BEAMER_SYNC:  {value: 8, doc: "FROZEN value. Sent by a beamer itself (never a Wii) on its relay link, with relay_hdr.version = BEAMER_SYNC_VERSION: its inventory and ack questions (beamer_sync_req); the relay answers beamer_sync_resp, signed. Touches no set and no station row"}
 
   relay_status:
     doc: "result of a request, first byte of relay_resp"
@@ -128,7 +183,8 @@ enums:
       ST_STARTGG_ERROR: {value: 5, doc: "upstream rejected; see status page"}
       ST_RATE_LIMITED:  {value: 6}
       ST_INTERNAL:      {value: 7}
-      ST_BAD_SECRET:    {value: 8, doc: "relay_auth missing or its secret wrong; check secret= on the SD card (decisions.md R16)"}
+      ST_BAD_SECRET:    {value: 8, doc: "relay_auth missing or its secret wrong; check LAZYTO-SECRET in the beamer's CONFIG/config.txt (decisions.md R16)"}
+      ST_DUP_STATION:   {value: 9, doc: "another beamer (another station_id) already plays as this station number: this one, the newcomer, is refused until one of them is renumbered; msg names the number"}
 
   exi_cmd:
     doc: >-
@@ -142,13 +198,23 @@ enums:
       EXI_RELAY_POLL: {value: 0xF1, doc: "read {state, response buffer}"}
 
   exi_poll_flags:
-    doc: "bit flags in exi_poll_hdr.flags; set by the host when it already knows a request cannot go out (Nintendont kernel: NetworkStarted, lazyto_station.txt)"
+    doc: "bit flags in exi_poll_hdr.flags, set by the Nintendont kernel from the beamer's latest hello so the kiosk can say why a request cannot go out; 0 = nothing known wrong (Dolphin). 1, 2, 4 and 8 (v1: PF_NO_NETWORK, PF_NO_CFG, the card's PF_NO_SECRET, PF_NET_JOINING) are retired: never reuse them"
     values:
-      PF_NO_NETWORK:  {value: 1, doc: "the host will never have a network: the loader's Network option is off"}
-      PF_NO_CFG:      {value: 2, doc: "no usable sd:/lazyto_station.txt"}
-      PF_NO_SECRET:   {value: 4, doc: "lazyto_station.txt has no valid secret="}
-      PF_NO_BEAMER:   {value: 16, doc: "lazyto_station.txt says transport=beamer but no LazyTO beamer answers on USB (no valid beamer_hello)"}
-      PF_NET_JOINING: {value: 8, doc: "Network is on but the Wi-Fi join / DHCP has not finished yet; the kernel brings the network up on its own thread (IOS SO_STARTUP blocks with no timeout) so the game boots meanwhile; clears on its own, the kiosk waits on it"}
+      PF_NO_BEAMER:   {value: 16, doc: "no valid v2 beamer_hello: no LazyTO beamer on USB; exi_poll_hdr.no_beamer_reason says why"}
+      PF_NO_STATION:  {value: 32, doc: "the beamer has no station number (hello without BF_STATION_SET): press its button. Requests are not sent and telemetry is dropped until it has one"}
+      PF_NO_SECRET:   {value: 64, doc: "the beamer has no LAZYTO-SECRET in its CONFIG/config.txt (hello without BF_SECRET)"}
+      PF_RELAY_STALE: {value: 128, doc: "the beamer knows a relay address (BF_RELAY) but has not heard its beacon for more than BEACON_STALE_S; requests still go to that address"}
+
+  no_beamer_reason:
+    doc: "exi_poll_hdr.no_beamer_reason: why PF_NO_BEAMER is set. 0 = no reason known, or PF_NO_BEAMER clear"
+    values:
+      NB_UNKNOWN:      {value: 0}
+      NB_REPLAYS_OFF:  {value: 1, doc: "the loader's Slippi replays option is off or the game is not on SD, so USB is never started"}
+      NB_NO_DRIVE:     {value: 2, doc: "no USB mass-storage drive is mounted"}
+      NB_NOT_LAZYTO:   {value: 3, doc: "a drive, but no beamer_hello magic past its replay partition: a plain stick, or a beamer without LAZYTO = true"}
+      NB_OLD_FIRMWARE: {value: 4, doc: "a LazyTO beamer whose hello is an older mailbox version or whose fw_build is below BEAMER_FW_MIN: update the beamer"}
+      NB_STARTING:     {value: 5, doc: "no hello yet within about 45 s of kernel boot or a USB removal: the beamer may still be booting, erasing or joining the Wi-Fi"}
+      NB_NEW_FIRMWARE: {value: 6, doc: "the beamer's hello is a newer mailbox version than this loader knows: update the SD card"}
 
   exi_host_opts:
     doc: "bit flags in exi_poll_hdr.host_opts: what the host's settings ask the kiosk to do with Melee's audio (the kiosk forces mono and music off unless told otherwise)"
@@ -162,7 +228,20 @@ enums:
       RELAY_IDLE:  {value: 0}
       RELAY_BUSY:  {value: 1, doc: "request in flight on the ARM side"}
       RELAY_DONE:  {value: 2, doc: "response buffer valid"}
-      RELAY_ERROR: {value: 3, doc: "transport failed; response buffer is zeroed"}
+      RELAY_ERROR: {value: 3, doc: "the request did not reach the relay or its answer did not come back; exi_poll_hdr.last_fail says why; the response buffer is zeroed"}
+
+  relay_fail:
+    doc: "exi_poll_hdr.last_fail: why the last request ended in RELAY_ERROR. 0 = none (the last request completed, or none yet). 1-0x7F are beamer_result values (BR_*), whether the beamer answered with it or the kernel knew it from the hello and did not send; 0x80 and up are the kernel's own"
+    values:
+      LF_NONE:        {value: 0}
+      LF_NO_BEAMER:   {value: 0x80, doc: "no valid beamer_hello when the request came (PF_NO_BEAMER)"}
+      LF_USB_WRITE:   {value: 0x81, doc: "writing the request sector failed"}
+      LF_USB_READ:    {value: 0x82, doc: "reading the response sectors failed"}
+      LF_USB_BUSY:    {value: 0x83, doc: "the USB lock stayed taken past the request's budget: the Slippi writer, or a beamer recovering its SD card"}
+      LF_NO_ANSWER:   {value: 0x84, doc: "no response carrying the request's seq within the 3 s budget"}
+      LF_BAD_REPLY:   {value: 0x85, doc: "the beamer's response was malformed: bad magic, len above RELAY_REPLY_MAX, or a relay_hdr that does not echo the request (a bug: tell the TO)"}
+      LF_BAD_REQUEST: {value: 0x86, doc: "the game's request was malformed or longer than EXI_PAYLOAD_MAX (a bug: tell the TO)"}
+      LF_BEAMER_LOST: {value: 0x87, doc: "the beamer's hello went invalid while the request was in flight (unplugged or rebooted)"}
 
   telemetry_kind:
     doc: "what follows a telemetry_hdr"
@@ -172,21 +251,69 @@ enums:
       TM_CRASH:  {value: 3, doc: "one crash_report: the game took an unhandled exception"}
 
   beamer_result:
-    doc: "beamer_resp_hdr.result: how the beamer's round trip to the relay went"
+    doc: "beamer_resp_hdr.result: how the beamer's round trip to the relay went (also beamer_hello.last_result, and passed through in exi_poll_hdr.last_fail)"
     values:
-      BR_OK:        {value: 0, doc: "the relay's reply follows, len bytes"}
-      BR_NO_RELAY:  {value: 1, doc: "the beamer has not found the relay (no beacon yet)"}
-      BR_NO_WIFI:   {value: 2, doc: "the beamer is not on Wi-Fi"}
-      BR_CONNECT:   {value: 3, doc: "TCP connect to the relay failed"}
-      BR_TIMEOUT:   {value: 4, doc: "the relay did not answer within the budget"}
-      BR_TOO_LARGE: {value: 5, doc: "the relay's reply did not fit the mailbox"}
-      BR_BAD_REQ:   {value: 6, doc: "the request sector was malformed (bad magic or length)"}
+      BR_OK:         {value: 0, doc: "the relay's reply follows, len bytes"}
+      BR_NO_RELAY:   {value: 1, doc: "the beamer has not found the relay (no beacon yet)"}
+      BR_NO_WIFI:    {value: 2, doc: "the beamer is not on Wi-Fi"}
+      BR_CONNECT:    {value: 3, doc: "TCP connect to the relay failed: the laptop is unreachable or its firewall blocks LazyTO"}
+      BR_TIMEOUT:    {value: 4, doc: "the relay did not answer within the budget"}
+      BR_TOO_LARGE:  {value: 5, doc: "the relay's reply did not fit the mailbox"}
+      BR_BAD_REQ:    {value: 6, doc: "the request sector was malformed (bad magic or length)"}
+      BR_NO_STATION: {value: 7, doc: "the beamer has no station number; refused without contacting the relay"}
+      BR_NO_SECRET:  {value: 8, doc: "the beamer has no LAZYTO-SECRET; refused without contacting the relay"}
 
   beamer_flags:
     doc: "bit flags in beamer_hello.flags"
     values:
-      BF_WIFI:  {value: 1, doc: "joined the Wi-Fi and has an address"}
-      BF_RELAY: {value: 2, doc: "has heard the relay's beacon; relay_ip and relay_port are valid"}
+      BF_WIFI:        {value: 1, doc: "joined the Wi-Fi and has an address (exactly when wifi is WIFI_UP)"}
+      BF_RELAY:       {value: 2, doc: "has heard the relay's beacon; relay_ip, relay_port and beacon_age_s are valid"}
+      BF_STATION_SET: {value: 4, doc: "station is valid: the beamer has a number (LazyTO mode: saved in its flash, unset until the first click)"}
+      BF_SECRET:      {value: 8, doc: "its CONFIG/config.txt has a LAZYTO-SECRET, which it puts in relay_auth"}
+
+  beamer_wifi:
+    doc: "beamer_hello.wifi, copied as-is into exi_poll_hdr.beamer_wifi: the beamer's Wi-Fi state. 0 = up (in exi_poll_hdr: up or unknown)"
+    values:
+      WIFI_UP:         {value: 0}
+      WIFI_JOINING:    {value: 1, doc: "joining or getting an address; clears by itself (the kiosk waits up to 60 s)"}
+      WIFI_NO_SSID:    {value: 2, doc: "no SSID in CONFIG/config.txt"}
+      WIFI_CANT_JOIN:  {value: 3, doc: "the network cannot be reached or refused the password (firmware WIFI ISSUE)"}
+      WIFI_NO_ADDRESS: {value: 4, doc: "joined, but DHCP gave no address (firmware WIFI TOO FULL)"}
+      WIFI_RADIO:      {value: 5, doc: "the radio failed to start (firmware RADIO FAILURE)"}
+
+  beamer_storage:
+    doc: "beamer_hello.storage, copied as-is into exi_poll_hdr.beamer_storage: the beamer's SD card. 0 = fine (in exi_poll_hdr: fine or unknown)"
+    values:
+      STORE_OK:           {value: 0}
+      STORE_NO_CARD:      {value: 1, doc: "no SD card (firmware NO SD CARD)"}
+      STORE_UNREADABLE:   {value: 2, doc: "the card cannot be read (SD UNREADABLE, DRIVE FAILING)"}
+      STORE_WRITE_FAILED: {value: 3, doc: "a write failed or the card stayed busy (WRITE FAILED, CARD STUCK)"}
+      STORE_WRONG_FORMAT: {value: 4, doc: "not the FAT32 layout the beamer needs (WRONG FORMAT)"}
+      STORE_FILLING:      {value: 5, doc: "384 files or more, or under 1 GB free: replug the beamer to erase collected replays"}
+      STORE_FULL:         {value: 6, doc: "under 64 MB free: the next replay would fail (REPLAYS NOT SAVING)"}
+
+  beamer_sync_flags:
+    doc: "FROZEN. bit flags in beamer_sync_req.flags"
+    values:
+      SF_STATION_SET:  {value: 1, doc: "station is valid"}
+      SF_COLD_BOOT:    {value: 2, doc: "this boot was a cold boot (power-on, first boot since power was applied); the erase report is this boot's"}
+      SF_ERASE_FAILED: {value: 4, doc: "an unlink failed during this boot's erase, which then stopped"}
+      SF_ACKS_DROPPED: {value: 8, doc: "the ack table was dropped at this boot because the card changed (FAT volume serial or SD CID)"}
+      SF_MORE:         {value: 16, doc: "more files need an answer than this sync lists; the beamer syncs again soon"}
+
+  sync_kind:
+    doc: "FROZEN. sync_file.kind: what the beamer knows about a file. Files with an ack are never listed (they are counted in to_erase)"
+    values:
+      SK_FINISHED:   {value: 1, doc: "complete: its size covers the raw length in its header"}
+      SK_INCOMPLETE: {value: 2, doc: "not live and not complete: an interrupted recording; the relay keeps it as partial"}
+      SK_LIVE:       {value: 3, doc: "being recorded now (raw length 0, the newest file, a host command in the last few seconds); not served yet"}
+
+  sync_answer_kind:
+    doc: "FROZEN. sync_answer.answer. 0 is NOTED so a zero-filled answer never erases or downloads anything"
+    values:
+      SA_NOTED:  {value: 0, doc: "known; nothing to do now (live, already downloading, disk full, or not wanted yet)"}
+      SA_HELD:   {value: 1, doc: "the laptop has stored this file; sha256 is the SHA-256 of its stored copy. The beamer acks the file only if that equals the SHA-256 it computed serving it this boot"}
+      SA_WANTED: {value: 2, doc: "the laptop will download this file (GET from the beamer's HTTP port)"}
 
   module_state:
     doc: "what the host did with sd:/lazyto_kiosk.bin at game boot (Nintendont kernel LoadTournamentModule)"
@@ -207,37 +334,44 @@ structs:
       What an EXI_RELAY_POLL read starts with (the game's lbRelayExi_PollBuf:
       this, then relay_hdr, relay_resp and the payload). Not on the TCP wire:
       filled by the host of the fake EXI device (Nintendont kernel, Slippi
-      Dolphin) on every poll, so the game can show which station it is and
-      which relay it is talking to even while the relay never answers. The
-      response bytes after it are valid only when state == RELAY_DONE.
-    size: 12
+      Dolphin) on every poll, from the beamer's latest hello, so the game can
+      show which station it is, which relay it is talking to and what is wrong
+      even while the relay never answers. The response bytes after it are
+      valid only when state == RELAY_DONE. Every field after host_build reads
+      0 as fine or unknown, so the Dolphin forwarder sends zeros.
+    size: 16
     fields:
-      - {name: state,      type: u8,  doc: "enum exi_poll_state"}
-      - {name: flags,      type: u8,  doc: "exi_poll_flags bits: why the relay cannot be reached yet, so the kiosk can say so instead of waiting for a beacon; 0 = nothing wrong (the Dolphin forwarder leaves it 0)"}
-      - {name: station,    type: u16, doc: "lazyto_station.txt station; 0 in Dolphin (decisions.md R10)"}
-      - {name: relay_ip,   type: u32, doc: "relay IPv4 address as a big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown"}
-      - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
-      - {name: host_opts,  type: u8,  doc: "exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)"}
-      - {name: host_build, type: u8,  doc: "the host's build number for the set list's version text (Nintendont NIN_HOST_BUILD, bumped by hand per loader release); 0 = unknown (Dolphin)"}
+      - {name: state,            type: u8,  doc: "enum exi_poll_state"}
+      - {name: flags,            type: u8,  doc: "exi_poll_flags bits: why a request cannot go out yet; 0 = nothing known wrong (Dolphin)"}
+      - {name: station,          type: u16, doc: "the beamer's station number from its hello (valid unless PF_NO_STATION or PF_NO_BEAMER); 0 in Dolphin (decisions.md R10)"}
+      - {name: relay_ip,         type: u32, doc: "relay IPv4 address from the hello, big-endian u32 (10.0.0.2 = 0x0A000002); 0 = unknown (no BF_RELAY)"}
+      - {name: relay_port,       type: u16, doc: "relay TCP port; 0 = unknown"}
+      - {name: host_opts,        type: u8,  doc: "exi_host_opts bits: venue audio choices from the host's settings (Nintendont loader menu); 0 = the kiosk defaults, mono and music off (Dolphin)"}
+      - {name: host_build,       type: u8,  doc: "the host's build number for the set list's version text and feature gates (Nintendont RELAY_HOST_BUILD, bumped by hand per loader release; RECORD_GATE_HOST_BUILD); 0 = unknown (Dolphin)"}
+      - {name: no_beamer_reason, type: u8,  doc: "enum no_beamer_reason, with PF_NO_BEAMER; 0 otherwise"}
+      - {name: beamer_wifi,      type: u8,  doc: "enum beamer_wifi from the hello; 0 = up or unknown"}
+      - {name: beamer_storage,   type: u8,  doc: "enum beamer_storage from the hello; 0 = fine or unknown"}
+      - {name: last_fail,        type: u8,  doc: "enum relay_fail (or a beamer_result below 0x80): why the last request ended in RELAY_ERROR; 0 = none"}
 
   relay_beacon:
     doc: >-
-      Relay discovery (decisions.md R15). Not on the TCP wire: one UDP datagram,
-      broadcast by the relay every BEACON_INTERVAL_MS to each IPv4
-      interface's directed broadcast address, port BEACON_PORT. A station
-      (Nintendont kernel, Slippi Dolphin forwarder) listens on BEACON_PORT,
-      ignores datagrams whose size, magic or version do not match, and
-      takes the datagram's SOURCE address plus tcp_port as the relay; the
-      latest valid beacon wins, so a relay that changes address is followed.
-      One relay per LAN. BEACON REQUEST (2026-09-30): some access points do
-      not deliver broadcasts to a power-saving Wi-Fi client, so a station that
-      has heard nothing may broadcast this same struct with tcp_port = 0 and
-      event_id = 0 to TELEMETRY_PORT; the relay answers with a unicast
-      relay_beacon to the sender's address at BEACON_PORT.
+      FROZEN. Relay discovery (decisions.md R15). Not on the TCP wire: one UDP
+      datagram, broadcast by the relay every BEACON_INTERVAL_MS to each IPv4
+      interface's directed broadcast address, port BEACON_PORT. A beamer
+      (and the Dolphin forwarder) listens on BEACON_PORT, ignores datagrams
+      whose length or magic do not match, never checks version (dongles have
+      no over-the-air update), and takes the datagram's SOURCE address plus
+      tcp_port as the relay; the latest valid beacon wins, so a relay that
+      changes address is followed. One relay per LAN. BEACON REQUEST: some
+      access points do not deliver broadcasts to a power-saving Wi-Fi client,
+      so a beamer that has heard nothing may broadcast this same struct with
+      tcp_port = 0 and event_id = 0 to TELEMETRY_PORT; the relay answers any
+      such 12-byte datagram with magic 'M','T' (whatever its version) with a
+      unicast relay_beacon to the sender's address at BEACON_PORT.
     size: 12
     fields:
       - {name: magic,    type: u8, array: 2, doc: "'M','T'"}
-      - {name: version,  type: u8,           doc: "PROTO_VERSION"}
+      - {name: version,  type: u8,           doc: "PROTO_VERSION of the relay; informational, never checked by a beamer"}
       - {name: _pad,     type: u8}
       - {name: tcp_port, type: u16,          doc: "the relay's TCP port for relay_hdr requests"}
       - {name: _pad2,    type: u16}
@@ -245,15 +379,16 @@ structs:
 
   relay_auth:
     doc: >-
-      Relay shared secret (decisions.md R16). Not part of the game's messages: the
-      host of the fake EXI device (Nintendont kernel, Slippi Dolphin
-      forwarder) writes it on the TCP connection before the game's relay_hdr
-      + payload, with the secret from its own config (lazyto_station.txt secret=,
-      Dolphin SlippiRelaySecret). The relay compares the secret with its
-      config in constant time and answers a missing or wrong one with
-      ST_BAD_SECRET without acting on the request. Responses carry no
-      relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi
-      out, not someone capturing the Wi-Fi traffic.
+      FROZEN. Relay shared secret (decisions.md R16). Not part of the game's
+      messages: the beamer writes it on the TCP connection before the
+      kernel's relay_hdr + payload, and in front of each telemetry datagram,
+      with LAZYTO-SECRET from its CONFIG/config.txt (the Dolphin forwarder
+      uses SlippiRelaySecret). The Wii never holds the secret. The relay
+      compares the secret with its config in constant time and answers a
+      missing or wrong one with ST_BAD_SECRET without acting on the request.
+      Responses carry no relay_auth. Plaintext on the LAN: it keeps
+      passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi
+      traffic.
     size: 20
     fields:
       - {name: magic,  type: u8,   array: 2, doc: "AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')"}
@@ -262,11 +397,11 @@ structs:
 
   telemetry_hdr:
     doc: >-
-      Station telemetry. Not part of the game's messages: the host of the
-      fake EXI device (Nintendont kernel) sends one UDP datagram per message
-      to the relay's address from the beacon, port TELEMETRY_PORT:
-      relay_auth (the same shared secret as TCP requests), this header, then
-      len payload bytes (TM_LOG text or one station_status). The relay drops
+      Station telemetry. Not part of the game's messages: the Nintendont
+      kernel writes this header and len payload bytes (TM_LOG text, one
+      station_status or one crash_report) to the beamer's telemetry sectors;
+      the beamer sends relay_auth + those bytes as one UDP datagram to the
+      relay's address from the beacon, port TELEMETRY_PORT. The relay drops
       datagrams with a wrong secret (counted on the status page), keeps the
       last log lines and status per station, and never answers. seq counts
       datagrams from 0 at kernel boot, so a gap is a lost datagram and a
@@ -276,7 +411,7 @@ structs:
       - {name: magic,     type: u8,  array: 2, doc: "MAGIC_0, TELEMETRY_MAGIC_1 ('M','L')"}
       - {name: version,   type: u8,            doc: "PROTO_VERSION"}
       - {name: kind,      type: u8,            doc: "enum telemetry_kind"}
-      - {name: station,   type: u16,           doc: "lazyto_station.txt station"}
+      - {name: station,   type: u16,           doc: "stamped by the kernel from the beamer's hello (BF_STATION_SET)"}
       - {name: len,       type: u16,           doc: "payload bytes after this header"}
       - {name: seq,       type: u32}
       - {name: uptime_ms, type: u32,           doc: "milliseconds since the kernel started"}
@@ -330,20 +465,41 @@ structs:
       - {name: seq,    type: u32, doc: "0 = nothing recorded; incremented per crash"}
       - {name: report, type: crash_report}
 
+  record_gate:
+    doc: >-
+      Not on the wire: the shared-memory slot at RECORD_GATE_PPC (kernel:
+      RECORD_GATE_ARM) through which the kiosk chooses which matches Slippi
+      records (docs/redesign.md, Recording only set games). Two 32-byte cache
+      lines, so a PPC-written field and a kernel-written field never share
+      one. Line 0 is written only by the PPC with u32 stores (want: set to
+      RECORD_THIS_MATCH just before vanilla gm_Scene_Vs_OnEnter, whose
+      StartMelee sends Slippi's Game Start, and cleared right after). Line 1
+      is written only by the kernel, which reads line 0 with sync_before_read
+      in its Game Start EXI handler and keeps {ring cursor, record, seq}.
+      The kernel zeroes both lines at boot.
+    size: 64
+    fields:
+      - {name: want,      type: u32, doc: "line 0, PPC-written: RECORD_THIS_MATCH while the Game Start being sent belongs to a set game; anything else = do not record (with a kiosk module loaded)"}
+      - {name: _pad,      type: u32, array: 7}
+      - {name: start_seq, type: u32, doc: "line 1, kernel-written: Game Starts seen since kernel boot, incremented at each one whether recorded or not"}
+      - {name: file_seq,  type: u32, doc: "the start_seq of the last match a replay file was opened for; 0 = none since boot"}
+      - {name: file_id,   type: u32, doc: "that file's gameStartTime (Unix seconds, the Wii clock read as UTC): its name is Game_<MAC>_<file_id as YYYYMMDDTHHMMSS>.slp. The kernel writes file_id before file_seq"}
+      - {name: _pad2,     type: u32, array: 5}
+
   relay_hdr:
-    doc: "Every message (request and response) begins with this header."
+    doc: "FROZEN layout. Every message (request and response) begins with this header."
     size: 8
     fields:
       - {name: magic,   type: u8, array: 2, doc: "'M','T'"}
-      - {name: version, type: u8,           doc: "PROTO_VERSION"}
+      - {name: version, type: u8,           doc: "PROTO_VERSION; BEAMER_SYNC_VERSION for CMD_BEAMER_SYNC"}
       - {name: cmd,     type: u8,           doc: "enum relay_cmd"}
-      - {name: station, type: u16,          doc: "from lazyto_station.txt"}
-      - {name: len,     type: u16,          doc: "payload bytes following the header"}
+      - {name: station, type: u16,          doc: "stamped by the kernel from the beamer's hello (the game sends 0); for CMD_BEAMER_SYNC the beamer's number or 0, which the relay ignores"}
+      - {name: len,     type: u16,          doc: "payload bytes following the header (in a response: relay_resp + payload)"}
 
   relay_resp:
     doc: >-
-      Every response: relay_hdr (same cmd), then this, then an optional
-      command-specific payload (see messages).
+      FROZEN layout. Every response: relay_hdr (same cmd), then this, then an
+      optional command-specific payload (see messages).
     size: 32
     fields:
       - {name: status, type: u8, doc: "enum relay_status"}
@@ -382,27 +538,34 @@ structs:
 
   game_result:
     doc: >-
-      One completed game. The stock and costume fields (2026-09-30) feed
-      start.gg's per-game entrant scores the way Replay Reporter for Slippi
-      does: score = (costume + 1) * 100 + stocks remaining, so the set page
-      shows the colour and the stock icons; both 0xFF = unknown (a game scored
-      by hand), and the relay then sends no score for that game.
-    size: 8
+      One completed game. The stock and costume fields feed start.gg's
+      per-game entrant scores the way Replay Reporter for Slippi does: score =
+      (costume + 1) * 100 + stocks remaining, so the set page shows the colour
+      and the stock icons; both stocks 0xFF = no score sent (a game scored by
+      hand, or one the ledge-grab limit or LGL's tiebreak game decided). The
+      ports and replay_id (v2) name the replay: the relay fetches
+      Game_<MAC>_<replay_id as UTC YYYYMMDDTHHMMSS>.slp from the beamer the
+      set was played through, and labels its ports with the entrants' tags.
+    size: 16
     fields:
-      - {name: winner_slot, type: u8, doc: "1 or 2"}
-      - {name: p1_char,     type: u8, doc: "Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected."}
+      - {name: winner_slot, type: u8,  doc: "1 or 2"}
+      - {name: p1_char,     type: u8,  doc: "Melee external character id (CharacterKind, the CSS ckind value: 0 = Captain Falcon .. 25 = Ganondorf) of entrant 1; 0xFF = unknown (a game scored by hand). Anything the relay cannot map is omitted, never rejected."}
       - {name: p2_char,     type: u8}
-      - {name: stage,       type: u8, doc: "Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand"}
-      - {name: p1_stocks,   type: u8, doc: "entrant 1's stocks remaining at the end of the game (0 for the player who was KO'd); 0xFF = unknown"}
+      - {name: stage,       type: u8,  doc: "Melee internal stage id (StKind, e.g. 0x1F Battlefield, 0x20 Final Destination); 0 = unknown, e.g. a game scored by hand"}
+      - {name: p1_stocks,   type: u8,  doc: "entrant 1's stocks remaining at the end of the game (0 for the player who was KO'd); 0xFF = unknown or not to be sent"}
       - {name: p2_stocks,   type: u8}
-      - {name: p1_costume,  type: u8, doc: "entrant 1's costume (colour) index, 0 = the default colour; 0xFF = unknown"}
+      - {name: p1_costume,  type: u8,  doc: "entrant 1's costume (colour) index, 0 = the default colour; 0xFF = unknown"}
       - {name: p2_costume,  type: u8}
+      - {name: p1_port,     type: u8,  doc: "CSS port 0-3 entrant 1 played on (from the L + R claim); NO_PORT = unknown"}
+      - {name: p2_port,     type: u8,  doc: "CSS port 0-3 of entrant 2; NO_PORT = unknown"}
+      - {name: _pad,        type: u16}
+      - {name: replay_id,   type: u32, doc: "the game's replay: record_gate.file_id of its match (a tiebreak game reports its main game's); 0 = no replay (no beamer, replays off, a stalled writer, Dolphin, or a hand-scored game whose match was not recorded)"}
 
   report_score_req:
     doc: >-
       CMD_REPORT_SCORE request payload. Always the full game list;
       the relay does a full overwrite (idempotent).
-    size: 48
+    size: 88
     fields:
       - {name: set_id,     type: u32}
       - {name: game_count, type: u8, doc: "0-5 valid entries in games"}
@@ -411,7 +574,7 @@ structs:
 
   end_set_req:
     doc: "CMD_END_SET request payload. Relay derives the winner from the game list."
-    size: 48
+    size: 88
     fields:
       - {name: set_id,     type: u32}
       - {name: game_count, type: u8}
@@ -424,60 +587,48 @@ structs:
     fields:
       - {name: set_id, type: u32}
 
-  game_start_req:
-    doc: >-
-      CMD_GAME_START request payload: sent by the kiosk on the first frame of
-      a match while a set is current. Per CSS port (0-3): the external
-      character id and costume of a human player, NO_PORT for an empty or CPU
-      port. e1_port / e2_port are the ports of entrant 1 and 2 from the L + R
-      claim, NO_PORT when nobody has claimed. The relay matches the replay
-      the station's beamer records next by these ports, characters, costumes
-      and stage.
-    size: 20
-    fields:
-      - {name: set_id,     type: u32}
-      - {name: game,       type: u8, doc: "1-based number this game gets if it is scored: games scored so far + 1"}
-      - {name: handwarmer, type: u8, doc: "1 = a handwarmer (Z + X), never scored"}
-      - {name: stage,      type: u8, doc: "internal StKind the game is played on"}
-      - {name: e1_port,    type: u8, doc: "CSS port 0-3 of entrant 1; NO_PORT = no claim"}
-      - {name: e2_port,    type: u8, doc: "CSS port 0-3 of entrant 2; NO_PORT = no claim"}
-      - {name: _pad,       type: u8, array: 3}
-      - {name: chars,      type: u8, array: 4, doc: "per port: external CharacterKind, NO_PORT = no human player"}
-      - {name: costumes,   type: u8, array: 4, doc: "per port: costume index, NO_PORT = no human player"}
-
   beamer_hello:
     doc: >-
       Beamer mailbox sector BEAMER_MB_HELLO, written by the beamer (a Slippi
-      Beamer running the LazyTO firmware), read by the Nintendont kernel when
-      lazyto_station.txt says transport=beamer. The mailbox is BEAMER_MB_SECTORS
+      Beamer running the LazyTO firmware with LAZYTO = true), read by the
+      Nintendont kernel about once a second. The mailbox is BEAMER_MB_SECTORS
       sectors right after the beamer's replay partition, served from the
       beamer's RAM: no filesystem covers them on either side. The kernel
       writes nothing to the mailbox until this sector carries the magic and
-      BEAMER_MB_VERSION. Not on the TCP wire.
-    size: 24
+      BEAMER_MB_VERSION. Offsets 0-17 and fw_build at 20 are where mailbox v1
+      had them, so a kernel can tell old firmware from no beamer. Not on the
+      TCP wire.
+    size: 32
     fields:
-      - {name: magic,      type: char, array: 8, doc: "LAZYTOMB"}
-      - {name: version,    type: u8,  doc: "BEAMER_MB_VERSION"}
-      - {name: flags,      type: u8,  doc: "beamer_flags bits"}
-      - {name: station,    type: u16, doc: "the station number on the beamer's screen (its button); for display"}
-      - {name: relay_ip,   type: u32, doc: "relay IPv4 address from the beacon, big-endian u32; 0 = unknown"}
-      - {name: relay_port, type: u16, doc: "relay TCP port; 0 = unknown"}
-      - {name: _pad,       type: u16}
-      - {name: fw_build,   type: u32, doc: "the beamer firmware's LazyTO build number"}
+      - {name: magic,        type: char, array: 8, doc: "LAZYTOMB"}
+      - {name: version,      type: u8,  doc: "BEAMER_MB_VERSION"}
+      - {name: flags,        type: u8,  doc: "beamer_flags bits"}
+      - {name: station,      type: u16, doc: "the station number on the beamer's screen; valid only with BF_STATION_SET (unset is a flag, never 0: Dolphin is station 0)"}
+      - {name: relay_ip,     type: u32, doc: "relay IPv4 address from the beacon, big-endian u32; 0 = unknown"}
+      - {name: relay_port,   type: u16, doc: "relay TCP port; 0 = unknown"}
+      - {name: wifi,         type: u8,  doc: "enum beamer_wifi"}
+      - {name: storage,      type: u8,  doc: "enum beamer_storage"}
+      - {name: fw_build,     type: u32, doc: "the beamer firmware's LazyTO build number (at least BEAMER_FW_MIN)"}
+      - {name: last_result,  type: u8,  doc: "enum beamer_result of the last mailbox round trip; 0 = BR_OK or none yet"}
+      - {name: _pad,         type: u8}
+      - {name: beacon_age_s, type: u16, doc: "seconds since the relay's beacon was last heard, saturating at 0xFFFF; valid with BF_RELAY"}
+      - {name: _pad2,        type: u32}
 
   beamer_req_hdr:
     doc: >-
       Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes,
-      exactly what the kernel would send on a TCP connection to the relay
-      (relay_auth + relay_hdr + payload). The beamer sends those bytes to the
-      relay once per seq (a repeated write of the same seq, for example a USB
-      retry, is not sent again) and answers in the response sectors.
+      relay_hdr + payload exactly as the relay is to get them after relay_auth.
+      The beamer refuses the request locally with BR_NO_STATION or
+      BR_NO_SECRET when it has no number or no secret; otherwise it sends
+      relay_auth (its LAZYTO-SECRET) + those bytes to the relay once per seq
+      (a repeated write of the same seq, for example a USB retry, is not sent
+      again) and answers in the response sectors.
     size: 12
     fields:
       - {name: magic, type: u8, array: 2, doc: "'M','Q'"}
       - {name: _pad,  type: u16}
       - {name: seq,   type: u32, doc: "nonzero; counts up by one per request. The beamer stays powered across Wii reboots and keeps its last response, so whenever the kernel finds the beamer (first valid beamer_hello after boot or a USB change) it starts one past the seq in the response sector (or at 1 if that is 0)"}
-      - {name: len,   type: u16, doc: "bytes after this header, at most BEAMER_SECTOR_SIZE - 12"}
+      - {name: len,   type: u16, doc: "bytes after this header (relay_hdr + payload), at most BEAMER_SECTOR_SIZE - 12"}
       - {name: _pad2, type: u16}
 
   beamer_resp_hdr:
@@ -498,16 +649,96 @@ structs:
   beamer_tele_hdr:
     doc: >-
       Start of mailbox sector BEAMER_MB_TELE (Wii to beamer): then len bytes of
-      one telemetry datagram (relay_auth + telemetry_hdr + payload), which the
-      beamer sends to the relay's TELEMETRY_PORT once per seq. Unanswered,
-      like the UDP datagram it replaces.
+      one telemetry datagram (telemetry_hdr + payload), which the beamer sends
+      as relay_auth + those bytes to the relay's TELEMETRY_PORT once per seq.
+      Unanswered. Dropped by a beamer without a number or a secret.
     size: 12
     fields:
       - {name: magic, type: u8, array: 2, doc: "'M','E'"}
       - {name: _pad,  type: u16}
       - {name: seq,   type: u32}
-      - {name: len,   type: u16}
+      - {name: len,   type: u16, doc: "bytes after this header, at most BEAMER_MB_TELE_SECTORS * BEAMER_SECTOR_SIZE - 12"}
       - {name: _pad2, type: u16}
+
+  sync_file:
+    doc: >-
+      FROZEN. One file in a beamer_sync_req: a Game_*.slp on the beamer's card
+      that has no ack. Listed in this order, oldest modified time first within
+      each group, until SYNC_MAX_FILES: files served this boot (hashed), then
+      SK_FINISHED, SK_INCOMPLETE, SK_LIVE.
+    size: 84
+    fields:
+      - {name: name,   type: char, array: SYNC_NAME_LEN, doc: "file name in the replay folder, without the folder (Game_0017AB12CD34_20261007T201502.slp)"}
+      - {name: bytes,  type: u32, doc: "file size in bytes, from the directory entry"}
+      - {name: mtime,  type: u32, doc: "FAT modified date << 16 | FAT modified time, from the directory entry"}
+      - {name: kind,   type: u8,  doc: "enum sync_kind"}
+      - {name: hashed, type: u8,  doc: "1 = sha256 is valid: the beamer served the whole file this boot and hashed its raw bytes (before gzip) while serving; 0 = sha256 is zero"}
+      - {name: _pad,   type: u16}
+      - {name: sha256, type: u8, array: SHA256_LEN}
+
+  beamer_sync_req:
+    doc: >-
+      FROZEN. CMD_BEAMER_SYNC request payload, sent by a beamer on its relay
+      link (relay_auth + relay_hdr with version BEAMER_SYNC_VERSION + this)
+      when no mailbox request is pending: after each served file, when it
+      finds a new file, and every 30 s. The relay learns the beamer's address
+      from the connection and answers beamer_sync_resp.
+    size: 100        # fixed part only; files[] follows
+    fields:
+      - {name: station_id,   type: u8,  array: SYNC_ID_LEN, doc: "the beamer's StationId (from its MAC)"}
+      - {name: archive_id,   type: u8,  array: SYNC_ID_LEN, doc: "the archive its ack table belongs to (the last verified beamer_sync_resp.archive_id); all zero = none yet"}
+      - {name: nonce,        type: u8,  array: SYNC_ID_LEN, doc: "fresh random bytes for this sync; the reply's hmac covers them"}
+      - {name: fw_build,     type: u32, doc: "as in beamer_hello"}
+      - {name: uptime_s,     type: u32, doc: "seconds since this boot (\"not unplugged since\")"}
+      - {name: free_mb,      type: u32, doc: "free space on the card in MiB, counted from the FAT (not FSInfo)"}
+      - {name: card_mb,      type: u32, doc: "size of the replay partition in MiB"}
+      - {name: used_mb,      type: u32, doc: "MiB held by Game_*.slp files; card_mb - free_mb - used_mb estimates clusters leaked by interrupted recordings"}
+      - {name: station,      type: u16, doc: "the station number; valid with SF_STATION_SET"}
+      - {name: http_port,    type: u16, doc: "the beamer's HTTP port, where the relay downloads files"}
+      - {name: on_card,      type: u16, doc: "Game_*.slp files on the card, all kinds, saturating at 0xFFFF"}
+      - {name: to_collect,   type: u16, doc: "files without an ack"}
+      - {name: to_erase,     type: u16, doc: "files with an ack: erased at the next cold boot"}
+      - {name: empty,        type: u16, doc: "0-byte Game_*.slp entries (erased at the next cold boot without an ack)"}
+      - {name: incomplete,   type: u16, doc: "files of kind SK_INCOMPLETE"}
+      - {name: acks,         type: u16, doc: "ack records stored (at most 1024)"}
+      - {name: erased,       type: u16, doc: "erase report of this boot (0 unless SF_COLD_BOOT): acked files deleted"}
+      - {name: erased_empty, type: u16, doc: "0-byte entries deleted"}
+      - {name: erase_ms,     type: u16, doc: "milliseconds the erase took (budget 4000)"}
+      - {name: erase_left,   type: u16, doc: "acked files the budget left for the next cold boot"}
+      - {name: flags,        type: u8,  doc: "beamer_sync_flags bits"}
+      - {name: storage,      type: u8,  doc: "enum beamer_storage"}
+      - {name: last_result,  type: u8,  doc: "enum beamer_result of the last mailbox round trip"}
+      - {name: rssi,         type: u8,  doc: "Wi-Fi signal as -dBm (67 = -67 dBm); 0 = unknown"}
+      - {name: file_count,   type: u8,  doc: "sync_file entries following, at most SYNC_MAX_FILES"}
+      - {name: _pad,         type: u8, array: 3}
+      - {name: files,        type: sync_file, array: file_count, max: SYNC_MAX_FILES}
+
+  sync_answer:
+    doc: "FROZEN. The relay's answer about files[i] of the request, at answers[i]."
+    size: 36
+    fields:
+      - {name: answer, type: u8, doc: "enum sync_answer_kind"}
+      - {name: _pad,   type: u8, array: 3}
+      - {name: sha256, type: u8, array: SHA256_LEN, doc: "with SA_HELD: the SHA-256 of the laptop's stored copy; zero otherwise"}
+
+  beamer_sync_resp:
+    doc: >-
+      FROZEN. CMD_BEAMER_SYNC response payload after relay_resp (ST_OK only).
+      hmac = HMAC-SHA256 keyed with the secret's SECRET_LEN bytes exactly as
+      relay_auth carries them (NUL-padded), over the request's nonce (16
+      bytes), then the request's station_id (16 bytes), then this payload
+      from archive_id to its end (20 + 36 * answer_count bytes). A beamer
+      drops a reply whose hmac does not verify, whose answer_count differs
+      from its file_count, or whose archive_id is all zero. A verified reply
+      with another archive_id than the ack table's drops every ack and adopts
+      the new id before its answers are applied.
+    size: 52         # fixed part only; answers[] follows
+    fields:
+      - {name: hmac,         type: u8, array: SHA256_LEN}
+      - {name: archive_id,   type: u8, array: SYNC_ID_LEN, doc: "the laptop's archive (archive.json in its archive folder); never all zero"}
+      - {name: answer_count, type: u8, doc: "equals the request's file_count"}
+      - {name: _pad,         type: u8, array: 3}
+      - {name: answers,      type: sync_answer, array: answer_count, max: SYNC_MAX_FILES}
 
 # Which struct follows relay_hdr in a request, and which struct (if any)
 # follows relay_resp in an ST_OK response.
@@ -517,4 +748,4 @@ messages:
   CMD_REPORT_SCORE: {request: report_score_req, response_payload: null}
   CMD_END_SET:      {request: end_set_req,      response_payload: null}
   CMD_ABANDON_SET:  {request: abandon_set_req,  response_payload: null}
-  CMD_GAME_START:   {request: game_start_req,   response_payload: null}
+  CMD_BEAMER_SYNC:  {request: beamer_sync_req,  response_payload: beamer_sync_resp}

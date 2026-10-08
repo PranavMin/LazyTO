@@ -9,9 +9,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { RelayStatus, RelayCmd, MAX_SETS, encodeStartSetReq } from '../generated/wire.js';
+import {
+  BEAMER_SYNC_VERSION,
+  PROTO_VERSION,
+  RelayStatus,
+  RelayCmd,
+  MAX_SETS,
+  encodeBeamerSyncReq,
+  encodeStartSetReq,
+} from '../generated/wire.js';
 import { entrant, FIXTURE_STREAM_ID, type FakeSet } from './fake-startgg.js';
-import { rawRequest, game, gameStartReq } from './wii-client.js';
+import { rawRequest, game } from './wii-client.js';
 import { startHarness, STREAM_STATION } from './harness.js';
 
 const STREAM_ID = FIXTURE_STREAM_ID;
@@ -39,7 +47,7 @@ test('framing and versioning', async (t) => {
 
   await t.test('bad protocol version gets ST_BAD_VERSION', async () => {
     const r = await rawRequest(env.port, 3, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
-      version: 2,
+      version: PROTO_VERSION + 1,
     });
     assert.equal(r.resp.status, RelayStatus.ST_BAD_VERSION);
     assert.equal(r.hdr.cmd, RelayCmd.CMD_LIST_SETS);
@@ -498,30 +506,77 @@ test('close() drops a connection that never sends its request', { timeout: 5000 
   await dropped;
 });
 
-// ---- CMD_GAME_START on the wire ----
+// ---- protocol v2: replay ids, the retired CMD_GAME_START, the beamer sync ----
 
-test("CMD_GAME_START reaches the archive for the station's own set only", async (t) => {
+test("a game's ports and replay id reach the archive with the report", async (t) => {
   const env = await setup();
   t.after(env.close);
   const wii = env.wii(3);
-  assert.equal((await wii.startSet(107949994)).resp.status, RelayStatus.ST_OK);
-  const ok = await wii.gameStart(gameStartReq(107949994, 1, { e1: 2, e2: 0, c1: 9, c2: 2 }));
-  assert.equal(ok.resp.status, RelayStatus.ST_OK);
-  assert.equal(ok.resp.msg, 'game 1');
-  assert.equal(ok.hdr.cmd, RelayCmd.CMD_GAME_START);
-  const other = await env
-    .wii(4)
-    .gameStart(gameStartReq(107949994, 1, { e1: 2, e2: 0, c1: 9, c2: 2 }));
-  assert.equal(other.resp.status, RelayStatus.ST_SET_NOT_FOUND);
+  assert.equal((await wii.startSet(SET)).resp.status, RelayStatus.ST_OK);
+  const g = game(1, 9, 2, 0x1f, [2, 0], [0, 0], { p1_port: 2, p2_port: 0, replay_id: 1791403502 });
+  assert.equal((await wii.reportScore(SET, [g])).resp.status, RelayStatus.ST_OK);
   assert.deepEqual(
-    env
-      .auditEvents()
-      .filter((e) => e.type === 'game_start')
-      .map((e) => [e.station, e.game]),
-    [[3, 1]],
+    env.ev.archive.status().inProgress.map((s) => [s.setId, s.station, s.games]),
+    [[SET, 3, 1]],
   );
-  assert.deepEqual(
-    env.ev.archive.status().inProgress.map((s) => [s.setId, s.station, s.starts]),
-    [[107949994, 3, 1]],
-  );
+  const score = env.auditEvents().find((e) => e.type === 'score');
+  assert.deepEqual((score?.games as { replay_id: number; p1_port: number }[])[0], g);
+});
+
+test('CMD_GAME_START (6) is retired: an unknown command', async () => {
+  const env = await setup();
+  try {
+    const r = await rawRequest(env.port, 3, 6, new Uint8Array(20));
+    assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
+    assert.equal(r.resp.msg, 'unknown command');
+  } finally {
+    await env.close();
+  }
+});
+
+test('CMD_BEAMER_SYNC speaks BEAMER_SYNC_VERSION, not PROTO_VERSION, and makes no station row', async () => {
+  const env = await setup();
+  try {
+    const sync = encodeBeamerSyncReq({
+      station_id: new Uint8Array(16).fill(0x11),
+      archive_id: new Uint8Array(16),
+      nonce: new Uint8Array(16).fill(0x22),
+      fw_build: 2,
+      uptime_s: 60,
+      free_mb: 3000,
+      card_mb: 3800,
+      used_mb: 700,
+      station: 3,
+      http_port: 80,
+      on_card: 0,
+      to_collect: 0,
+      to_erase: 0,
+      empty: 0,
+      incomplete: 0,
+      acks: 0,
+      erased: 0,
+      erased_empty: 0,
+      erase_ms: 0,
+      erase_left: 0,
+      flags: 1,
+      storage: 0,
+      last_result: 0,
+      rssi: 60,
+      files: [],
+    });
+    const ok = await rawRequest(env.port, 3, RelayCmd.CMD_BEAMER_SYNC, sync, {
+      version: BEAMER_SYNC_VERSION,
+    });
+    assert.equal(ok.hdr.version, BEAMER_SYNC_VERSION, 'the reply carries the sync version');
+    assert.equal(ok.hdr.cmd, RelayCmd.CMD_BEAMER_SYNC);
+    assert.equal(ok.resp.status, RelayStatus.ST_INTERNAL);
+    assert.equal(ok.resp.msg, 'beamer sync not handled yet');
+    const v2 = await rawRequest(env.port, 3, RelayCmd.CMD_BEAMER_SYNC, sync, {
+      version: PROTO_VERSION,
+    });
+    assert.equal(v2.resp.status, RelayStatus.ST_BAD_VERSION);
+    assert.equal(env.state.lastAction(3), undefined, 'a beamer sync is not a station action');
+  } finally {
+    await env.close();
+  }
 });

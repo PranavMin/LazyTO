@@ -13,9 +13,7 @@ import {
   decodeListSetsResp,
   decodeRelayHdr,
   decodeRelayResp,
-  encodeGameStartReq,
   NO_PORT,
-  type GameStartReq,
   encodeEndSetReq,
   encodeRelayHdr,
   encodeRelayAuth,
@@ -120,48 +118,12 @@ export class WiiClient {
       encodeEndSetReq({ set_id: setId, game_count: games.length, games: padGames(games) }),
     );
   }
-
-  gameStart(req: GameStartReq): Promise<WireReply> {
-    return this.request(RelayCmd.CMD_GAME_START, encodeGameStartReq(req));
-  }
-}
-
-/** A game_start_req: entrant 1 on port e1 with c1, entrant 2 on e2 with c2 (costume 0 each); other ports empty. */
-export function gameStartReq(
-  setId: number,
-  game: number,
-  opts: {
-    handwarmer?: boolean;
-    stage?: number;
-    e1?: number;
-    e2?: number;
-    c1?: number;
-    c2?: number;
-  } = {},
-): GameStartReq {
-  const e1 = opts.e1 ?? 0;
-  const e2 = opts.e2 ?? 1;
-  const chars = new Uint8Array([NO_PORT, NO_PORT, NO_PORT, NO_PORT]);
-  const costumes = new Uint8Array([NO_PORT, NO_PORT, NO_PORT, NO_PORT]);
-  chars[e1] = opts.c1 ?? 2;
-  chars[e2] = opts.c2 ?? 9;
-  costumes[e1] = 0;
-  costumes[e2] = 0;
-  return {
-    set_id: setId,
-    game,
-    handwarmer: opts.handwarmer ? 1 : 0,
-    stage: opts.stage ?? 0x1f,
-    e1_port: e1,
-    e2_port: e2,
-    chars,
-    costumes,
-  };
 }
 
 // Defaults are what an auto-scored game carries: Fox (ext 2) vs Marth (ext 9)
 // on Battlefield (StKind 0x1F). A hand-scored game sends 0xFF, 0xFF, 0
-// (0 is Captain Falcon on the external character scale).
+// (0 is Captain Falcon on the external character scale). Ports and the
+// replay id default to unknown and none; `more` sets them.
 export function game(
   winnerSlot: 1 | 2,
   p1Char = 2,
@@ -169,6 +131,7 @@ export function game(
   stage = 0x1f,
   stocks: [number, number] = [0xff, 0xff],
   costumes: [number, number] = [0xff, 0xff],
+  more: Partial<Pick<GameResult, 'p1_port' | 'p2_port' | 'replay_id'>> = {},
 ): GameResult {
   return {
     winner_slot: winnerSlot,
@@ -179,6 +142,10 @@ export function game(
     p2_stocks: stocks[1],
     p1_costume: costumes[0],
     p2_costume: costumes[1],
+    p1_port: NO_PORT,
+    p2_port: NO_PORT,
+    replay_id: 0,
+    ...more,
   };
 }
 
@@ -194,6 +161,9 @@ function padGames(games: GameResult[]): GameResult[] {
       p2_stocks: 0,
       p1_costume: 0,
       p2_costume: 0,
+      p1_port: 0,
+      p2_port: 0,
+      replay_id: 0,
     });
   return out;
 }

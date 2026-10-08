@@ -8,9 +8,6 @@ export class RecordingArchive implements ArchiveHooks {
   setStarted(...args: unknown[]): void {
     this.calls.push({ hook: 'setStarted', args });
   }
-  gameStarted(...args: unknown[]): void {
-    this.calls.push({ hook: 'gameStarted', args });
-  }
   scored(...args: unknown[]): void {
     this.calls.push({ hook: 'scored', args });
   }

@@ -71,7 +71,9 @@ test('a beacon request (relay_beacon with tcp_port 0) is answered with the relay
   await t.start();
   try {
     const got = new Promise<Buffer>((resolve) => station.once('message', (m) => resolve(m)));
-    const request = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // tcp_port 0 = please send it
+    // tcp_port 0 = please send it. From a beamer built against protocol v1:
+    // the beacon is frozen, so its version is never checked.
+    const request = new Uint8Array([MAGIC_0, 0x54, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     await new Promise<void>((resolve, reject) =>
       station.send(request, t.address().port, '127.0.0.1', (e) => (e ? reject(e) : resolve())),
     );

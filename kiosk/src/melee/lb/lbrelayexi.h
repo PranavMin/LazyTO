@@ -20,8 +20,9 @@
 /* Response buffer size fixed by the design (4 KB, EXI-DMA sized). */
 #define LB_RELAY_EXI_BUF_SIZE 4096
 
-/* Largest request payload in the protocol (report_score_req/end_set_req). */
-#define LB_RELAY_EXI_MAX_PAYLOAD 48 /* report_score_req / end_set_req, 8-byte game_result */
+/* Largest request payload in the protocol (report_score_req/end_set_req,
+ * 16-byte game_result); the kernel's staging buffer is the same constant. */
+#define LB_RELAY_EXI_MAX_PAYLOAD EXI_PAYLOAD_MAX
 
 /* What one EXI_RELAY_POLL read returns: the host-filled exi_poll_hdr (state,
  * this station's number, the relay's address - protocol.yaml), then the
@@ -36,12 +37,16 @@ struct lbRelayExi_PollBuf {
 
 RELAY_STATIC_ASSERT(sizeof(struct lbRelayExi_PollBuf) == LB_RELAY_EXI_BUF_SIZE,
                     lb_poll_buf_size);
-RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, hdr) == 12,
+RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, hdr) == 16,
                     lb_poll_buf_hdr);
-RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, resp) == 20,
+RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, resp) == 24,
                     lb_poll_buf_resp);
-RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, payload) == 52,
+RELAY_STATIC_ASSERT(offsetof(struct lbRelayExi_PollBuf, payload) == 56,
                     lb_poll_buf_payload);
+RELAY_STATIC_ASSERT(sizeof(struct lbRelayExi_PollBuf) -
+                            sizeof(struct exi_poll_hdr) ==
+                        RELAY_REPLY_MAX,
+                    lb_poll_buf_reply_max);
 
 /* Start a request: writes header + payload to the device and marks it in
  * flight. One request in flight at a time; returns false (without touching

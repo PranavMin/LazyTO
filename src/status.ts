@@ -311,7 +311,7 @@ function renderArchive(v: StatusView): string {
   const inProgress = as.inProgress
     .map(
       (s) =>
-        `set ${s.setId} on station ${s.station}: ${s.bound}/${s.starts} game(s) matched to a replay${s.ended ? ' — ended, writing the archive' : ''}`,
+        `set ${s.setId} on station ${s.station}: ${s.bound}/${s.games} game(s) matched to a replay${s.ended ? ' — ended, writing the archive' : ''}`,
     )
     .map((l) => `<p class="muted">${escapeHtml(l)}</p>`)
     .join('');

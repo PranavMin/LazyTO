@@ -69,10 +69,9 @@ enum mnTourney_State {
 
 #define TM_TIMEOUT_FRAMES (5 * 60)
 #define TM_SEARCH_FRAMES (10 * 60) /* beacons come every 2 s */
-/* How long to wait for the host's Wi-Fi join (PF_NET_JOINING) before calling
- * it a failure. The kernel brings the network up on its own thread since
- * Nintendont host build 2 (a stuck join used to hang the whole boot); a join
- * normally takes 5-15 s, one that is still going after a minute never ends. */
+/* How long to wait for the beamer's Wi-Fi join (exi_poll_hdr.beamer_wifi
+ * WIFI_JOINING) before calling it a failure: a join normally takes 5-15 s,
+ * one that is still going after a minute never ends. */
 #define TM_JOIN_FRAMES (60 * 60)
 /* Largest row count that fits the 4 KB poll buffer alongside the headers. */
 #define TM_MAX_SETS                                                          \
@@ -181,7 +180,7 @@ static u16 tm_top;    /* first visible slot (headers count as slots) */
 static u16 tm_chosen; /* tm_sets index picked on the confirm screen */
 static char tm_filter; /* 0 = all sets, else 'A'..'Z' */
 static u32 tm_timeout;
-static u16 tm_join_frames; /* frames spent on JOINING THE WI-FI this search */
+static u16 tm_join_frames; /* frames spent waiting for the beamer this search */
 static u8 tm_retry_cmd; /* relay_cmd the error screen's A retries */
 static char tm_errmsg[MSG_LEN + 1];
 static bool tm_err_link; /* the error is ours/transport, not the relay's answer */
@@ -459,7 +458,7 @@ static void selectSet(u32 set_id)
 }
 
 /* The relay refused us over the shared secret (relay_status ST_BAD_SECRET,
- * decisions.md R15): lazyto_station.txt's secret= does not match the relay's. */
+ * decisions.md R16): the beamer's LAZYTO-SECRET does not match the relay's. */
 static bool errIsSecret(void)
 {
     return !tm_err_link && tm_err_status == ST_BAD_SECRET;
@@ -833,21 +832,25 @@ static void panePill(f32 y, int best_of)
     lineC(L_PANE_X + 7.0f, y, 0.55f, &c_white, buf);
 }
 
-/* The host's own verdict (exi_poll_hdr.flags): a card or network problem it
- * knows about before any beacon could arrive. 0 on Dolphin. */
-static bool hostNoNetwork(void)
+/* The host's own verdict (exi_poll_hdr, from the beamer's hello): a beamer
+ * problem it knows about before any beacon could arrive. 0 on Dolphin. The
+ * kernel says more (no_beamer_reason, beamer_storage, last_fail) than these
+ * texts show yet (docs/protocol-v2.md). */
+static bool hostNoBeamer(void)
 {
-    return (tm_ph.flags & PF_NO_NETWORK) != 0;
+    return (tm_ph.flags & PF_NO_BEAMER) != 0;
 }
 
-/* Network is on but the host has not finished joining the Wi-Fi yet. */
-static bool hostNetJoining(void)
+/* The beamer has no station number or no secret. */
+static bool hostBeamerUnset(void)
 {
-    return (tm_ph.flags & PF_NET_JOINING) != 0;
+    return (tm_ph.flags & (PF_NO_STATION | PF_NO_SECRET)) != 0;
 }
-static bool hostNoCard(void)
+
+/* The beamer has not finished joining the Wi-Fi yet. */
+static bool hostWifiJoining(void)
 {
-    return (tm_ph.flags & (PF_NO_CFG | PF_NO_SECRET)) != 0;
+    return !hostNoBeamer() && tm_ph.beamer_wifi == WIFI_JOINING;
 }
 
 /* STATION n / RELAY / a.b.c.d from the poll header the host fills. */
@@ -939,9 +942,9 @@ static void drawPane(void)
     case TM_ERROR:
         paneWhereAmI(126.0f);
         dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_red,
-                 hostNetJoining()    ? "NO WI-FI"
-                 : hostNoNetwork()   ? "NET OFF"
-                 : hostNoCard()      ? "BAD CARD"
+                 hostNoBeamer()        ? "NO BEAMER"
+                 : hostBeamerUnset()   ? "NOT SET UP"
+                 : hostWifiJoining()   ? "NO WI-FI"
                  : tm_ph.relay_ip == 0 ? "NOT FOUND"
                  : tm_err_link       ? "NO LINK"
                  : errIsSecret()     ? "BAD SECRET"
@@ -987,7 +990,7 @@ static void redraw(void)
     switch (tm_state) {
     case TM_SEARCHING:
         centredAt(L_LIST_CX, 214.0f, 0.62f, &c_dim,
-                  hostNetJoining() ? "JOINING THE WI-FI" : "LOOKING FOR THE RELAY");
+                  hostWifiJoining() ? "JOINING THE WI-FI" : "LOOKING FOR THE RELAY");
         pulse(L_LIST_CX, 250.0f, 0.62f);
         centredAt(L_HINT_CX, L_HINT_Y, L_HINT_S, &c_white, "#B MENU");
         break;
@@ -1022,9 +1025,9 @@ static void redraw(void)
         break;
     case TM_ERROR:
         lineC(L_TEXT_X, 150.0f, 0.62f, &c_red,
-              hostNetJoining()    ? "THIS WII COULD NOT JOIN THE WI-FI"
-              : hostNoNetwork()   ? "NETWORK IS OFF IN THE LOADER"
-              : hostNoCard()      ? "THIS CARD IS NOT SET UP"
+              hostNoBeamer()        ? "NO LAZYTO BEAMER ON USB"
+              : hostBeamerUnset()   ? "THIS BEAMER IS NOT SET UP"
+              : hostWifiJoining()   ? "THE BEAMER COULD NOT JOIN WI-FI"
               : tm_ph.relay_ip == 0 ? "NO RELAY FOUND"
               : tm_err_link       ? "NO LINK TO THE RELAY"
               : errIsSecret()     ? "RELAY SECRET MISMATCH"
@@ -1037,12 +1040,14 @@ static void redraw(void)
          * into a 128-byte stack buffer without a bound, and a space after a
          * letter costs 7 bytes there. */
         lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim,
-              hostNetJoining()    ? "POWER CYCLE, CHECK THE ROUTER"
-              : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER"
-              : hostNoCard()      ? "UNZIP THE STATION ZIP AGAIN"
-              : tm_ph.relay_ip == 0 ? "IS THE RELAY ON THIS WI-FI?"
-              : errIsSecret()     ? "CHECK THE SECRET ON THIS CARD"
-                                  : "TELL THE TO IF THIS REPEATS");
+              hostNoBeamer() ? "PLUG THE BEAMER INTO THIS WII"
+              : hostBeamerUnset()
+                  ? ((tm_ph.flags & PF_NO_STATION) ? "PRESS THE BEAMER BUTTON"
+                                                   : "SET UP THIS BEAMER AGAIN")
+              : hostWifiJoining()   ? "POWER CYCLE, CHECK THE ROUTER"
+              : tm_ph.relay_ip == 0 ? "IS THE LAPTOP ON THIS WI-FI?"
+              : errIsSecret()       ? "THE BEAMER HAS ANOTHER SECRET"
+                                    : "TELL THE TO IF THIS REPEATS");
         centredAt(L_HINT_CX, L_HINT_Y, L_HINT_S, &c_white,
                   "#A RETRY   #B BACK");
         break;
@@ -1126,7 +1131,7 @@ static void sendStart(void)
     struct start_set_req req;
     req.set_id = tm_sets[tm_chosen].set_id;
     /* Unused by the relay, which picks the stream station itself. The kernel
-     * stamps hdr.station from lazyto_station.txt. */
+     * stamps hdr.station from the beamer's hello. */
     req.stream = 0;
     req._pad[0] = req._pad[1] = req._pad[2] = 0;
 
@@ -1344,11 +1349,18 @@ void mnTourney_Think(HSD_GObj* gobj)
         int r = peekRelay();
         if (r < 0) {
             fail("EXI ERROR");
+        } else if (hostNoBeamer() && tm_ph.no_beamer_reason != NB_STARTING) {
+            /* No beamer that can ever answer: say so now. */
+            fail("NO LAZYTO BEAMER ON USB");
+        } else if (hostBeamerUnset()) {
+            fail((tm_ph.flags & PF_NO_STATION) ? "THIS BEAMER HAS NO NUMBER"
+                                               : "NO SECRET ON THE BEAMER");
         } else if (r > 0) {
             sendList();
-        } else if (hostNetJoining()) {
-            /* The host is still joining the Wi-Fi (its network comes up on
-             * its own thread): wait, keep B working, and only give up after
+        } else if (hostNoBeamer() || hostWifiJoining()) {
+            /* The beamer may still come up by itself: it is starting (the
+             * kernel says so for about 45 s after boot or a USB change) or
+             * joining the Wi-Fi. Wait, keep B working, and only give up after
              * TM_JOIN_FRAMES. The beacon timeout below starts once it is on. */
             if (buttons & MenuInput_Back) {
                 sfxBack();
@@ -1356,16 +1368,9 @@ void mnTourney_Think(HSD_GObj* gobj)
                 return;
             }
             if (++tm_join_frames > TM_JOIN_FRAMES) {
-                fail("NO WI-FI AFTER 60 SECONDS");
+                fail(hostNoBeamer() ? "NO BEAMER AFTER 60 SECONDS"
+                                    : "NO WI-FI AFTER 60 SECONDS");
             }
-        } else if (hostNoNetwork()) {
-            /* The loader's Network option is off: no beacon will ever come,
-             * say so now. */
-            fail("NETWORK IS OFF IN THE LOADER");
-        } else if (hostNoCard()) {
-            /* The font has no underscore, so the file is "the station file". */
-            fail((tm_ph.flags & PF_NO_CFG) ? "NO STATION FILE ON THE CARD"
-                                           : "NO SECRET IN THE STATION FILE");
         } else if (buttons & MenuInput_Back) {
             sfxBack();
             exitToMainMenu();

@@ -209,12 +209,12 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 ## Wire protocol
 
-[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary.
+[`protocol.yaml`](../protocol.yaml) is the source of truth (version 2, MIT). `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary; [protocol-v2.md](protocol-v2.md) is the implementer's guide for each part, the beamer firmware included.
 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.
 - Every message is a fixed-size struct with a version byte. No JSON, no varints.
-- The host writes a 20-byte `relay_auth` (`'M','K'`, pad, 16-byte secret) before each request. The game never sees it. A missing or wrong secret gets `ST_BAD_SECRET` and nothing happens.
+- The beamer writes a 20-byte `relay_auth` (`'M','K'`, pad, 16-byte secret from its `CONFIG/config.txt`) before each request it forwards. The Wii never holds the secret. A missing or wrong secret gets `ST_BAD_SECRET` and nothing happens.
 - Every request and response starts with an 8-byte `relay_hdr` (`'M','T'`, version, command, station, length). Every response then has a 32-byte `relay_resp` (status, 30-character message for the menu).
 
 | Command | Request | Relay does |
@@ -224,19 +224,23 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
-| `CMD_GAME_START` | set id, game number, handwarmer, stage, per-port characters and costumes, entrants' ports | Remembers it for the set archive; no start.gg call (experimental, [beamer.md](beamer.md)) |
+| `CMD_BEAMER_SYNC` | a beamer's inventory and ack questions (frozen layout, its own version 1) | Not handled yet: `ST_INTERNAL`, so no beamer acks or erases anything ([protocol-v2.md](protocol-v2.md)) |
 
-The game list is up to five 8-byte `game_result` records: winner slot, both characters, stage, and each player's stocks and costume. Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected.
+Command 6 (`CMD_GAME_START`, v1) is retired.
 
-The game always sends station 0. The host stamps it from `lazyto_station.txt`, and the relay trusts what it receives.
+The game list is up to five 16-byte `game_result` records: winner slot, both characters, stage, each player's stocks and costume, both entrants' CSS ports and the replay id (the match's Slippi `gameStartTime`, 0 = no replay). Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected; both stocks 0xFF send no per-game score.
+
+The game always sends station 0. The kernel stamps it from the beamer's number (its hello), and the relay trusts what it receives.
 
 UDP messages (not on the TCP wire):
 
 | Message | Port | Direction |
 |---------|------|-----------|
 | `relay_beacon` (12 bytes) | 29471 | relay broadcasts every 2 s to each interface's directed broadcast address |
-| beacon request (a `relay_beacon` with zero port and event) | 29472 | station to relay; the relay answers with a unicast beacon |
-| `relay_auth` + `telemetry_hdr` + payload | 29472 | station to relay; never answered |
+| beacon request (a `relay_beacon` with zero port and event) | 29472 | beamer to relay; the relay answers with a unicast beacon, whatever the request's version |
+| `relay_auth` + `telemetry_hdr` + payload | 29472 | beamer to relay, for its Wii; never answered |
+
+The beacon, `relay_auth`, `relay_hdr`, `relay_resp` and the sync are frozen: beamers check the beacon by length and magic only, never by version.
 
 ### Status codes
 
@@ -251,6 +255,7 @@ UDP messages (not on the TCP wire):
 | `ST_RATE_LIMITED` | No rate-limit token within 2 s |
 | `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no station file") |
 | `ST_BAD_SECRET` | `relay_auth` missing or wrong |
+| `ST_DUP_STATION` | Another beamer already plays as this station number (not sent yet) |
 
 ## Relay internals
 

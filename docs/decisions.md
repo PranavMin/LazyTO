@@ -70,6 +70,24 @@ The relay and the Wii files can never come from different commits, and the loade
 
 A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 
+### The protocol is MIT
+
+**`protocol.yaml` and the files generated from it (`generated/wire.ts`, both `relay_proto.h`) are MIT. The rest of LazyTO stays GPL-2.0-only.** (2026-10-07, redesign D18)
+
+The LazyTO beamer firmware is a fork of an MIT project built on Apache-2.0 ESP-IDF, and it compiles the generated header. A GPL header would have pulled the firmware under the GPL. `tools/gen_protocol.py` writes the SPDX line and the copyright into every generated file.
+
+### What a beamer parses is frozen
+
+**The beacon, `relay_auth`, `relay_hdr`, `relay_resp` and the beamer sync never change with `PROTO_VERSION`. A beamer checks the beacon by length and magic, never its version, and the sync carries its own version (`BEAMER_SYNC_VERSION`).** (2026-10-07, protocol v2)
+
+Beamers have no over-the-air update. With a version check, every protocol bump would mean reflashing every dongle by hand. The mailbox between the Wii and the beamer is versioned instead (`BEAMER_MB_VERSION`) and changes only with a firmware update; the kernel names old and new firmware. `test/protocol-frozen.test.ts` pins the frozen bytes.
+
+### Replays are named by the game
+
+**Each reported game carries its replay's id, the match's Slippi `gameStartTime`, which names the file on the beamer. `CMD_GAME_START` and the content matcher are gone.** (2026-10-07, protocol v2)
+
+The matcher bound each replay to the earliest game start with the same ports, characters, costumes and stage, and it needed a fire-and-forget request on every match's first frame. With only set games recorded, game 1's replay would have bound to an unrecorded handwarmer's game start. The kiosk learns the id from the record gate, a 64-byte slot it shares with the kernel ([protocol-v2.md](protocol-v2.md)). The content check stays, as a check that flags a mismatch.
+
 ## Risks and questions (R1-R17)
 
 ### R1: assignStream

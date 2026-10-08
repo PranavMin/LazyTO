@@ -1,15 +1,18 @@
 // tcp.ts -- the Wii-facing TCP server (architecture.md (Wire protocol, Error handling)). One request
-// per connection: read relay_hdr + payload, dispatch by cmd, write
+// per connection: read relay_auth + relay_hdr + payload, dispatch by cmd, write
 // relay_hdr + relay_resp (+ payload), close. All business logic for the
-// five commands lives here; upstream I/O goes through startgg.ts, the set
+// set commands lives here; upstream I/O goes through startgg.ts, the set
 // list through cache.ts, station claims through state.ts. Every request,
-// response, and upstream call is audited.
+// response, and upstream call is audited -- except CMD_BEAMER_SYNC, a
+// beamer's own sync (docs/protocol-v2.md), whose header carries
+// BEAMER_SYNC_VERSION instead of PROTO_VERSION.
 
 import { createServer, type Server, type Socket, type AddressInfo } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import {
   AUTH_MAGIC_0,
   AUTH_MAGIC_1,
+  BEAMER_SYNC_VERSION,
   MAGIC_0,
   MAGIC_1,
   MAX_SETS,
@@ -23,12 +26,10 @@ import {
   decodeStartSetReq,
   decodeReportScoreReq,
   decodeEndSetReq,
-  decodeGameStartReq,
   encodeRelayHdr,
   encodeRelayResp,
   encodeListSetsResp,
   type GameResult,
-  type GameStartReq,
   type SetEntry,
 } from '../generated/wire.js';
 import type { SetCache, CachedSet } from './cache.js';
@@ -45,7 +46,6 @@ export interface AuditSink {
 /** The set archive (archive.ts), told about each successful set action. */
 export interface ArchiveHooks {
   setStarted(station: number, set: CachedSet): void;
-  gameStarted(station: number, req: GameStartReq): void;
   scored(setId: number, games: GameResult[]): void;
   setEnded(setId: number, games: GameResult[]): void;
   setAbandoned(setId: number): void;
@@ -166,14 +166,13 @@ export class RelayTcpServer {
       handled = true;
       this.waiting.delete(socket);
       const secretOk = timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
-      const pending: Promise<Reply> = secretOk
-        ? this.handle(
-            hdr.cmd,
-            hdr.version,
-            hdr.station,
-            buf.subarray(payloadOff, payloadOff + hdr.len),
-          )
-        : Promise.resolve(this.refuse(hdr.cmd, hdr.station, socket.remoteAddress ?? '?'));
+      const payload = buf.subarray(payloadOff, payloadOff + hdr.len);
+      const from = socket.remoteAddress ?? '?';
+      const pending: Promise<Reply> = !secretOk
+        ? Promise.resolve(this.refuse(hdr.cmd, hdr.station, from))
+        : hdr.cmd === RelayCmd.CMD_BEAMER_SYNC
+          ? Promise.resolve(this.beamerSync(hdr.version))
+          : this.handle(hdr.cmd, hdr.version, hdr.station, payload);
       void pending
         .then((reply) => {
           const payload = reply.payload ?? new Uint8Array(0);
@@ -181,7 +180,7 @@ export class RelayTcpServer {
           const out = Buffer.concat([
             encodeRelayHdr({
               magic: new Uint8Array([MAGIC_0, MAGIC_1]),
-              version: PROTO_VERSION,
+              version: hdr.cmd === RelayCmd.CMD_BEAMER_SYNC ? BEAMER_SYNC_VERSION : PROTO_VERSION,
               cmd: hdr.cmd,
               station: hdr.station,
               len: resp.length + payload.length,
@@ -193,6 +192,21 @@ export class RelayTcpServer {
         })
         .catch(() => socket.destroy()); // handle() never throws; belt and braces
     });
+  }
+
+  // ---- CMD_BEAMER_SYNC ----
+
+  /**
+   * A beamer's own sync (protocol.yaml beamer_sync_req). Its layout is frozen
+   * under BEAMER_SYNC_VERSION, never PROTO_VERSION. Collection is not built
+   * yet: the answer carries no beamer_sync_resp, so the beamer acks and
+   * erases nothing. It touches no station row.
+   */
+  private beamerSync(version: number): Reply {
+    if (version !== BEAMER_SYNC_VERSION) {
+      return { status: RelayStatus.ST_BAD_VERSION, msg: `sync speaks v${BEAMER_SYNC_VERSION}` };
+    }
+    return { status: RelayStatus.ST_INTERNAL, msg: 'beamer sync not handled yet' };
   }
 
   // ---- refused: wrong secret ----
@@ -240,9 +254,6 @@ export class RelayTcpServer {
             break;
           case RelayCmd.CMD_END_SET:
             reply = await this.endSet(station, decodeEndSetReq(payload));
-            break;
-          case RelayCmd.CMD_GAME_START:
-            reply = this.gameStart(station, decodeGameStartReq(payload));
             break;
           default:
             reply = { status: RelayStatus.ST_INTERNAL, msg: 'unknown command' };
@@ -483,30 +494,6 @@ export class RelayTcpServer {
     audit.record({ type: 'release', station, setId: req.set_id, reason: 'end_set', winnerId });
     this.deps.archive.setEnded(req.set_id, games.list);
     return { status: RelayStatus.ST_OK, msg: `final ${scoreText(games.list)}` };
-  }
-
-  // ---- CMD_GAME_START ----
-
-  /** A game of this station's set started: remember who plays where, for the set archive. No upstream call. */
-  private gameStart(station: number, req: GameStartReq): Reply {
-    const claim = this.deps.state.get(station);
-    if (!claim || claim.setId !== req.set_id) {
-      return { status: RelayStatus.ST_SET_NOT_FOUND, msg: 'no such set on this station' };
-    }
-    this.deps.audit.record({
-      type: 'game_start',
-      station,
-      setId: req.set_id,
-      game: req.game,
-      handwarmer: req.handwarmer,
-      stage: req.stage,
-      e1Port: req.e1_port,
-      e2Port: req.e2_port,
-      chars: [...req.chars],
-      costumes: [...req.costumes],
-    });
-    this.deps.archive.gameStarted(station, req);
-    return { status: RelayStatus.ST_OK, msg: req.handwarmer ? 'handwarmer' : `game ${req.game}` };
   }
 }
 

@@ -217,11 +217,14 @@ export class StationTelemetry {
     return this.beaconRequests ? { ...this.beaconRequests } : null;
   }
 
-  /** A 12-byte relay_beacon with tcp_port 0 is a station asking for the beacon; answer it unicast. */
+  /**
+   * A 12-byte relay_beacon with tcp_port 0 is a beamer asking for the beacon; answer it unicast.
+   * The beacon is frozen (protocol.yaml relay_beacon): checked by length and magic, never by
+   * version, so a beamer built against an older protocol still finds this relay.
+   */
   private answerBeaconRequest(msg: Uint8Array, from: string, now = Date.now()): boolean {
     if (msg.length !== RELAY_BEACON_SIZE || msg[0] !== MAGIC_0 || msg[1] !== MAGIC_1) return false;
-    const b = decodeRelayBeacon(msg);
-    if (b.version !== PROTO_VERSION || b.tcp_port !== 0) return false;
+    if (decodeRelayBeacon(msg).tcp_port !== 0) return false;
     const payload = this.opts.beaconPayload;
     if (payload && this.socket) {
       this.socket.send(payload, this.opts.beaconReplyPort ?? BEACON_PORT, from, (err) => {

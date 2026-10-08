@@ -30,8 +30,6 @@ RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >= sizeof(struct start_set_req),
 RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >=
                         sizeof(struct abandon_set_req),
                     lb_req_fits_abandon_set);
-RELAY_STATIC_ASSERT(LB_RELAY_EXI_MAX_PAYLOAD >= sizeof(struct game_start_req),
-                    lb_req_fits_game_start);
 RELAY_STATIC_ASSERT((LB_RELAY_EXI_BUF_SIZE % 32) == 0, lb_resp_dma_multiple);
 
 static struct lbRelayExi_Req req_buf;
@@ -53,9 +51,9 @@ bool lbRelayExi_Request(u8 cmd, const void* payload, u16 len)
     req_buf.hdr.magic[1] = RELAY_MAGIC_1;
     req_buf.hdr.version = RELAY_PROTO_VERSION;
     req_buf.hdr.cmd = cmd;
-    /* The game does not know the station; the Nintendont kernel / Dolphin
-     * forwarder stamps station from lazyto_station.txt before the
-     * request reaches the relay. */
+    /* The game does not know the station; the Nintendont kernel stamps it
+     * from the beamer's hello (the Dolphin forwarder: 0) before the request
+     * reaches the relay. */
     req_buf.hdr.station = 0;
     req_buf.hdr.len = len;
     if (len != 0) {

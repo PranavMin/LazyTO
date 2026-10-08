@@ -105,16 +105,11 @@ static bool tiebreak_armed;   /* that game tied: score LGL's tiebreak game */
 static u8 auto_chars[2];      /* external CharacterKind of entrant 1 and 2 */
 static u8 auto_stocks[2];     /* stocks left at the end, entrant 1 and 2 */
 static u8 auto_costumes[2];   /* costume (colour) index, entrant 1 and 2 */
+static u8 auto_ports[2];      /* CSS port entrant 1 and 2 played on */
 static u8 auto_stage;         /* internal StKind the game was played on */
 static char auto_note[40];    /* why nothing was scored, or what was */
 static u32 auto_note_frames;  /* frames left showing auto_note */
 
-/* CMD_GAME_START (2026-10-01): sent on a match's first frame so the relay
- * can match the replay the station's beamer records and label who played
- * on which port. Fire and forget: polled during the match only to clear it,
- * never shown, and dropped if it is still in flight back on the CSS. */
-static bool gs_flight;
-static u32 gs_timeout;
 static bool match_seen;   /* a GS_VS frame ran since the last CSS frame */
 static u32 match_frames;  /* frames since the match scene began */
 static s32 vs_ctx = -1;   /* in-match SIS overlay, per GS_VS visit */
@@ -173,10 +168,6 @@ void lbTourney_SetCurrent(const struct set_entry* set)
     auto_note_frames = 0;
     claim_port = -1;
     memset(claim_hold, 0, sizeof(claim_hold));
-    if (gs_flight) {
-        lbRelayExi_Abort();
-        gs_flight = false;
-    }
     has_set = true;
     css_dirty = true;
 }
@@ -252,15 +243,19 @@ static void sendEndSet(void)
 /* Stocks and costume per entrant (2026-09-30): the relay folds them into
  * start.gg's per-game score as (costume + 1) * 100 + stocks, the Replay
  * Reporter for Slippi convention, so the set page shows colour and stocks.
- * Unknown (hand-scored) games send 0xFF and get no score. */
+ * Unknown (hand-scored) games send 0xFF and get no score. The ports
+ * (protocol v2) say which replay port is which entrant; NO_PORT when
+ * unknown. replay_id stays 0 (no replay) until the kiosk reads the record
+ * gate (protocol.yaml record_gate, docs/protocol-v2.md). */
 static void appendGame(int winner_slot, u8 p1_char, u8 p2_char, u8 stage,
-                       const u8* stocks, const u8* costumes)
+                       const u8* stocks, const u8* costumes, const u8* ports)
 {
     struct game_result* game;
     if (game_count >= MAX_GAMES) {
         return;
     }
     game = &games[game_count];
+    memset(game, 0, sizeof(*game));
     game->winner_slot = winner_slot;
     game->p1_char = p1_char;
     game->p2_char = p2_char;
@@ -269,6 +264,9 @@ static void appendGame(int winner_slot, u8 p1_char, u8 p2_char, u8 stage,
     game->p2_stocks = stocks ? stocks[1] : STOCKS_UNKNOWN;
     game->p1_costume = costumes ? costumes[0] : COSTUME_UNKNOWN;
     game->p2_costume = costumes ? costumes[1] : COSTUME_UNKNOWN;
+    game->p1_port = ports ? ports[0] : NO_PORT;
+    game->p2_port = ports ? ports[1] : NO_PORT;
+    game->replay_id = 0;
     game_count++;
     sendReport();
 }
@@ -401,9 +399,11 @@ static void handleInputs(void)
     /* Score / undo fire once per flick: on the edge into a new direction. */
     if (cdir != prev_cdir) {
         if (cdir == CDIR_LEFT) {
-            appendGame(leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL);
+            appendGame(leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL,
+                       NULL);
         } else if (cdir == CDIR_RIGHT) {
-            appendGame(3 - leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL);
+            appendGame(3 - leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL,
+                       NULL, NULL);
         } else if (cdir == CDIR_DOWN) {
             undoGame();
         }
@@ -556,6 +556,8 @@ static void autoScoreFromMatch(const struct MatchEnd* me)
      * as 0 on the first Wii set (2026-09-30). */
     auto_costumes[who[0] - 1] = (u8) Player_GetCostumeId(slots[0]);
     auto_costumes[who[1] - 1] = (u8) Player_GetCostumeId(slots[1]);
+    auto_ports[who[0] - 1] = (u8) slots[0];
+    auto_ports[who[1] - 1] = (u8) slots[1];
     auto_stage = (u8) gm_GetStartMeleeRules()->stkind;
     /* The game's own winner, never recomputed here. The cards run Gameplay:
      * Both (LGL and anti-wobbling). On a time-out LGL takes the player ahead
@@ -925,49 +927,6 @@ void lbTourney_SSSEnter(void* arg)
     mnStageSel_Scene_OnEnter(arg);
 }
 
-/* CMD_GAME_START on the match's first frame: the players, characters and
- * costumes are spawned and the stage is in the start rules by now. */
-static void sendGameStart(void)
-{
-    struct game_start_req req;
-    int port;
-    int e1 = entrantPort(1);
-    int e2 = entrantPort(2);
-    memset(&req, 0, sizeof(req));
-    req.set_id = cur_set.set_id;
-    req.game = (u8) (game_count + 1);
-    req.handwarmer = handwarmer ? 1 : 0;
-    req.stage = (u8) gm_GetStartMeleeRules()->stkind;
-    req.e1_port = e1 >= 0 ? (u8) e1 : NO_PORT;
-    req.e2_port = e2 >= 0 ? (u8) e2 : NO_PORT;
-    for (port = 0; port < 4; port++) {
-        if (Player_GetPlayerSlotType(port) == Gm_PKind_Human) {
-            req.chars[port] = (u8) Player_GetPlayerCharacter(port);
-            req.costumes[port] = (u8) Player_GetCostumeId(port);
-        } else {
-            req.chars[port] = NO_PORT;
-            req.costumes[port] = NO_PORT;
-        }
-    }
-    if (pending_cmd == 0 &&
-        lbRelayExi_Request(CMD_GAME_START, &req, sizeof(req)))
-    {
-        gs_flight = true;
-        gs_timeout = 0;
-    }
-}
-
-static void pollGameStart(void)
-{
-    s32 state = lbRelayExi_Poll();
-    if (state < 0 || state == RELAY_DONE || state == RELAY_ERROR ||
-        ++gs_timeout > LB_TOURNEY_TIMEOUT_FRAMES)
-    {
-        lbRelayExi_Abort();
-        gs_flight = false;
-    }
-}
-
 void lbTourney_MatchFrame(void)
 {
     hw_battlefield = false; /* consumed by the SSS enter; never carry it over */
@@ -975,12 +934,8 @@ void lbTourney_MatchFrame(void)
         if (!match_seen) {
             match_seen = true;
             match_frames = 0;
-            sendGameStart();
         } else {
             match_frames++;
-            if (gs_flight) {
-                pollGameStart();
-            }
         }
         if (handwarmer) {
             if (vs_ctx < 0) {
@@ -1065,12 +1020,6 @@ void lbTourney_CSSFrame(void)
             match_seen = false;
             handwarmer = false;
             css_dirty = true;
-            if (gs_flight) {
-                /* A game shorter than the round trip: the score report
-                 * below needs the device. */
-                lbRelayExi_Abort();
-                gs_flight = false;
-            }
             if (auto_pending != 0) {
                 char note[40];
                 char tag[TAG_LEN + 1];
@@ -1078,7 +1027,7 @@ void lbTourney_CSSFrame(void)
                 const char* src =
                     auto_pending == 1 ? cur_set.p1_tag : cur_set.p2_tag;
                 appendGame(auto_pending, auto_chars[0], auto_chars[1],
-                           auto_stage, auto_stocks, auto_costumes);
+                           auto_stage, auto_stocks, auto_costumes, auto_ports);
                 memcpy(tag, src, TAG_LEN);
                 tag[TAG_LEN] = '\0';
                 /* "GAME 3 TO MANGO", "GAME 3 TO MANGO - LGL" */
