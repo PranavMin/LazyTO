@@ -1,8 +1,9 @@
 // archive.ts -- the set archive: every finished set whose games all have a
-// replay becomes one zip of them, named from the config's templates
-// (names.ts), each replay labelled with the players' tags, plus a
-// context.json that links it to the start.gg set (the format Replay Reporter
-// for Slippi writes and Lucky Stats' "Import Tournament Game Data" reads).
+// replay becomes one zip of them in Replay Reporter for Slippi's format
+// (setzip.ts builds it): each replay with the players' tags and re-timed to
+// the report, plus a context.json that links it to the start.gg set, which
+// Lucky Stats' "Import Tournament Game Data" reads. The values in it are the
+// ones LazyTO reported.
 //
 // How a replay is matched to its game (protocol v2, docs/redesign.md:
 // Matching a replay to its game). Every reported game_result carries the
@@ -23,6 +24,14 @@
 // incomplete recording) to unmatched/. A late report that names an unmatched
 // replay moves it to raw/. Raw copies are never deleted here.
 //
+// What a set's record keeps for its zip: the set as the cache had it and
+// its participants (names, prefixes, pronouns) from START_SET's
+// markSetInProgress; start.gg's REST phase group, fetched once right after
+// START_SET without holding up the Wii's reply (its bracket type, wave,
+// winners target phase and the set's ordinal); and from END_SET's report the
+// set's completedAt and stream. A failed phase group lookup is not tried
+// again: the zip is then written without context.json, and says why.
+//
 // Zips. A set that ended is zipped once every game has a complete replay
 // (D12: a set with a game without one gets no zip, so Lucky Stats never sees
 // a short set; the status page lists it with the reason per game). A replay
@@ -35,32 +44,21 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { NO_PORT, type GameResult } from '../generated/wire.js';
+import type { GameResult } from '../generated/wire.js';
 import type { CachedSet } from './cache.js';
+import { phaseGroupFacts, type PhaseGroupFacts, type RestPhaseGroup } from './phasegroup.js';
 import type { Folder, RawStore, StoredReplay } from './rawstore.js';
-import { parseSlp, withDisplayNames, playerPorts, type SlpInfo } from './slp.js';
-import { buildZip, type ZipEntry } from './zip.js';
 import {
-  fillName,
-  shortCharacter,
-  shortStage,
-  tournamentNumber,
-  type GameFields,
-  type SetFields,
-} from './names.js';
-import { characterName } from './chars.js';
-import { stageName } from './stages.js';
+  buildSetZip,
+  entrantPorts,
+  rrStream,
+  type ArchiveEvent,
+  type ContextStream,
+} from './setzip.js';
+import { parseSlp, playerPorts, type SlpInfo } from './slp.js';
+import type { ReportedSet, StartedParticipant, StartedSet } from './startgg.js';
 
-/** What the archive needs to know about an event (resolve.ts). */
-export interface ArchiveEvent {
-  tournamentName: string;
-  tournamentLocation: string | null;
-  eventId: number;
-  eventName: string;
-  eventSlug: string;
-  eventHasSiblings: boolean;
-  eventPhaseCount: number;
-}
+export type { ArchiveEvent } from './setzip.js';
 
 export interface BoundReplay {
   /** The stored copy (rawstore.ts StoredReplay.id) and where it was when bound. */
@@ -88,9 +86,15 @@ export interface SetRecord {
   station: number;
   set: CachedSet; // snapshot at START_SET: the set leaves the cache once completed
   event: ArchiveEvent;
+  /** Entrant 1's and 2's participants as markSetInProgress gave them at START_SET. */
+  participants: [StartedParticipant[], StartedParticipant[]];
+  /** start.gg's REST phase group for the set; why there is none; null while it is being fetched. */
+  phaseGroup: PhaseGroupFacts | { error: string } | null;
   startedAt: number;
   games: GameRecord[]; // the last reported list, index 0 = game 1
   endedAt: number | null;
+  /** From END_SET: the anchor of the re-timed replays (completedAt, else the relay's clock then) and the set's stream. */
+  report: { completedMs: number; stream: ContextStream | null } | null;
   /** The zip's file name in the archive folder, once written. */
   zip: string | null;
   /** The bound replays the zip was written from, to know when to write it again. */
@@ -120,25 +124,37 @@ export interface ArchiveDeps {
   store: RawStore;
   /** The station_id of the beamer that synced from an address (beamer.ts). */
   beamerAt(address: string): string | undefined;
-  setTemplate: string;
-  gameTemplate: string;
   event: ArchiveEvent;
   audit: { record(event: Record<string, unknown>): void };
+  /** start.gg's REST phase group (startgg.ts getPhaseGroupRest), fetched once per START_SET. */
+  phaseGroup(id: number): Promise<RestPhaseGroup>;
+  /** Now, in ms: the zips' entry times and END_SET's anchor when start.gg gives no completedAt. Tests pin it. */
+  clock?: () => number;
 }
 
 export class SetArchive {
   private readonly sets = new Map<number, SetRecord>(); // by set id
   private readonly results: ArchiveResult[] = [];
+  private readonly clock: () => number;
+  /** Phase group lookups under way; idle() waits for them. */
+  private readonly lookups = new Set<Promise<void>>();
+  private stopped = false;
 
   constructor(private readonly deps: ArchiveDeps) {
+    this.clock = deps.clock ?? Date.now;
     mkdirSync(join(deps.dir, '.sets'), { recursive: true });
     for (const f of readdirSync(join(deps.dir, '.sets'))) {
       if (!f.endsWith('.json')) continue;
       try {
         const r: unknown = JSON.parse(readFileSync(join(deps.dir, '.sets', f), 'utf8'));
-        // A record an older relay wrote (protocol v1's game starts, or the
-        // first v2 archive's per-set raw folder) is reported, not used.
+        // A record an older relay wrote (protocol v1's game starts, the
+        // first v2 archive's per-set raw folder, or one from before the
+        // archive kept start.gg's participants) is reported, not used.
         if (!isSetRecord(r)) throw new Error('not a set record of this relay version');
+        // A lookup the last run never heard back from is not made again.
+        if (r.phaseGroup === null) {
+          r.phaseGroup = { error: 'the relay stopped before start.gg answered' };
+        }
         this.sets.set(r.setId, r);
       } catch (e) {
         deps.audit.record({
@@ -150,21 +166,38 @@ export class SetArchive {
     }
   }
 
+  /** Every phase group lookup started so far has answered (tests). */
+  async idle(): Promise<void> {
+    while (this.lookups.size > 0) await Promise.allSettled([...this.lookups]);
+  }
+
+  /** The relay is stopping: a lookup that answers from now on is dropped (its audit log is closed). */
+  stop(): void {
+    this.stopped = true;
+  }
+
   // ---- hooks from tcp.ts (after the request succeeded) ----
 
-  setStarted(station: number, set: CachedSet): void {
+  setStarted(station: number, set: CachedSet, started: StartedSet): void {
     if (this.sets.has(set.id)) return; // a resume
-    this.save({
+    const of = (entrantId: number) =>
+      started.entrants.find((e) => e.id === entrantId)?.participants ?? [];
+    const r: SetRecord = {
       setId: set.id,
       station,
       set,
       event: this.deps.event,
-      startedAt: Date.now(),
+      participants: [of(set.p1.id), of(set.p2.id)],
+      phaseGroup: null,
+      startedAt: this.clock(),
       games: [],
       endedAt: null,
+      report: null,
       zip: null,
       zipOf: null,
-    });
+    };
+    this.save(r);
+    this.lookUpPhaseGroup(r);
   }
 
   scored(setId: number, games: GameResult[], from: string): void {
@@ -175,11 +208,21 @@ export class SetArchive {
     this.save(r);
   }
 
-  setEnded(setId: number, games: GameResult[], from: string): void {
+  /** reportedSet: the set as start.gg answered the final report (null if it left it out). */
+  setEnded(
+    setId: number,
+    games: GameResult[],
+    from: string,
+    reportedSet: ReportedSet | null,
+  ): void {
     const r = this.sets.get(setId);
     if (!r) return;
     r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
-    r.endedAt = Date.now();
+    r.endedAt = this.clock();
+    // Replay Reporter's anchor: completedAt, else the moment it copies,
+    // which is right after its report.
+    const completedMs = reportedSet?.completedAt ? reportedSet.completedAt * 1000 : 0;
+    r.report = { completedMs: completedMs || r.endedAt, stream: rrStream(reportedSet?.stream) };
     this.bindSet(r);
     this.save(r);
     this.maybeZip(r);
@@ -305,6 +348,44 @@ export class SetArchive {
     });
   }
 
+  // ---- start.gg's phase group ----
+
+  /** Fetch the set's phase group once, without holding up anything; the zip waits for the answer. */
+  private lookUpPhaseGroup(r: SetRecord): void {
+    const id = r.set.phaseGroup?.id;
+    const done = (phaseGroup: SetRecord['phaseGroup'], error?: string) => {
+      // Dropped when the relay stopped, or the set was abandoned meanwhile.
+      if (this.stopped || this.sets.get(r.setId) !== r) return;
+      r.phaseGroup = phaseGroup;
+      this.deps.audit.record({
+        type: 'upstream',
+        call: 'phase_group',
+        setId: r.setId,
+        phaseGroupId: id ?? null,
+        ok: error === undefined,
+        ...(error === undefined ? {} : { error }),
+      });
+      this.save(r);
+      this.maybeZip(r);
+    };
+    if (id === undefined) {
+      done({ error: 'the set has no phase group' }, 'the set has no phase group');
+      return;
+    }
+    const lookup = this.deps
+      .phaseGroup(id)
+      .then((json) => phaseGroupFacts(json, r.setId))
+      .then(
+        (facts) => done(facts),
+        (e: unknown) => {
+          const why = e instanceof Error ? e.message : String(e);
+          done({ error: why }, why);
+        },
+      )
+      .finally(() => this.lookups.delete(lookup));
+    this.lookups.add(lookup);
+  }
+
   // ---- binding ----
 
   private beamerOf(g: GameRecord): string | null {
@@ -378,46 +459,37 @@ export class SetArchive {
   // ---- zips ----
 
   private maybeZip(r: SetRecord): void {
-    if (r.endedAt === null || r.games.length === 0) return;
+    if (r.endedAt === null || r.report === null || r.games.length === 0) return;
+    if (r.phaseGroup === null) return; // start.gg has not answered yet: zipped when it does
     if (!r.games.every((g) => g.replay?.complete)) return;
     const of = r.games.map((g) => g.replay!.id).join(',');
     if (r.zipOf === of) return;
-    this.writeZip(r, of);
+    this.writeZip(r, r.report, of);
   }
 
-  private writeZip(r: SetRecord, of: string): void {
-    const fields = setFields(r);
+  private writeZip(r: SetRecord, report: NonNullable<SetRecord['report']>, of: string): void {
     try {
-      const entries: ZipEntry[] = [];
-      const used = new Set<string>();
-      r.games.forEach((g, i) => {
-        const copy = this.deps.store.get(g.replay!.id);
-        const raw = readFileSync(
-          copy ? this.deps.store.absolute(copy) : join(this.deps.dir, ...g.replay!.path.split('/')),
-        );
-        const names: (string | null)[] = [null, null, null, null];
-        const ports = entrantPorts(g.result);
-        if (ports) {
-          names[ports[0]] = r.set.p1.tag;
-          names[ports[1]] = r.set.p2.tag;
-        }
-        const name = unique(
-          fillName(this.deps.gameTemplate, gameFields(fields, r, g, i)) + '.slp',
-          used,
-        );
-        entries.push({ name, data: withDisplayNames(raw, names), date: new Date(g.at) });
-      });
-      const ctx = context(r, r.games);
-      if (ctx) entries.unshift({ name: 'context.json', data: Buffer.from(JSON.stringify(ctx)) });
+      const built = buildSetZip(
+        {
+          event: r.event,
+          set: r.set,
+          participants: r.participants,
+          phaseGroup: r.phaseGroup,
+          report,
+          games: r.games.map((g) => {
+            const copy = this.deps.store.get(g.replay!.id);
+            const path = copy
+              ? this.deps.store.absolute(copy)
+              : join(this.deps.dir, ...g.replay!.path.split('/'));
+            return { result: g.result, replay: readFileSync(path) };
+          }),
+        },
+        new Date(this.clock()),
+      );
       const again = r.zip !== null;
-      const zipName =
-        r.zip ??
-        unique(
-          fillName(this.deps.setTemplate, fields) + '.zip',
-          new Set(readdirSync(this.deps.dir)),
-        );
+      const zipName = r.zip ?? unique(`${built.name}.zip`, new Set(readdirSync(this.deps.dir)));
       const tmp = join(this.deps.dir, `.${zipName}.tmp`);
-      writeFileSync(tmp, buildZip(entries));
+      writeFileSync(tmp, built.zip);
       renameSync(tmp, join(this.deps.dir, zipName));
       r.zip = zipName;
       r.zipOf = of;
@@ -427,8 +499,8 @@ export class SetArchive {
         station: r.station,
         file: join(this.deps.dir, zipName),
         games: r.games.length,
-        at: Date.now(),
-        note: ctx ? '' : 'no context.json (no L + R claim on a game)',
+        at: this.clock(),
+        note: built.note,
         again,
       };
       this.results.push(result);
@@ -460,6 +532,9 @@ function isSetRecord(x: unknown): x is SetRecord {
     typeof r.station === 'number' &&
     typeof r.event === 'object' &&
     r.event !== null &&
+    Array.isArray(r.participants) &&
+    r.phaseGroup !== undefined &&
+    r.report !== undefined &&
     Array.isArray(r.games) &&
     r.games.every(
       (g: Partial<GameRecord> | null) =>
@@ -511,12 +586,6 @@ export function fileStamp(name: string): string | null {
   return /_(\d{8}T\d{6})\.slp$/.exec(name)?.[1] ?? null;
 }
 
-/** Entrant 1's and 2's CSS ports, or null unless both are known (0-3) and differ. */
-function entrantPorts(g: GameResult): [number, number] | null {
-  const ok = (p: number) => p !== NO_PORT && p >= 0 && p <= 3;
-  return ok(g.p1_port) && ok(g.p2_port) && g.p1_port !== g.p2_port ? [g.p1_port, g.p2_port] : null;
-}
-
 /**
  * What in the replay disagrees with the report, or null: the stage, and each
  * entrant's character, costume and (only when the game sent them: never for
@@ -554,149 +623,6 @@ function unique(name: string, used: Set<string>): string {
   for (let n = 2; used.has(out); n++) out = `${name.slice(0, dot)} ${n}${name.slice(dot)}`;
   used.add(out);
   return out;
-}
-
-function localDate(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export function setFields(r: SetRecord): SetFields {
-  const ev = r.event;
-  const w1 = r.games.filter((g) => g.result.winner_slot === 1).length;
-  const w2 = r.games.length - w1;
-  const p1 = r.set.p1.tag;
-  const p2 = r.set.p2.tag;
-  return {
-    tournament: ev.tournamentName,
-    number: tournamentNumber(ev.tournamentName),
-    event: ev.eventName,
-    round: r.set.fullRoundText,
-    round_short: r.set.roundShort,
-    p1,
-    p2,
-    winner: w1 > w2 ? p1 : w2 > w1 ? p2 : '',
-    loser: w1 > w2 ? p2 : w2 > w1 ? p1 : '',
-    score: `${w1}-${w2}`,
-    date: localDate(r.startedAt),
-    set_id: String(r.setId),
-  };
-}
-
-export function gameFields(set: SetFields, r: SetRecord, g: GameRecord, i: number): GameFields {
-  const { stage, p1_char, p2_char, winner_slot: winner } = g.result;
-  return {
-    ...set,
-    game: String(i + 1),
-    stage: shortStage(stage, stageName(stage)),
-    stage_name: stageName(stage) ?? '',
-    p1_char: shortCharacter(p1_char),
-    p2_char: shortCharacter(p2_char),
-    game_winner: winner === 1 ? r.set.p1.tag : winner === 2 ? r.set.p2.tag : '',
-  };
-}
-
-// ---- context.json: Replay Reporter for Slippi's Context type
-// (src/common/types.ts there), which Lucky Stats reads to link the zip to
-// the start.gg set. ----
-
-interface ContextSlot {
-  displayNames: string[];
-  ports: number[]; // 1-based
-  prefixes: string[];
-  pronouns: string[];
-  score: number; // games won before this game (finalScore: in total)
-}
-
-const BRACKET_TYPE: Record<string, number> = {
-  SINGLE_ELIMINATION: 1,
-  DOUBLE_ELIMINATION: 2,
-  ROUND_ROBIN: 3,
-  SWISS: 4,
-  CUSTOM_SCHEDULE: 6,
-  MATCHMAKING: 7,
-};
-
-/** null when a game's ports are unknown (no L + R claim): then nobody knows whose port was whose. */
-export function context(r: SetRecord, games: GameRecord[]): Record<string, unknown> | null {
-  const ev = r.event;
-  if (games.length === 0 || games.some((g) => !entrantPorts(g.result))) return null;
-  const tag = (entrant: number) => (entrant === 1 ? r.set.p1.tag : r.set.p2.tag);
-  const wins = [0, 0];
-  const scores = games.map((g) => {
-    const [p1, p2] = entrantPorts(g.result)!;
-    const winnerSlot = g.result.winner_slot;
-    // Slots in port order, like Replay Reporter.
-    const order = [
-      { entrant: 1, port: p1 },
-      { entrant: 2, port: p2 },
-    ].sort((a, b) => a.port - b.port);
-    const slots = order.map((o): ContextSlot => ({
-      displayNames: [tag(o.entrant)],
-      ports: [o.port + 1],
-      prefixes: [''],
-      pronouns: [''],
-      score: wins[o.entrant - 1]!,
-    }));
-    if (winnerSlot === 1 || winnerSlot === 2) wins[winnerSlot - 1]!++;
-    return { slots, order };
-  });
-  const last = scores[scores.length - 1]!;
-  const finalScore = {
-    slots: last.order.map((o, j) => ({ ...last.slots[j]!, score: wins[o.entrant - 1]! })),
-  };
-  const charsOf = (entrant: number) => [
-    ...new Set(
-      games
-        .map((g) => characterName(entrant === 1 ? g.result.p1_char : g.result.p2_char) ?? '')
-        .filter(Boolean),
-    ),
-  ];
-  const pg = r.set.phaseGroup;
-  return {
-    bestOf: r.set.bestOf,
-    durationMs: games.reduce(
-      (ms, g) => ms + Math.ceil(((g.replay?.lastFrame ?? -124) + 124) / 0.06),
-      0,
-    ),
-    scores: scores.map((s) => ({ slots: s.slots })),
-    finalScore,
-    players: {
-      entrant1: [{ name: r.set.p1.tag, characters: charsOf(1) }],
-      entrant2: [{ name: r.set.p2.tag, characters: charsOf(2) }],
-    },
-    startgg: {
-      tournament: { name: ev.tournamentName, location: ev.tournamentLocation },
-      event: {
-        id: ev.eventId,
-        name: ev.eventName,
-        slug: ev.eventSlug,
-        hasSiblings: ev.eventHasSiblings,
-      },
-      phase: {
-        id: pg?.phase?.id ?? 0,
-        name: pg?.phase?.name ?? '',
-        hasSiblings: ev.eventPhaseCount > 1,
-      },
-      phaseGroup: {
-        id: pg?.id ?? 0,
-        name: pg?.displayIdentifier ?? '',
-        bracketType: BRACKET_TYPE[pg?.bracketType ?? ''] ?? 2,
-        hasSiblings: (pg?.phase?.groupCount ?? 1) > 1,
-        waveId: pg?.wave?.id ?? null,
-        winnersTargetPhaseId: null,
-      },
-      set: {
-        id: r.setId,
-        internalId: r.setId,
-        fullRoundText: r.set.fullRoundText,
-        ordinal: null,
-        round: r.set.round,
-        stream: null,
-      },
-    },
-    startMs: games[0]!.at,
-  };
 }
 
 /** True if the set's record file exists; for tests. */

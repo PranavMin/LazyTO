@@ -40,8 +40,8 @@ export interface EventOptions {
   host?: string;
   /** Beacon and telemetry on their fixed UDP ports. Tests leave them off. */
   network?: boolean;
-  /** The archive folder, the set archive's file-name templates (names.ts) and what it says about the event. */
-  archive: { dir: string; setName: string; gameName: string; event: ArchiveEvent };
+  /** The archive folder, what the set archive says about the event, and its clock (tests pin it). */
+  archive: { dir: string; event: ArchiveEvent; clock?: () => number };
   /** Tests stand in a full disk and shorten the download stall timeout. */
   rawStore?: RawStoreOptions;
   stallMs?: number;
@@ -109,10 +109,10 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
     dir: o.archive.dir,
     store,
     beamerAt: (address) => beamers.stationIdAt(address),
-    setTemplate: o.archive.setName,
-    gameTemplate: o.archive.gameName,
     event: o.archive.event,
     audit,
+    phaseGroup: (id) => o.startgg.getPhaseGroupRest(id),
+    clock: o.archive.clock,
   });
   const collector = new Collector({
     store,
@@ -178,6 +178,7 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
     admin: new Admin({ state, cache, startgg: o.startgg, audit, archive }),
     async stop() {
       cache.stop();
+      archive.stop();
       await Promise.all([
         beacon?.stop(),
         network ? telemetry.stop() : undefined,

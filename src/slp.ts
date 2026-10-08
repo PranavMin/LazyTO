@@ -22,6 +22,8 @@
 //
 // Replay Reporter refuses replays older than Slippi 3.13.0, and so does this.
 // It counts a CPU (player type 1) as a player everywhere, and so does this.
+// Ported from Replay Reporter for Slippi (jmlee337/replay-manager-for-slippi,
+// MIT).
 
 import { sjisCodes, sjisDecode } from './sjis.js';
 

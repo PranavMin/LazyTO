@@ -1,112 +1,139 @@
-// names.ts -- file names for the set archives (archive.ts), from the two
-// templates in the config (archiveSetName, archiveGameName; .env
-// ARCHIVE_SET_NAME / ARCHIVE_GAME_NAME). A template is text with {field}
-// placeholders. The fields are fixed here, and config.ts refuses a template
-// that names any other, so a typo fails at startup instead of in a file name.
+// names.ts -- the set archive's file names (archive.ts), exactly as Replay
+// Reporter for Slippi names a copied set with its default settings
+// (src/renderer/App.tsx onCopy and src/main/replay.ts writeReplays, v2.7.0):
+//   zip:   '{phaseOrEvent} {roundShort} - {playersChars}' + '.zip'
+//   entry: '{ordinal} - {playersChars} - {stage}' + '.slp'
+// filled one placeholder at a time in Replay Reporter's order, then cleaned
+// by sanitize-filename 1.6.3. The tables are Replay Reporter's
+// (src/common/constants.ts): its short character names and its stage names.
+//
+// One Replay Reporter bug is left out: it fills with String.replace and a
+// string value, so "$$", "$&", "$`" and "$'" in a tag are replacement
+// patterns there ("Ca$$h" becomes "Ca$h"). Here every value is taken
+// literally.
+//
+// Ported from Replay Reporter for Slippi (jmlee337/replay-manager-for-slippi,
+// MIT) and sanitize-filename (WTFPL OR ISC).
 
-/** Fields both templates may use. */
-export const SET_FIELDS = [
-  'tournament', // start.gg tournament name, e.g. "My Bar Weekly #60"
-  'number', // the last number in the tournament name ("60"), "" if none
-  'event', // event name
-  'round', // "Winners Semi-Final"
-  'round_short', // "WSF"
-  'p1', // entrant 1's tag (start.gg order)
-  'p2', // entrant 2's tag
-  'winner',
-  'loser',
-  'score', // games won, p1-p2: "3-1"
-  'date', // the set's start, local date: 2026-10-01
-  'set_id',
-] as const;
+/** Replay Reporter's short names by external character id (constants.ts characterNames). */
+export const RR_CHARACTER: ReadonlyMap<number, string> = new Map([
+  [0, 'Falcon'],
+  [1, 'DK'],
+  [2, 'Fox'],
+  [3, 'GW'],
+  [4, 'Kirby'],
+  [5, 'Bowser'],
+  [6, 'Link'],
+  [7, 'Luigi'],
+  [8, 'Mario'],
+  [9, 'Marth'],
+  [10, 'Mewtwo'],
+  [11, 'Ness'],
+  [12, 'Peach'],
+  [13, 'Pikachu'],
+  [14, 'ICs'],
+  [15, 'Puff'],
+  [16, 'Samus'],
+  [17, 'Yoshi'],
+  [18, 'Zelda'],
+  [19, 'Sheik'],
+  [20, 'Falco'],
+  [21, 'YL'],
+  [22, 'Doc'],
+  [23, 'Roy'],
+  [24, 'Pichu'],
+  [25, 'Ganon'],
+]);
 
-/** Extra fields only the per-game template may use. */
-export const GAME_FIELDS = [
-  'game', // 1-based game number
-  'stage', // short stage name: "BF"
-  'stage_name', // "Battlefield"
-  'p1_char', // entrant 1's character, short: "Fox"
-  'p2_char',
-  'game_winner', // tag of the game's winner
-] as const;
+/** Replay Reporter's stage names by the replay's stage id (constants.ts stageNames). */
+export const RR_STAGE: ReadonlyMap<number, string> = new Map([
+  [2, 'Fountain of Dreams'],
+  [3, 'Pokémon Stadium'],
+  [4, "Peach's Castle"],
+  [5, 'Kongo Jungle'],
+  [6, 'Brinstar'],
+  [7, 'Corneria'],
+  [8, "Yoshi's Story"],
+  [9, 'Onett'],
+  [10, 'Mute City'],
+  [11, 'Rainbow Cruise'],
+  [12, 'Jungle Japes'],
+  [13, 'Great Bay'],
+  [14, 'Temple'],
+  [15, 'Brinstar Depths'],
+  [16, "Yoshi's Island"],
+  [17, 'Green Greens'],
+  [18, 'Fourside'],
+  [19, 'Mushroom Kingdom'],
+  [20, 'Mushroom Kingdom II'],
+  [22, 'Venom'],
+  [23, 'Poké Floats'],
+  [24, 'Big Blue'],
+  [25, 'Icicle Mountain'],
+  [27, 'Flat Zone'],
+  [28, 'Dream Land'],
+  [29, "Yoshi's Island N64"],
+  [30, 'Kongo Jungle N64'],
+  [31, 'Battlefield'],
+  [32, 'Final Destination'],
+]);
 
-export type SetFields = Record<(typeof SET_FIELDS)[number], string>;
-export type GameFields = SetFields & Record<(typeof GAME_FIELDS)[number], string>;
+/** Replay Reporter's default zip name template (src/main/ipc.ts). */
+export const RR_ZIP_TEMPLATE = '{phaseOrEvent} {roundShort} - {playersChars}';
+/** Replay Reporter's default entry name template: '{ordinal}' + its fileNameFormat. */
+export const RR_ENTRY_TEMPLATE = '{ordinal} - {playersChars} - {stage}';
 
-const PLACEHOLDER = /\{([^{}]*)\}/g;
-
-/** Placeholders in a template that are not among `allowed`. */
-export function unknownFields(template: string, allowed: readonly string[]): string[] {
-  const bad: string[] = [];
-  for (const m of template.matchAll(PLACEHOLDER)) if (!allowed.includes(m[1]!)) bad.push(m[1]!);
-  return bad;
+/** Every capital letter and digit of start.gg's round text, in order: "Winners Semi-Final" -> "WSF", "Losers Top 8" -> "LT8". */
+export function rrRoundShort(fullRoundText: string): string {
+  return (fullRoundText.match(/[A-Z0-9]/g) ?? []).join('');
 }
 
-/** Fill a template and make the result a safe file name (no extension). */
-export function fillName(template: string, fields: Record<string, string>): string {
-  const filled = template.replace(PLACEHOLDER, (_, k: string) => fields[k] ?? '');
-  return safeFileName(filled);
+/**
+ * Fill a template the way Replay Reporter does, one placeholder after another
+ * in the given order, each only at its first occurrence in the text so far
+ * (so a value that contains a later placeholder's text is filled in too) --
+ * but with the value taken literally.
+ */
+export function rrFill(template: string, fill: readonly (readonly [string, string])[]): string {
+  let out = template;
+  for (const [placeholder, value] of fill) {
+    const at = out.indexOf(placeholder);
+    if (at >= 0) out = out.slice(0, at) + value + out.slice(at + placeholder.length);
+  }
+  return out;
 }
 
-/** Windows' and Linux's forbidden characters out, runs of spaces folded, no leading/trailing dots or spaces. */
-export function safeFileName(s: string): string {
-  const cleaned = s
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s.]+|[\s.]+$/g, '');
-  return cleaned.slice(0, 180) || 'set';
+/**
+ * sanitize-filename 1.6.3 with its default replacement "" (WTFPL OR ISC),
+ * with truncate-utf8-bytes 1.0.2 (WTFPL): / ? < > \ : * | " and C0/C1
+ * controls removed; a name of only dots, or a Windows reserved name (con,
+ * prn, aux, nul, com0-9, lpt0-9, with or without an extension), becomes "";
+ * trailing dots and spaces go; then at most 255 UTF-8 bytes, never splitting
+ * a surrogate pair.
+ */
+export function rrSanitize(input: string): string {
+  const sanitized = input
+    .replace(/[/?<>\\:*|"]/g, '')
+    .replace(/[\x00-\x1f\x80-\x9f]/g, '')
+    .replace(/^\.+$/, '')
+    .replace(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i, '')
+    .replace(/[. ]+$/, '');
+  return truncateUtf8(sanitized, 255);
 }
 
-/** "My Bar Weekly #60" -> "60". */
-export function tournamentNumber(name: string): string {
-  const m = name.match(/(\d+)\D*$/);
-  return m ? m[1]! : '';
-}
-
-const SHORT_CHARACTER: Record<number, string> = {
-  0: 'Falcon',
-  1: 'DK',
-  2: 'Fox',
-  3: 'G&W',
-  4: 'Kirby',
-  5: 'Bowser',
-  6: 'Link',
-  7: 'Luigi',
-  8: 'Mario',
-  9: 'Marth',
-  10: 'Mewtwo',
-  11: 'Ness',
-  12: 'Peach',
-  13: 'Pikachu',
-  14: 'ICs',
-  15: 'Puff',
-  16: 'Samus',
-  17: 'Yoshi',
-  18: 'Zelda',
-  19: 'Sheik',
-  20: 'Falco',
-  21: 'YLink',
-  22: 'Doc',
-  23: 'Roy',
-  24: 'Pichu',
-  25: 'Ganon',
-};
-
-/** Short character name for file names, by external character id; "" if unknown. */
-export function shortCharacter(externalId: number): string {
-  return SHORT_CHARACTER[externalId] ?? '';
-}
-
-const SHORT_STAGE: Record<number, string> = {
-  0x02: 'FoD',
-  0x03: 'PS',
-  0x08: 'YS',
-  0x1c: 'DL',
-  0x1f: 'BF',
-  0x20: 'FD',
-};
-
-/** Short stage name for file names: the legal stages' usual abbreviations, else the full name without spaces. */
-export function shortStage(stkind: number, fullName: string | undefined): string {
-  return SHORT_STAGE[stkind] ?? (fullName ?? '').replace(/[^A-Za-z0-9]/g, '');
+function truncateUtf8(s: string, byteLength: number): string {
+  let bytes = 0;
+  for (let i = 0; i < s.length; i++) {
+    let segment = s[i]!;
+    const c = s.charCodeAt(i);
+    const next = s.charCodeAt(i + 1);
+    if (c >= 0xd800 && c <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+      i++;
+      segment += s[i]!;
+    }
+    bytes += Buffer.byteLength(segment);
+    if (bytes === byteLength) return s.slice(0, i + 1);
+    if (bytes > byteLength) return s.slice(0, i - segment.length + 1);
+  }
+  return s;
 }
