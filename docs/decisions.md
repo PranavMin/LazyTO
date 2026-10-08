@@ -100,6 +100,12 @@ A beamer erases only what the laptop holds, and the laptop can say "held" only w
 
 Lucky Stats probably rejects a set whose replays do not cover its games (`game_count_mismatch`).
 
+### The set zip is Replay Reporter's, with LazyTO's values
+
+**The set archive writes the zip Replay Reporter for Slippi v2.7.0 writes when it reports and copies a set with its default settings, byte for byte: names, `context.json`, display names, re-timed start times and zip headers. Where Replay Reporter's values are wrong, the zip has the ones LazyTO reported: each game's reported winner, the score counted per player, the set's best-of, tags taken literally and display names encoded without corruption. Its start.gg facts come from where Replay Reporter takes them, including its REST tournament (once at startup) and REST phase group (once per START_SET).** (2026-10-07, redesign D21)
+
+Lucky Stats reads Replay Reporter's zips, so the safest zip is one it has already seen, and `npm test` holds it to Replay Reporter's own output (`test/rr-conformance/`). Replay Reporter's bugs would make `context.json` contradict start.gg: it counts the score per port slot, so a port swap credits the wrong player, and it decides each game from the replay, so a tie the TO scored by hand counts for nobody. The REST reads give what start.gg's GraphQL lacks (the location, the set's ordinal, the winners target phase); they are undocumented and unauthenticated, and a failed phase group lookup leaves the zip without `context.json` rather than inventing values.
+
 ### Two beamers on one number: the newcomer is refused
 
 **When a second beamer uses a station number another beamer used in the last 15 s, its Wii gets `ST_DUP_STATION` and its telemetry is dropped. The beamer already holding the station keeps playing; the status page names both.** (2026-10-07, redesign D17)

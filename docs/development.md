@@ -31,7 +31,12 @@ check.
 | `npm run build` | Compiles to `dist/`. The Pi runs `dist/main.js`. |
 | `LAZYTO_DIR=<dir> npm start` | Runs the relay from source with its settings, audit log and setup code in `<dir>`. With no settings there it serves the setup page on port 29473. The fields are in [architecture.md](architecture.md#startup-and-event-discovery). Without `LAZYTO_DIR` the folder is `/var/lib/lazyto` on Linux and the desktop app's own folder on Windows and macOS (below). |
 | `npm run sim` | Load test: 12 simulated Wiis play sets for 10 minutes against an in-process relay and fake start.gg. Fails on any error or on 70 or more start.gg calls in a minute. For a shorter run: `npx tsx scripts/sim-wii.ts --duration=60`. |
+| `node tools/gen_sjis.mjs <iconv-lite folder>` | Regenerates `generated/sjis.ts`, the set archive's Shift-JIS tables, from iconv-lite 0.6.3 (install it outside the repo: `npm install --no-save --prefix <tmp> iconv-lite@0.6.3`). Never edit the file by hand. |
 | `npx tsx scripts/preview-status.ts` | The status page on fake data at `http://127.0.0.1:29480/` (three Wiis, a flagged station, telemetry), for checking its layout at phone width. TO password `to-pass-9876`. `--page=setup` and `--page=failed` show the setup wizard and the "Not running" page; `--wii=<dir>` (an unpacked bundle's `wii/`) makes the SD cards page serve real zips; `--network` makes it a relay on the LAN (beacon, telemetry, TCP 29470) that a development Dolphin can play against; `--laptop` adds what the desktop app shows (a firewall note with its button, a newer release, no update channel in the settings). |
+
+`test/rr-conformance/` holds Replay Reporter for Slippi's own output for a set of fixtures, made by
+its code (`BUNDLE.md` there says how); `test/rr-conformance.test.ts` holds the set archive to it.
+It is generated: never edit it by hand, and keep its bytes (`.gitattributes`, `.prettierignore`).
 
 **On Windows.** `python3` is often the Microsoft Store alias; the npm scripts call `python`.
 npm drops some flags after `--` (`--duration`), so run `npx tsx scripts/<name>.ts` directly when

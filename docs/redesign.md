@@ -60,6 +60,7 @@ Laptop: LazyTO app = Electron shell + the relay core (src/, unchanged in shape)
 | D18 | `protocol.yaml` and the generated protocol headers are MIT (`SPDX-License-Identifier: MIT`). The rest of LazyTO stays GPL-2.0-only. | The firmware fork (MIT) compiles the generated `relay_proto.h`. |
 | D19 | Builds: a universal dmg, a one-click per-user NSIS installer and a Linux AppImage. `productName` LazyTO, `appId` `gg.lazyto.app`. Windows 10 and macOS 12 at least. | One dmg for both Mac architectures; the AppImage is free in the same CI; Electron 44 sets the floor. |
 | D20 | The status page may offer "Allow LazyTO through the firewall", which raises one admin prompt. | Cancel on Windows's first prompt creates block rules that never prompt again. |
+| D21 | The set zip is Replay Reporter's format (v2.7.0, default copy settings) byte for byte, with the values LazyTO reported where Replay Reporter's are wrong. Its start.gg facts come from where Replay Reporter takes them, including its two REST reads. See [The zip and Lucky Stats](#the-zip-and-lucky-stats). | Lucky Stats reads Replay Reporter's zips, so the safest zip is one it has already seen. A value Replay Reporter gets wrong (a port swap, a hand-scored tie) would contradict what start.gg shows. |
 
 ## The Wii side
 
@@ -403,11 +404,65 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
 
 ### The zip and Lucky Stats
 
-- **The zip.** The archive already writes Replay Reporter's layout: a flat zip with `context.json`
-  first, then `<n> - <players and characters> - <stage>.slp`, with the tags written into each
-  replay's display-name fields. Its `context.json` already carries Replay Reporter's keys. Known
-  differences: `bestOf` comes from the set (Replay Reporter derives it from the winner's game
-  count), and `prefixes`, `pronouns`, `ordinal` and `stream` are blank.
+- **The zip (D21).** The archive writes what Replay Reporter for Slippi v2.7.0 writes when it
+  reports and copies a set with its default settings, and `npm test` compares it with Replay
+  Reporter's own output (`test/rr-conformance/`, made by its code). Copied byte for byte:
+  - the zip name `{phaseOrEvent} {roundShort} - {playersChars}.zip` and each entry's
+    `{ordinal} - {playersChars} - {stage}.slp`: filled in its order, first occurrence only, with
+    its character short names (`GW`, `YL`) and stage names (`Pokémon Stadium`), then
+    sanitize-filename 1.6.3. The zip name has the entrants in bracket order with every character
+    they used, an entry name that game's players in port order;
+  - `context.json`: its keys in its order (`bestOf`, `durationMs`, `scores`, `finalScore`,
+    `players`, `startMs`, `startgg`), minified, first in the zip, and only when every player of
+    every game has a name; `durationMs` is the sum of `ceil((lastFrame + 124) / 0.05994)`, with
+    `lastFrame` from the last Frame Bookend;
+  - the re-time: every game moves by one offset so the last one ends at the reported set's
+    `completedAt`, in `startMs` and in each replay's `metadata.startAt` (its length byte and the
+    24-character string; the file grows by 5 bytes);
+  - each replay's display names at Game Start `0x1A5 + 31 * port`, in its encoding: the first 15
+    UTF-16 units, iconv-lite 0.6.3's Shift_JIS (cp932), ASCII punctuation full-width. The table is
+    generated from iconv-lite itself into `generated/sjis.ts` (`tools/gen_sjis.mjs`), so the relay
+    keeps no dependency;
+  - the `startgg` block: the participants' untrimmed `gamerTag`, `prefix` and `pronouns` and the
+    stream `{id, domain lowercased, path}` from GraphQL, the rest from its REST reads (below);
+    `set.round` one up for a grand final reset;
+  - yazl's zip headers: version made by 3.63 (Unix), mode 0664, deflate, UTF-8 names.
+- **LazyTO's values where Replay Reporter's are wrong.** Each makes `context.json` agree with what
+  LazyTO reported to start.gg:
+  - each game's winner is the one LazyTO reported (`winner_slot`, LGL's tiebreak included), not
+    the one Replay Reporter works out from the replay. A tie the TO scored by hand counts;
+  - the running score and `finalScore` count per player. Replay Reporter counts per port slot, so
+    after a port swap it credits the wrong player (its 3-2 Bo5 came out 1-4 with `bestOf` 7);
+  - `bestOf` is the set's best-of, the one the Wiis played;
+  - display names are encoded without corruption: Replay Reporter remaps every byte through its
+    full-width table, trail bytes included (ソ `83 5C` becomes `83 81 5F`), and writes past the
+    31-byte field into the next port's. Here only single-byte characters are remapped, and a name
+    is cut between characters to fit its field;
+  - tags are taken literally: Replay Reporter's `String.replace` turns `$$` into `$` and `$&` into
+    the placeholder.
+- **Order and start times.** Game N is game N of the report; Replay Reporter sorts its replays by
+  `startAt`, the same order for a set played in order. Each game starts at its `replay_id`, the
+  replay's own start in UTC; Replay Reporter reads Nintendont's zone-less `startAt` in its local
+  time, and the two agree except across a daylight-saving change.
+- **The REST reads.** start.gg's GraphQL has no `locationDisplayName`, no `callOrder`, `isGF`,
+  `unreachable` or prerequisite conditions, and no `winnersTargetPhaseId`, so the relay makes
+  Replay Reporter's own unauthenticated REST requests, to the origin of its GraphQL endpoint and
+  with the 5xx rule:
+  - `GET /tournament/<slug>?expand[]=event` once when the event resolves: `tournament.location`,
+    and `event.hasSiblings` (more than one Melee singles or doubles event). It failing fails the
+    start like any other lookup;
+  - `GET /phase_group/<id>?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true` once per
+    START_SET, right after the claim and without holding up the Wii: `phaseGroup.bracketType`,
+    `name`, `waveId`, `winnersTargetPhaseId`, and `set.ordinal` from Replay Reporter's
+    double-elimination stack (`callOrder` otherwise). A failed lookup is not made again: the zip
+    is written without `context.json`, and says why.
+  - Not yet checked against the live API: whether start.gg serves these REST paths for an
+    unpublished tournament (the test tournament) and what `locationDisplayName` looks like. The
+    shapes are taken from Replay Reporter's code. Check both with a read-only lookup before an
+    event.
+- **Unassigned ports.** A game scored by hand without an L + R claim has no names. As in Replay
+  Reporter with no chip on a port, its entry names give each player's character (and nametag),
+  the zip name has no players, and there is no `context.json`.
 - **Where zips go.** The archive folder: `Documents/LazyTO` unless the TO changes it. Never Replay
   Reporter's copy folder, which treats every zip there as a set it reported.
 - **Upload.** Lucky Stats (luckystats.gg) takes uploads only in its web page, "Import Tournament Game
@@ -763,7 +818,7 @@ through `ptr 0x803DA968`, and is merged into this branch.
 
 ## Open questions
 
-The maintainer's decisions of 2026-10-07 closed the earlier list. One choice and three outside
+The maintainer's decisions of 2026-10-07 closed the earlier list. One choice and four outside
 answers remain:
 
 1. **Stocks for a game the tiebreak game decided.** Built as planned: none (both 0xFF), like a game
@@ -772,10 +827,13 @@ answers remain:
    replay.
 2. **Lucky Stats' rules.** Which `context.json` fields and game counts the server checks. Upload one
    archive zip as a test, or ask Lucky 7s.
-3. **Broadcast from the packaged macOS app.** Whether raw UDP broadcast works from the ad-hoc-signed
+3. **start.gg's REST API for an unpublished tournament.** The archive's two REST reads (D21) are
+   Replay Reporter's, unauthenticated. Whether they answer for the unpublished test tournament,
+   and the format of `locationDisplayName`, need a read-only lookup.
+4. **Broadcast from the packaged macOS app.** Whether raw UDP broadcast works from the ad-hoc-signed
    app (Phase 3's first step). If it does not, LazyTO advertises over Bonjour, as Replay Reporter
    does.
-4. **The Wii's USB power.** Whether a Wii cuts USB power on reset, IOS reload, standby and off,
+5. **The Wii's USB power.** Whether a Wii cuts USB power on reset, IOS reload, standby and off,
    which decides when a beamer can erase mid-event (Phase 1).
 
 ## Docs to revise as parts land
