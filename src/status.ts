@@ -8,6 +8,12 @@
 // waiting set's best-of -- need the admin password (web.ts). Freeing goes
 // through a confirm page that names the set and the score it discards.
 //
+// At the top, what keeps stations from reaching the relay at all: macOS's
+// Local Network switch (the beacon fails with EHOSTUNREACH), the desktop
+// app's notes about the laptop (platform.ts: Windows Firewall, with its fix
+// button), and beacons answered by nobody for NO_CONTACT_MS. In the footer,
+// a newer LazyTO release, whose link is withheld while a station is mid-set.
+//
 // The footer is the "night of" dashboard: cache size and age (stale =
 // warning), how many sets are selectable vs on stations, upstream call rate,
 // the last refresh error, the R8 preview-id warning, the beacon, refusals.
@@ -18,12 +24,6 @@
 //
 // "Beamers and set archives" is the experimental set archive (archive.ts):
 // each station's beamer as its announces placed it, and the zips written.
-//
-// At the top, what keeps stations from reaching the relay at all: macOS's
-// Local Network switch (the beacon fails with EHOSTUNREACH), the desktop
-// app's notes about the laptop (platform.ts: Windows Firewall, with its fix
-// button), and beacons answered by nobody for NO_CONTACT_MS. In the footer,
-// a newer LazyTO release, whose link is withheld while a station is mid-set.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SetCache } from './cache.js';
