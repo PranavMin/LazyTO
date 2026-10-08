@@ -23,12 +23,17 @@
  * 2026-09-30), with a status line
  * above it: SENDING... / SCORE SENT / SEND FAILED, else the next game
  * (GAME n or HANDWARMER). Inputs are ignored while a request is in flight.
- * Games carry winners only (R13). */
+ * Every game carries the replay of the set's last match (record gate) when
+ * that match was recorded and no earlier game took it. */
 
-/* Called by mntourney when START_SET succeeds. Copies the set and resets
- * the game list. */
-void lbTourney_SetCurrent(const struct set_entry* set);
+/* Called by mntourney when START_SET succeeds, with the poll header of that
+ * reply. Copies the set and resets the game list; the header's host_build
+ * says whether this host has the record gate (RECORD_GATE_HOST_BUILD). */
+void lbTourney_SetCurrent(const struct set_entry* set,
+                          const struct exi_poll_hdr* host);
 
+/* No set is current: friendlies, and leaving the set list for the vanilla
+ * main menu (a match from there is neither scored nor recorded). */
 void lbTourney_ClearCurrent(void);
 
 /* GS_CSS scene hooks (gmscdata rows): run the tournament keybinds, polls
@@ -41,6 +46,12 @@ void lbTourney_SSSEnter(void* arg);
  * flagged game, then the vanilla gm_Scene_Vs handler. */
 void lbTourney_MatchFrame(void);
 void lbTourney_MatchExit(void* arg);
+
+/* GS_VS on_enter (gmscdata row): the record gate. Around vanilla
+ * gm_Scene_Vs_OnEnter, whose StartMelee sends Slippi's Game Start, it asks
+ * the kernel to record the match when it is a game of the current set (not a
+ * handwarmer) and the host has the gate; everything else is not recorded. */
+void lbTourney_MatchEnter(void* arg);
 
 /* GS_SUDDEN_DEATH on_exit (gmscdata row): vanilla gm_Scene_Vs_OnExit, then
  * auto-scores the tiebreak game the cards' Gameplay code plays after a tied

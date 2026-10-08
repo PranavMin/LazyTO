@@ -147,7 +147,9 @@ anything):
      `s0 = start_seq; want = RECORD_THIS_MATCH;` call vanilla, then `want = 0;`
      `match_seq = (start_seq == s0 + 1) ? start_seq : 0`. Otherwise `match_seq = 0` and `want`
      stays 0.
-  2. At VS exit: `replay_id = (match_seq != 0 && file_seq == match_seq) ? file_id : 0`.
+  2. When the game is appended (the first CSS frame after the VS exit, or a hand score):
+     `replay_id = (match_seq != 0 && file_seq == match_seq) ? file_id : 0`, read then rather
+     than at the VS exit so a writer that opened the file late still counts.
   3. A tiebreak game (Sudden Death scene) does not touch the gate; it reports the main game's
      `replay_id`.
   4. Hand scoring takes the id of the set's last match if it was recorded and its id is not used
@@ -183,11 +185,11 @@ anything):
   Text limits: `fail()` strings at most 30 characters, each line under 128 encoded bytes (a space
   after a letter costs 7), pane labels about 10 characters, no underscore in the font.
 
-On this branch the kiosk only does what the contract forces: the new offsets, no
-`CMD_GAME_START`, ports in auto-scored games, `replay_id` always 0, and the retired flags replaced
-by `PF_NO_BEAMER` (with `NB_STARTING` as a wait), `PF_NO_STATION` / `PF_NO_SECRET` and
-`WIFI_JOINING`. The record gate, the VS on_enter hook and the rest of the table are the kiosk's
-next step.
+The kiosk (branch `redesign-kiosk`) does all of the above: the VS on_enter hook and the record
+gate, `replay_id` for every game (read from the gate when the game is appended, so a writer that
+opened the file late still counts), the L + R claim's ports on hand-scored games, and the table's
+texts in its check order. [kiosk.md](kiosk.md) has the details. Not run on hardware yet: it
+needs the kernel with the gate and mailbox v2.
 
 ## Kernel (`Nintendont/kernel`)
 
@@ -338,5 +340,5 @@ firmware. Mixed versions fail visibly:
 - v1 beamer firmware never accepts a v2 relay's beacon (it compares the version), so it shows no
   relay until it is reflashed. From v2 on, firmware ignores the version.
 
-Until the kiosk fills `replay_id` from the record gate, every game reports 0 and the set archive
-binds no replay.
+Until the kernel has the record gate (`host_build` 7), the kiosk never touches it, every game
+reports 0 and the set archive binds no replay.

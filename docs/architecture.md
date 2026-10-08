@@ -110,11 +110,11 @@ The Wii boots straight into the set list. The menu hijacks the main menu's Troph
 
 | View | What it shows |
 |------|---------------|
-| Searching | LOOKING FOR THE RELAY until the host has heard a beacon. After 10 s: NO RELAY FOUND. A searches again. |
+| Searching | Waits for the beamer and the relay, in this order: WAITING FOR THE BEAMER (the kernel's "starting"), THIS BEAMER HAS NO NUMBER (until its button is pressed), BEAMER JOINING THE WI-FI (up to 60 s), LOOKING FOR THE RELAY (up to 10 s, then BEAMER HEARS NO RELAY). Anything no wait cures is an error at once. |
 | Loading | LOADING SETS, plus station number and the relay's address and port. |
 | Set list | Two panes. Left: "tag VS tag" rows grouped under round names, earliest round first. Right: the highlighted set (round, tags, best of, A START or A RESUME). |
 | Confirm | START THIS SET? A starts it and opens the CSS. B goes back. |
-| Error | NO LINK TO THE RELAY or THE RELAY SAID NO, the relay's message, A retries. |
+| Error | What is wrong, picked by code from the host's poll header ([kiosk.md](kiosk.md)): the beamer (none, its reason, no number, no secret, its Wi-Fi), the relay (not heard, no link, timeout), or the relay's own answer (RELAY SECRET MISMATCH, TWO BEAMERS ARE STATION n, THE RELAY SAID NO with its message). A retries. |
 
 Set list controls: up/down move, left/right page, L/R first-letter filter, X jumps to this station's set, Y refreshes, Z enters friendlies (CSS with no set), B goes to the main menu.
 
@@ -132,7 +132,7 @@ Set list controls: up/down move, left/right page, L/R first-letter filter, X jum
 
 Any controller port can drive these. A trigger counts at its click or any analog press.
 
-The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 ZAIN`. The banner is also the status: yellow digits, amber while a report is in flight, green after SCORE SENT, red after a failure (alternating with SEND FAILED - TELL THE TO). Until the players are placed it alternates with HOLD L+R IF YOU ARE &lt;name&gt;.
+The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 ZAIN`. The banner is also the status: yellow digits, amber while a report is in flight, green after SCORE SENT, red after a failure (alternating with SEND FAILED - TELL THE TO). It alternates with WAITING FOR THE BEAMER while the beamer restarts, with REPLAYS NOT SAVING - TELL THE TO when the beamer's card is full or faulty, and until the players are placed with HOLD L+R IF YOU ARE &lt;name&gt;.
 
 #### Auto-score
 
@@ -150,7 +150,11 @@ Also left to the players:
 - a Team battle (`TEAMS ON - SCORE BY HAND`): the game decides it by team standings, which LGL does not touch;
 - a game with a CPU or more than two players (`AUTO-SCORE NEEDS 2 PLAYERS`).
 
-Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner only.
+Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner, the claim's ports when known, and the replay id below; no characters, stage, stocks or costumes.
+
+#### Recording only set games
+
+The module wraps the VS scene's on_enter (`ptr 0x803DA950`, vanilla `gm_Scene_Vs_OnEnter`, which sends Slippi's Game Start). For a game of the current set that is not a handwarmer, on a host with the gate (`host_build` 7 or later), it sets `record_gate.want` in MEM2 around the vanilla call, and the kernel records that match only. Friendlies, handwarmers, matches from the vanilla main menu (B from the set list clears the set) and LGL's tiebreak game leave no replay. Each game appended to the set gets the replay id of the set's last match if the kernel opened a file for it and no earlier game took it, else 0; so a tiebreak game reports its main game's replay. Dolphin has no gate and reports 0. Details: [kiosk.md](kiosk.md), The record gate.
 
 #### EXI device contract
 
@@ -162,6 +166,7 @@ The module talks to a fake EXI device that the host implements.
 | Request | command word `EXI_RELAY_REQ << 24`, then `relay_hdr` + payload |
 | Poll | command word `EXI_RELAY_POLL << 24`, then a 4096-byte DMA read: `exi_poll_hdr`, `relay_hdr`, `relay_resp`, payload |
 | Game timeout | 5 s; any poll state other than DONE or ERROR means "still waiting" |
+| Record gate | `record_gate`, 64 bytes of MEM2 at PPC `0xD3003200`: line 0 (`want`) written by the module, line 1 (`start_seq`, `file_seq`, `file_id`) by the kernel; u32 accesses only, and only when `host_build` is at least 7 |
 
 The game never blocks. It polls once per frame. All buffers are static. The command values (0xF0, 0xF1) sit clear of Slippi's EXI command space.
 
@@ -351,7 +356,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 |---------|------------|-----------|
 | No `lazyto_station.txt` | Wii | "NO STATION FILE ON THE CARD". Station unusable until fixed. |
 | Wrong or missing secret | Wii + status page | RELAY SECRET MISMATCH. Counted on the status page. |
-| No beacon heard | Wii | NO RELAY FOUND after 10 s. A searches again. |
+| No beacon heard | Wii | BEAMER HEARS NO RELAY after 10 s. A searches again. |
 | Relay unreachable | Wii | Times out after 3 s. A retries. TO checks the Pi and network. |
 | Set taken | Wii | "started on station N". Player picks again. |
 | `assignStream` fails after `markSetInProgress` | Wii + status page | Set is in progress but not on stream. TO assigns it by hand and acks. |

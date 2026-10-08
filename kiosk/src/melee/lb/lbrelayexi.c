@@ -144,3 +144,9 @@ void lbRelayExi_Abort(void)
 {
     in_flight = false;
 }
+
+bool lbRelayExi_NotSaving(const struct exi_poll_hdr* ph)
+{
+    return ph->beamer_storage != STORE_OK &&
+           ph->beamer_storage != STORE_FILLING;
+}
