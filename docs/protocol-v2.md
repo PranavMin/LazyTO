@@ -198,11 +198,12 @@ Game results (`game_result`, 16 bytes):
   Text limits: `fail()` strings at most 30 characters, each line under 128 encoded bytes (a space
   after a letter costs 7), pane labels about 10 characters, no underscore in the font.
 
-The kiosk (branch `redesign-kiosk`) does all of the above: the VS on_enter hook and the record
-gate, `replay_id` for every game (read from the gate when the game is appended, so a writer that
-opened the file late still counts), the L + R claim's ports on hand-scored games, and the table's
-texts in its check order. [kiosk.md](kiosk.md) has the details. Not run on hardware yet: it
-needs the kernel with the gate and mailbox v2.
+The kiosk (branch `redesign-kiosk`, merged into `redesign-v2`) does all of the above: the VS
+on_enter hook and the record gate, `replay_id` for every game (read from the gate when the game is
+appended, so a writer that opened the file late still counts), the L + R claim's ports on
+hand-scored games, a tiebreak game without stocks, the resume from `start_set_resp` (a reply
+without it is BAD RESPONSE), and the table's texts in its check order. [kiosk.md](kiosk.md) has
+the details. Not run on hardware yet: it needs the kernel with the gate and mailbox v2.
 
 ## Kernel (`Nintendont/kernel`)
 

@@ -126,8 +126,13 @@ Nintendont kernel reads when Slippi's Game Start arrives:
   last VS match: `file_id` when `file_seq` equals that match's sequence and no earlier game of
   the set already carries it, else 0. It is read when the game is appended (the first CSS frame
   back, or the flick), not at the VS exit, so a writer that opened the file late still counts.
-  A tiebreak game therefore reports its main game's replay, a handwarmer that turned into a real
-  game gets 0, and undo frees an id. Hand-scored games send the L + R claim's ports.
+  A tiebreak game therefore reports its main game's replay (and no stocks, which would
+  contradict that replay), a handwarmer that turned into a real game gets 0, and undo frees an
+  id. Hand-scored games send the L + R claim's ports.
+- **Resume (N3).** The START_SET reply's `start_set_resp` holds the games the relay has for the
+  set: none for a new set, the games already reported on a resume after a reboot.
+  `lbTourney_SetCurrent` takes them as the game list, with their replay ids, so the next report
+  keeps them on start.gg.
 - **Leaving the set list** (B to the vanilla main menu) clears the current set, so a match
   started from there is neither scored nor recorded.
 

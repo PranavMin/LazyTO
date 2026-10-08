@@ -231,8 +231,9 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       a double KO on the last stocks: the game plays LGL's tiebreak (1 stock, 0%, 3:00), and
       back on the CSS the score counts ONE game, to the tiebreak's winner (`GAME n TO
       <TAG>`). A tiebreak that ties again: `TIE - SCORE IT MANUALLY`, nothing appended.
-      The game is reported with the main game's replay id (the relay log shows it), and no
-      second `.slp` appears for the tiebreak. *Scored by `lbTourney_TiebreakExit` (`ptr
+      The game is reported with the main game's replay id (the relay log shows it) and
+      without stocks (start.gg shows no per-game score for it), and no second `.slp` appears
+      for the tiebreak. *Scored by `lbTourney_TiebreakExit` (`ptr
       0x803DA968`, the GS_SUDDEN_DEATH exit), armed only by a set game's tie; the tiebreak's
       scene does not touch the record gate, so the main game stays the set's last match.*
 - [ ] **Replay ids in the reports (record gate):** on a Wii with a beamer, every auto-scored
@@ -252,8 +253,13 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 - [ ] **B from the set list leaves the set:** start a set, go back to the list with B on
       the CSS, then B again to the vanilla main menu and start a VS match from there: no
       score banner, nothing scored, nothing recorded. Z back into the list shows the set as
-      PLAYING HERE, and A RESUME starts it again (at 0-0 on the Wii: the resume gap N3 in
-      redesign.md). *`exitToMainMenu` calls `lbTourney_ClearCurrent`.*
+      PLAYING HERE, and A RESUME starts it again with the games already reported. *`exitToMainMenu`
+      calls `lbTourney_ClearCurrent`.*
+- [ ] **A Wii reboot mid-set keeps the games (N3):** report two games, power the Wii off and on,
+      pick the set (first in the list, PLAYING HERE): the CSS shows the score it had (1 - 1),
+      and the next game is reported as game 3 with games 1 and 2 still on start.gg. *The
+      START_SET reply carries `start_set_resp`; `lbTourney_SetCurrent` takes its games. A
+      reply without it is BAD RESPONSE.*
 - [ ] **Characters and stage reported (v38):** after an auto-scored game the start.gg
       set's game row shows both characters and the stage (check the set page or the
       relay audit log). *Filled from `MatchEnd.player_standings[].ckind` per entrant and

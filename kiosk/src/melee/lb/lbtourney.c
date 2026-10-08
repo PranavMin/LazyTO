@@ -174,14 +174,20 @@ static int entrantPort(int entrant)
 }
 
 void lbTourney_SetCurrent(const struct set_entry* set,
-                          const struct exi_poll_hdr* host)
+                          const struct exi_poll_hdr* host,
+                          const struct start_set_resp* held)
 {
     cur_set = *set;
     css_host = *host;
     gate_build = host->host_build;
     last_match_seq = 0;
+    /* The relay's games for the set: none for a new set; on a resume after a
+     * reboot, the games already reported, so the next report keeps them
+     * (docs/redesign.md, N3). Their replay ids come along, so a later hand
+     * score never takes one of them again. */
     memset(games, 0, sizeof(games));
-    game_count = 0;
+    game_count = held->game_count;
+    memcpy(games, held->games, game_count * sizeof(struct game_result));
     pending_cmd = 0;
     last_failed = false;
     end_hold = 0;
@@ -1125,8 +1131,12 @@ void lbTourney_MatchExit(void* arg)
  * scene has its own scene-table row; its exit is the same vanilla
  * gm_Scene_Vs_OnExit, filling gmVsMelee_SuddenDeathExitInfo, so the tiebreak
  * is scored like any game and stands for the tied game, which appended
- * nothing. A tiebreak that ties again is not replayed (vanilla goes to the
- * results screen): its TIE note asks for hand scoring. */
+ * nothing. It is not recorded (the gate is the VS scene's), so it reports the
+ * tied game's replay, and no stocks: its own 1 and 0 would contradict that
+ * replay, whose stocks are tied (both 0xFF, so the relay sends no per-game
+ * score and its content check compares none; protocol.yaml game_result). A
+ * tiebreak that ties again is not replayed (vanilla goes to the results
+ * screen): its TIE note asks for hand scoring. */
 void lbTourney_TiebreakExit(void* arg)
 {
     bool armed = tiebreak_armed;
@@ -1135,6 +1145,8 @@ void lbTourney_TiebreakExit(void* arg)
     if (armed && has_set && !handwarmer && arg != NULL) {
         autoScoreFromMatch(&((struct lbTourney_EndMelee*) arg)->me);
         tiebreak_armed = false;
+        auto_stocks[0] = STOCKS_UNKNOWN;
+        auto_stocks[1] = STOCKS_UNKNOWN;
     }
 }
 

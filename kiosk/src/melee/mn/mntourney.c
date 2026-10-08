@@ -1582,8 +1582,18 @@ static void pollRelay(void)
         /* START_SET accepted: hand the set to lbtourney and enter the CSS.
          * The scene teardown frees this think and the overlay. The header
          * is this reply's, a real host's: its host_build decides the record
-         * gate for the set. */
-        lbTourney_SetCurrent(&tm_sets[tm_chosen], &tm_ph);
+         * gate for the set. The reply carries the set's games (a resume
+         * after a reboot goes on from them, N3). */
+        const struct start_set_resp* held =
+            (const struct start_set_resp*) r->payload;
+        if (r->hdr.len < sizeof(struct relay_resp) + sizeof(*held) ||
+            held->set_id != tm_sets[tm_chosen].set_id ||
+            held->game_count > MAX_GAMES)
+        {
+            fail(TE_BAD, "BAD RESPONSE");
+            return;
+        }
+        lbTourney_SetCurrent(&tm_sets[tm_chosen], &tm_ph, held);
         tm_state = TM_OFF;
         mn_80229860(GM_VS);
     }

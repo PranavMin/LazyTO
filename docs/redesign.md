@@ -689,6 +689,7 @@ These hold whatever happens to the redesign:
   works with the kiosk module loaded: the maintainer checked it on a Wii with the previous build.
 - **A Wii reboot mid-set loses games (N3).** The kiosk resumes at 0-0, and its next report
   overwrites the earlier games on start.gg. The resume reply should return the claim's games.
+  Built: the START_SET reply carries `start_set_resp`, and the kiosk takes its games.
 - **Stale docs.** `docs/architecture.md` still describes `CMD_ABANDON_SET`, which the relay no
   longer handles.
 - **Licence (D18).** The firmware fork (MIT, built with Apache-2.0 ESP-IDF) contains the generated
@@ -765,9 +766,10 @@ through `ptr 0x803DA968`, and is merged into this branch.
 The maintainer's decisions of 2026-10-07 closed the earlier list. One choice and three outside
 answers remain:
 
-1. **Stocks for a game the tiebreak game decided.** Planned: none (both 0xFF), like a game the limit
-   decided, because the game's replay is the main game's and its stocks are tied. The alternative
-   is the tiebreak's 1 and 0, which the content check must then not compare with that replay.
+1. **Stocks for a game the tiebreak game decided.** Built as planned: none (both 0xFF), like a game
+   the limit decided, because the game's replay is the main game's and its stocks are tied. The
+   alternative is the tiebreak's 1 and 0, which the content check must then not compare with that
+   replay.
 2. **Lucky Stats' rules.** Which `context.json` fields and game counts the server checks. Upload one
    archive zip as a test, or ask Lucky 7s.
 3. **Broadcast from the packaged macOS app.** Whether raw UDP broadcast works from the ad-hoc-signed

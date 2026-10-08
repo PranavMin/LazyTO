@@ -27,10 +27,13 @@
  * that match was recorded and no earlier game took it. */
 
 /* Called by mntourney when START_SET succeeds, with the poll header of that
- * reply. Copies the set and resets the game list; the header's host_build
- * says whether this host has the record gate (RECORD_GATE_HOST_BUILD). */
+ * reply and its start_set_resp. Copies the set and takes the relay's games
+ * for it as the game list (none for a new set, the games already reported
+ * on a resume after a reboot); the header's host_build says whether this
+ * host has the record gate (RECORD_GATE_HOST_BUILD). */
 void lbTourney_SetCurrent(const struct set_entry* set,
-                          const struct exi_poll_hdr* host);
+                          const struct exi_poll_hdr* host,
+                          const struct start_set_resp* held);
 
 /* No set is current: friendlies, and leaving the set list for the vanilla
  * main menu (a match from there is neither scored nor recorded). */
@@ -55,7 +58,8 @@ void lbTourney_MatchEnter(void* arg);
 
 /* GS_SUDDEN_DEATH on_exit (gmscdata row): vanilla gm_Scene_Vs_OnExit, then
  * auto-scores the tiebreak game the cards' Gameplay code plays after a tied
- * game (1 stock, 0%, 3:00), when that game was a set game that tied. */
+ * game (1 stock, 0%, 3:00), when that game was a set game that tied: with
+ * the tied game's replay and no stocks. */
 void lbTourney_TiebreakExit(void* arg);
 
 #endif
