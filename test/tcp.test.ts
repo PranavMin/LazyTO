@@ -157,6 +157,22 @@ test('full set lifecycle on a non-stream station', async (t) => {
       assert.deepEqual([mixed[0]!.entrant1Score, mixed[0]!.entrant2Score], [0, 4]);
       assert.equal(mixed[1]!.entrant1Score, undefined);
       assert.equal(mixed[1]!.entrant2Score, undefined);
+      // A game the ledge-grab limit decided: the kiosk knows characters,
+      // stage and costumes but sends stocks 0xFF, so there is no per-game
+      // score (the loser may have more stocks than the winner).
+      const r5 = await wii.reportScore(SET, [game(2, 2, 9, 0x1f, [0xff, 0xff], [1, 0])]);
+      assert.equal(r5.resp.msg, '0-1');
+      assert.deepEqual(env.fake.callsFor('reportBracketSet').at(-1)!.variables.gameData, [
+        {
+          gameNum: 1,
+          winnerId: entrant(2).id,
+          stageId: 19, // Battlefield
+          selections: [
+            { entrantId: entrant(1).id, characterId: 6 }, // Fox
+            { entrantId: entrant(2).id, characterId: 14 }, // Marth
+          ],
+        },
+      ]);
     },
   );
 

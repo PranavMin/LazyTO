@@ -42,4 +42,9 @@ void lbTourney_SSSEnter(void* arg);
 void lbTourney_MatchFrame(void);
 void lbTourney_MatchExit(void* arg);
 
+/* GS_SUDDEN_DEATH on_exit (gmscdata row): vanilla gm_Scene_Vs_OnExit, then
+ * auto-scores the tiebreak game the cards' Gameplay code plays after a tied
+ * game (1 stock, 0%, 3:00), when that game was a set game that tied. */
+void lbTourney_TiebreakExit(void* arg);
+
 #endif

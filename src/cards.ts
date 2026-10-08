@@ -10,8 +10,9 @@
 //   lazyto_station.txt  station= and secret=
 //   lazyto_nincfg.bin   the loader's own settings, fresh: Network and Auto Boot
 //                       on, the game at games/GALE01/game.iso, Melee's codes at
-//                       their defaults (UCF on). A venue's Slippi Nintendont
-//                       keeps its own slippi_nincfg.bin; neither reads the other's.
+//                       their defaults (UCF on) plus Gameplay: Both (LGL and
+//                       anti-wobbling). A venue's Slippi Nintendont keeps its
+//                       own slippi_nincfg.bin; neither reads the other's.
 //   README.txt and games/GALE01/README.txt
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -34,10 +35,17 @@ const NIN_CFG_VERSION = 0xe;
 const NIN_LAN_AUTO = 0xffffffff;
 const GAME_PATH = '/games/GALE01/game.iso';
 const GAME_ID = 0x47414c45; // "GALE", Melee NTSC
-// Nintendont common/config/MeleeCodes.c line items 0-7 at their defaultValue:
-// Controller Fix UCF, PAL patch off, Convenience stealth, then lag reduction,
-// frozen stages, gameplay, screen and safety all at their first option.
-const MELEE_CODES = [2, 1, 2, 1, 1, 1, 1, 1];
+// Nintendont common/config/MeleeCodes.c line items 0-7 at their defaultValue
+// (Controller Fix UCF, PAL patch off, Convenience stealth, then lag reduction,
+// frozen stages, screen and safety at their first option), except Gameplay
+// (MELEE_CODES_GAMEPLAY_OPTION_ID 5) = 4, "Both": the kernel (Patch.c) applies
+// the option whose value matches, here g_gameplay_both.bin, which is
+// g_gameplay_lgl.bin (UnclePunch's ledge-grab limit) followed by
+// g_gameplay_wobbling.bin (anti-wobbling). On a time-out LGL takes the player
+// ahead on stocks, then lower percent, unless that player is over the
+// ledge-grab limit and the other is not, and the kiosk reports the game's own
+// winner (docs/architecture.md, Auto-score). 2 would be LGL alone.
+const MELEE_CODES = [2, 1, 2, 1, 1, 4, 1, 1];
 
 /** A fresh lazyto_nincfg.bin: what the loader would save after picking the game and turning on Network and Auto Boot. */
 export function loaderSettings(): Buffer {
@@ -74,9 +82,11 @@ What is on the card:
   apps/LazyTO/        the LazyTO loader (Slippi Nintendont with the tournament kiosk)
   lazyto_kiosk.bin    the kiosk module
   lazyto_station.txt  this card's station number and the relay's Wii secret
-  lazyto_nincfg.bin   the loader's settings: Network and Auto Boot on, UCF on, the
-                      game at games/GALE01/game.iso. A venue's own Slippi Nintendont
-                      on the same card keeps its own slippi_nincfg.bin.
+  lazyto_nincfg.bin   the loader's settings: Network and Auto Boot on, UCF on,
+                      Gameplay Both (the ledge-grab limit and anti-wobbling),
+                      the game at games/GALE01/game.iso. A venue's own Slippi
+                      Nintendont on the same card keeps its own
+                      slippi_nincfg.bin.
 
 Keep the card like a password: lazyto_station.txt carries the Wii secret.
 Made by the LazyTO ${version} relay.

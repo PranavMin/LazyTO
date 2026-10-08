@@ -100,6 +100,8 @@ static bool hw_battlefield;   /* the next stage-select enter forces Battlefield 
 
 /* Auto-score state (see autoScoreFromMatch below). */
 static int auto_pending;      /* entrant (1/2) who won the game just played */
+static bool auto_lgl;         /* the ledge-grab limit decided that game */
+static bool tiebreak_armed;   /* that game tied: score LGL's tiebreak game */
 static u8 auto_chars[2];      /* external CharacterKind of entrant 1 and 2 */
 static u8 auto_stocks[2];     /* stocks left at the end, entrant 1 and 2 */
 static u8 auto_costumes[2];   /* costume (colour) index, entrant 1 and 2 */
@@ -167,6 +169,7 @@ void lbTourney_SetCurrent(const struct set_entry* set)
     handwarmer = false;
     match_seen = false;
     auto_pending = 0;
+    tiebreak_armed = false;
     auto_note_frames = 0;
     claim_port = -1;
     memset(claim_hold, 0, sizeof(claim_hold));
@@ -463,11 +466,17 @@ static int leftEntrant(void)
 }
 
 /* Automatic scoring at game end (architecture.md, 2026-09-22). The
- * vanilla GS_VS exit fills the scene's MatchEnd (outcome + per-slot standings:
- * type, stocks, percent), so lbTourney_MatchExit reads it after the
- * vanilla handler and decides the game there; the game is appended and sent
- * on the first CSS frame back (where the relay is polled), unless the game was
- * a handwarmer. The C-stick binds stay for corrections (undo / re-score). */
+ * vanilla GS_VS exit fills the scene's MatchEnd (outcome, per-slot standings:
+ * type, stocks, percent, and the game's own winners[] after the cards'
+ * Gameplay code, LGL, has ruled on a time-out), so lbTourney_MatchExit reads it
+ * after the vanilla handler and reports the winner the game decided; the game
+ * is appended and sent on the first CSS frame back (where the relay is
+ * polled), unless the game was a handwarmer. A game that tied is not
+ * appended: LGL's tiebreak game follows in the Sudden Death scene, and
+ * lbTourney_TiebreakExit scores that one instead (2026-10-07), so the set
+ * gets one game for the two. The C-stick binds stay for corrections (undo /
+ * re-score). The Sudden Death scene's exit data
+ * (gmVsMelee_SuddenDeathExitInfo) has the same MatchExitInfo layout. */
 struct lbTourney_EndMelee { /* mirrors gmvs.c EndMeleeData */
     u32 x0, x4, x8;
     struct MatchEnd me;
@@ -489,28 +498,38 @@ static void autoScoreFromMatch(const struct MatchEnd* me)
     int slots[GM_MAX_PLAYERS];
     u8 who[2];
     int n = 0;
+    int others = 0;
     int i;
     int w;
 
     auto_pending = 0;
+    auto_lgl = false;
     if (me->outcome == OUTCOME_NO_CONTEST) {
         setAutoNote("NO CONTEST - NOT SCORED");
         return;
     }
-    if (me->outcome != OUTCOME_TIMEOUT && me->outcome != OUTCOME_ELIMINATION &&
-        me->outcome != OUTCOME_TEAM_ELIMINATION)
-    {
+    /* Team battle decides by team standings, which the Gameplay code never
+     * touches, so winners[] need not be the team the results screen names. */
+    if (me->is_teams) {
+        setAutoNote("TEAMS ON - SCORE BY HAND");
         return;
     }
+    if (me->outcome != OUTCOME_TIMEOUT && me->outcome != OUTCOME_ELIMINATION) {
+        return;
+    }
+    /* Exactly two players in the game, both human: a CPU counts in the game's
+     * winners[] and in the Gameplay code's leaders. */
     for (i = 0; i < GM_MAX_PLAYERS; i++) {
         if (me->player_standings[i].pkind == Gm_PKind_Human) {
             if (n < GM_MAX_PLAYERS) {
                 slots[n] = i;
             }
             n++;
+        } else if (me->player_standings[i].pkind != Gm_PKind_NA) {
+            others++;
         }
     }
-    if (n != 2) {
+    if (n != 2 || others != 0) {
         setAutoNote("AUTO-SCORE NEEDS 2 PLAYERS");
         return;
     }
@@ -538,17 +557,58 @@ static void autoScoreFromMatch(const struct MatchEnd* me)
     auto_costumes[who[0] - 1] = (u8) Player_GetCostumeId(slots[0]);
     auto_costumes[who[1] - 1] = (u8) Player_GetCostumeId(slots[1]);
     auto_stage = (u8) gm_GetStartMeleeRules()->stkind;
-    /* Stock mode: the survivor; on time-out more stocks, then less damage. */
+    /* The game's own winner, never recomputed here. The cards run Gameplay:
+     * Both (LGL and anti-wobbling). On a time-out LGL takes the player ahead
+     * on stocks, then lower percent; if that player is over the ledge-grab
+     * limit (more than 45 grabs at 8:00) and the other is not, the other
+     * wins; both over with one ahead, nobody wins. So the results screen,
+     * the replay and start.gg all name the same player. */
     {
         const struct MatchPlayerData* a = &me->player_standings[slots[0]];
         const struct MatchPlayerData* b = &me->player_standings[slots[1]];
-        if (a->stocks != b->stocks) {
-            w = a->stocks > b->stocks ? 0 : 1;
-        } else if (a->percent != b->percent) {
-            w = a->percent < b->percent ? 0 : 1;
-        } else {
-            setAutoNote("TIE - SCORE IT MANUALLY");
+        const struct MatchPlayerData* wp;
+        const struct MatchPlayerData* lp;
+        if (me->n_winners == 0) {
+            /* Only LGL leaves no winner: both over the limit, one ahead. */
+            setAutoNote("BOTH OVER LGL - SCORE BY HAND");
             return;
+        }
+        if (me->n_winners > 1) {
+            /* In a 1v1, LGL never leaves a time-out tied on stocks with
+             * different percent, so that card has Gameplay off, and vanilla
+             * Sudden Death follows: scored by hand. Otherwise an exact tie or
+             * a double KO on the last stocks: LGL's tiebreak game follows,
+             * and lbTourney_TiebreakExit scores it (vanilla goes there exactly
+             * when gm_MatchHasMultipleWinners). Nothing is appended for this
+             * game either way. */
+            if (me->outcome == OUTCOME_TIMEOUT && a->stocks == b->stocks &&
+                a->percent != b->percent)
+            {
+                setAutoNote("LGL OFF - SCORE BY HAND");
+            } else {
+                setAutoNote("TIE - SCORE IT MANUALLY");
+                tiebreak_armed = gm_MatchHasMultipleWinners((MatchEnd*) me);
+            }
+            return;
+        }
+        if (me->winners[0] != slots[0] && me->winners[0] != slots[1]) {
+            setAutoNote("AUTO-SCORE NEEDS 2 PLAYERS");
+            return;
+        }
+        w = me->winners[0] == slots[0] ? 0 : 1;
+        wp = w == 0 ? a : b;
+        lp = w == 0 ? b : a;
+        /* A stock-mode time-out won from behind on stocks, then percent: the
+         * limit decided it. Such a game sends no stocks (0xFF, so the relay
+         * sends no per-game score): the loser would show more stock icons
+         * than the winner. Characters, stage and costumes still go. */
+        auto_lgl = me->outcome == OUTCOME_TIMEOUT &&
+                   me->match_kind == MatchKind_Stock &&
+                   !(wp->stocks > lp->stocks ||
+                     (wp->stocks == lp->stocks && wp->percent < lp->percent));
+        if (auto_lgl) {
+            auto_stocks[0] = STOCKS_UNKNOWN;
+            auto_stocks[1] = STOCKS_UNKNOWN;
         }
     }
     auto_pending = who[w];
@@ -959,6 +1019,26 @@ void lbTourney_MatchExit(void* arg)
     }
 }
 
+/* LGL's tiebreak game (2026-10-07). After a set game the game left with two
+ * winners (an exact tie, or a double KO on the last stocks), vanilla plays
+ * GS_SUDDEN_DEATH, which the cards' Gameplay code turns into 1 stock each at
+ * 0% for 3:00 (its own time-out goes through LGL with a limit of 17). That
+ * scene has its own scene-table row; its exit is the same vanilla
+ * gm_Scene_Vs_OnExit, filling gmVsMelee_SuddenDeathExitInfo, so the tiebreak
+ * is scored like any game and stands for the tied game, which appended
+ * nothing. A tiebreak that ties again is not replayed (vanilla goes to the
+ * results screen): its TIE note asks for hand scoring. */
+void lbTourney_TiebreakExit(void* arg)
+{
+    bool armed = tiebreak_armed;
+    tiebreak_armed = false;
+    gm_Scene_Vs_OnExit(arg);
+    if (armed && has_set && !handwarmer && arg != NULL) {
+        autoScoreFromMatch(&((struct lbTourney_EndMelee*) arg)->me);
+        tiebreak_armed = false;
+    }
+}
+
 void lbTourney_CSSFrame(void)
 {
     /* Kiosk: every CSS visit comes from our menu (a tournament set or
@@ -967,6 +1047,8 @@ void lbTourney_CSSFrame(void)
      * GM_MENU's onEnter lands on our Tournament menu. */
     gmMainLib_GetGameRules()->force_main_menu = 1;
     mnTourney_ArmAutoEnter();
+    /* A tiebreak follows its tied game directly; the CSS ends that chance. */
+    tiebreak_armed = false;
     /* Venue mods (UCF, neutral spawns, striking, stealth nametag, the D-pad
      * rumble toggle, audio) are Nintendont's / Dolphin's gecko codes on the
      * vanilla DOL; the module adds nothing there. */
@@ -999,14 +1081,18 @@ void lbTourney_CSSFrame(void)
                            auto_stage, auto_stocks, auto_costumes);
                 memcpy(tag, src, TAG_LEN);
                 tag[TAG_LEN] = '\0';
-                /* "GAME 3 TO MANGO" */
+                /* "GAME 3 TO MANGO", "GAME 3 TO MANGO - LGL" */
                 memcpy(note, "GAME ", 5);
                 note[5] = (char) ('0' + game_count);
                 memcpy(note + 6, " TO ", 4);
                 for (i = 0; tag[i] != '\0' && i < TAG_LEN; i++) {
                     note[10 + i] = tag[i];
                 }
-                note[10 + i] = '\0';
+                if (auto_lgl) {
+                    memcpy(note + 10 + i, " - LGL", 7);
+                } else {
+                    note[10 + i] = '\0';
+                }
                 setAutoNote(note);
                 auto_pending = 0;
             }
