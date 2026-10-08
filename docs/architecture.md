@@ -187,7 +187,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
 | `setup.ts` | Setup wizard and settings page |
 | `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
-| `cards.ts` | The SD-card zips: the bundle's Wii files plus `lazyto_station.txt` and the loader's settings (`zip.ts` writes them) |
+| `cards.ts` | The SD-card zip, the same for every Wii: the bundle's Wii files plus the loader's settings (`zip.ts` writes it) |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
@@ -368,18 +368,13 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 - The stock Melee 1.02 disc image on USB or SD, as at any Slippi local.
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
-- On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
+- On the SD card root, all from the one SD-card zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder). Every card is the same:
   - `apps/LazyTO/`: the loader.
-  - `lazyto_kiosk.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
-  - `lazyto_nincfg.bin`: the loader's settings, Network and Auto Boot on. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
-  - `lazyto_station.txt`: per card.
+  - `lazyto_kiosk.bin`: the kiosk module. Updating the kiosk means replacing this file.
+  - `lazyto_nincfg.bin`: the loader's settings: Slippi replays and Auto Boot on, Network off, the game on SD (UseUSB 0), Gameplay: Both. The kernel starts USB, and with it the beamer's mailbox, only with replays on and the game on SD. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
+- A LazyTO beamer in the Wii's USB port, its only USB drive. It holds the station number (its button) and the secret (`LAZYTO-SECRET` in its `CONFIG/config.txt`).
 
-```
-station=3
-secret=<the relay's secret>
-```
-
-The relay decides the stream by station number (`streamStation`), so no card says it is the stream station and a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
+The relay decides the stream by station number (`streamStation`), so no card says it is the stream station. There is no relay address: beamers find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
 
 ### Pi
 

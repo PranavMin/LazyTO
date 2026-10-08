@@ -349,19 +349,8 @@ export class App {
     // SD cards need only the settings, so they work before tonight's event resolves.
     if (url.pathname === '/cards' || url.pathname === '/cards/zip') {
       if (!this.settings) return redirect(res, '/setup');
-      const m = this.mode;
       return serveCards(
-        {
-          wiiDir: this.opts.wiiDir ?? null,
-          config: this.settings,
-          streamStation:
-            m.kind === 'running'
-              ? m.view.streamStation
-              : this.settings.streamName
-                ? this.settings.streamStation
-                : null,
-          version: this.version,
-        },
+        { wiiDir: this.opts.wiiDir ?? null, config: this.settings, version: this.version },
         req,
         res,
         url,

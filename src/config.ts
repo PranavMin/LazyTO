@@ -76,9 +76,9 @@ const FIELDS: {
     check: (v) =>
       typeof v === 'string' && v.trim().length > 0 ? null : 'must be a non-empty string',
   },
-  // Letters, digits, - and _ only: it is written onto every SD card as
-  // secret=<value> and must survive the kernel's key=value parser. 8 to
-  // SECRET_LEN (16) characters.
+  // Letters, digits, - and _ only: it is written into every beamer's
+  // CONFIG/config.txt as LAZYTO-SECRET and must survive the firmware's
+  // key = value parser. 8 to SECRET_LEN (16) characters.
   secret: {
     check: (v) =>
       typeof v === 'string' && SECRET_RE.test(v) ? null : 'must be 8-16 letters, digits, - or _',
@@ -165,7 +165,7 @@ export function parseConfig(raw: unknown): ParsedConfig {
     problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
   }
   if (typeof obj.adminPassword === 'string' && obj.adminPassword === obj.secret) {
-    problems.push('adminPassword must differ from secret (the secret is on every SD card)');
+    problems.push('adminPassword must differ from secret (the secret is on every beamer)');
   }
   if (problems.length > 0) return { ok: false, problems };
   const ignored = Object.keys(obj).filter((k) => !(k in FIELDS));
