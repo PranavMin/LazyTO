@@ -439,10 +439,11 @@ function renderReach(
     lines.push(`<p class="warn">✗ ${escapeHtml(beaconProblem(bs, os))}</p>`);
   }
   for (const n of v.platform?.notes() ?? []) {
+    // The button after the paragraph, not in it: a <form> can't sit inside a <p>.
     const button = n.action
-      ? ` <form method="post" action="/platform?action=${encodeURIComponent(n.action.name)}"><button>${escapeHtml(n.action.label)}</button></form>`
+      ? `<div class="acts"><form method="post" action="/platform?action=${encodeURIComponent(n.action.name)}"><button>${escapeHtml(n.action.label)}</button></form></div>`
       : '';
-    lines.push(`<p class="warn">⚠ ${escapeHtml(n.text)}${button}</p>`);
+    lines.push(`<p class="warn">⚠ ${escapeHtml(n.text)}</p>${button}`);
   }
   if (noContact(v, now)) {
     const mins = Math.floor((now - bs.firstSentAt!) / 60_000);
