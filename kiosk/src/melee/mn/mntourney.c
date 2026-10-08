@@ -557,7 +557,13 @@ static void whyNoBeamer(struct tm_why* w)
         setWhy(w, "WAITING FOR THE BEAMER", "IT MAY BE STARTING OR ERASING",
                "STARTING");
         break;
-    default: /* NB_NO_DRIVE, NB_UNKNOWN */
+    case NB_UNKNOWN:
+        /* A drive, but its reads fail, or none got through within the
+         * kernel's 45 s starting window (the USB lock stayed taken). */
+        setWhy(w, "NO LINK TO THE BEAMER", "CHECK THE BEAMER IS PLUGGED IN",
+               "NO LINK");
+        break;
+    default: /* NB_NO_DRIVE */
         setWhy(w, "NO BEAMER ON THIS WII", "PLUG THE BEAMER INTO THIS WII",
                "NO BEAMER");
         break;
