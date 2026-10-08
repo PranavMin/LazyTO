@@ -5,7 +5,15 @@
 // (beamer-config.ts) and keeps everything else.
 
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { lazytoValues, setConfigValues } from './beamer-config.js';
 
@@ -15,26 +23,26 @@ export type Firmware =
 /** The firmware this build carries, verified; or why there is none. */
 export function loadFirmware(resources: string): Firmware {
   const dir = join(resources, 'firmware');
-  const bin = join(dir, 'beamer.bin');
-  if (!existsSync(bin))
+  if (!existsSync(join(dir, 'beamer.bin'))) {
     return { ok: false, reason: 'This build of LazyTO carries no beamer firmware.' };
-  const bytes = readFileSync(bin);
-  const want = readFileSync(join(dir, 'beamer.bin.sha256'), 'utf8')
-    .trim()
-    .split(/\s+/)[0]!
-    .toLowerCase();
+  }
+  let bytes: Buffer, want: string, version: string;
+  try {
+    bytes = readFileSync(join(dir, 'beamer.bin'));
+    want = readFileSync(join(dir, 'beamer.bin.sha256'), 'utf8').trim().split(/\s+/)[0]!;
+    version = readFileSync(join(dir, 'VERSION'), 'utf8').trim();
+  } catch (e) {
+    return {
+      ok: false,
+      reason: `The beamer firmware is incomplete (${String(e)}): reinstall LazyTO.`,
+    };
+  }
   const got = createHash('sha256').update(bytes).digest('hex');
-  if (got !== want) {
+  if (got !== want.toLowerCase()) {
     return {
       ok: false,
       reason: `beamer.bin does not match its SHA-256 (${want.slice(0, 12)}…): reinstall LazyTO.`,
     };
-  }
-  let version = '';
-  try {
-    version = readFileSync(join(dir, 'VERSION'), 'utf8').trim();
-  } catch {
-    // unversioned build
   }
   return { ok: true, bytes: new Uint8Array(bytes), sha256: got, version };
 }
@@ -54,13 +62,16 @@ export function provisionDrive(
     };
   }
   const text = setConfigValues(readFileSync(file, 'utf8'), lazytoValues(ssid, password, secret));
-  const fd = openSync(file, 'w');
+  // A new file renamed over the old one: an unplug mid-write leaves the old file, never half of one.
+  const tmp = `${file}.tmp`;
+  const fd = openSync(tmp, 'w');
   try {
     writeSync(fd, text);
     fsyncSync(fd);
   } finally {
     closeSync(fd);
   }
+  renameSync(tmp, file);
   return {
     ok: true,
     msg: `Saved ${file}. Eject the drive, then plug the beamer into its Wii.`,

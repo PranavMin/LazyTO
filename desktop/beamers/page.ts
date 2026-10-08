@@ -97,7 +97,7 @@ async function flash(fw: Extract<Firmware, { ok: true }>): Promise<void> {
     result(
       'flash-result',
       true,
-      `Done: LazyTO firmware ${fw.version || fw.sha256.slice(0, 12)} is on the beamer. It kept ${plan.kept.map((p) => p.label).join(', ')}. Unplug it.`,
+      `Done: LazyTO firmware ${fw.version} is on the beamer. It kept ${plan.kept.map((p) => p.label).join(', ')}. Unplug it.`,
     );
   } catch (e) {
     result(
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
   const fw = await window.lazyto.firmware();
   const fwLine = el<HTMLParagraphElement>('fw');
   if (fw.ok) {
-    fwLine.textContent = `Firmware ${fw.version || '(unversioned)'} · SHA-256 ${fw.sha256.slice(0, 16)}…`;
+    fwLine.textContent = `Firmware ${fw.version} · SHA-256 ${fw.sha256.slice(0, 16)}…`;
     const button = el<HTMLButtonElement>('flash');
     button.disabled = false;
     button.addEventListener('click', () => void flash(fw));
@@ -139,8 +139,11 @@ async function main(): Promise<void> {
     void window.lazyto
       .provision(el<HTMLInputElement>('ssid').value, el<HTMLInputElement>('password').value)
       .then((r) => result('provision-result', r.ok, r.msg))
+      .catch((err: unknown) => result('provision-result', false, String(err)))
       .finally(() => (write.disabled = false));
   });
 }
 
-void main();
+main().catch((e: unknown) => {
+  result('flash-result', false, `This window failed to start: ${String(e)}`);
+});

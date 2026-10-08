@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { flashPlan, readPartitionTable } from '../desktop/flash-layout.js';
@@ -157,6 +157,7 @@ test("a beamer's drive gets the keys; a folder that is not one is refused", (t) 
     readFileSync(join(root, 'CONFIG', 'config.txt'), 'utf8'),
     'SSID=Venue\nPASSWORD=12345678\nDEBUG=false\nLAZYTO=true\nLAZYTO-SECRET=abcd-EFGH_1234xy\n',
   );
+  assert.deepEqual(readdirSync(join(root, 'CONFIG')), ['config.txt'], 'no temp file left behind');
 });
 
 test('the firmware is handed over only when it matches its SHA-256', (t) => {
@@ -182,6 +183,9 @@ test('the firmware is handed over only when it matches its SHA-256', (t) => {
   const bad = loadFirmware(res);
   assert.equal(bad.ok, false);
   assert.match(!bad.ok ? bad.reason : '', /does not match its SHA-256/);
+  rmSync(join(dir, 'VERSION'));
+  const partial = loadFirmware(res);
+  assert.match(!partial.ok ? partial.reason : '', /firmware is incomplete/);
 });
 
 const PROFILES: FirewallProbe['profiles'] = ['Domain', 'Private', 'Public'].map((Name) => ({

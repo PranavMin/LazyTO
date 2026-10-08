@@ -31,17 +31,26 @@ export const LATEST_RELEASE_URL = 'https://api.github.com/repos/PranavMin/LazyTO
 const UPDATE_EVERY_MS = 6 * 60 * 60_000;
 const FIREWALL_EVERY_MS = 30_000;
 const POWERSHELL_TIMEOUT_MS = 30_000;
+const FIX_TIMEOUT_MS = 5 * 60_000;
 
 /** Run a PowerShell script; resolves with its stdout, rejects with its error output. */
-function powershell(script: string, env: Record<string, string> = {}): Promise<string> {
+function powershell(
+  script: string,
+  o: { env?: Record<string, string>; timeoutMs?: number } = {},
+): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-      { env: { ...process.env, ...env }, timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true },
+      {
+        env: { ...process.env, ...o.env },
+        timeout: o.timeoutMs ?? POWERSHELL_TIMEOUT_MS,
+        windowsHide: true,
+      },
       (err, stdout, stderr) => {
-        if (err) reject(new Error((stderr || err.message).trim()));
-        else resolve(stdout);
+        if (!err) return resolve(stdout);
+        const why = stderr.trim() || (err.killed ? 'timed out' : `exit code ${String(err.code)}`);
+        reject(new Error(why));
       },
     );
   });
@@ -92,7 +101,8 @@ export class DesktopPlatform implements Platform {
       return { ok: false, msg: `nothing to do for "${name}"` };
     }
     try {
-      await powershell(elevate(fixScript(this.o.exe)));
+      // Waits while Windows asks for an administrator.
+      await powershell(elevate(fixScript(this.o.exe)), { timeoutMs: FIX_TIMEOUT_MS });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return {
@@ -126,7 +136,7 @@ export class DesktopPlatform implements Platform {
 
   private async probeFirewall(): Promise<void> {
     try {
-      const out = await powershell(PROBE_SCRIPT, { LAZYTO_EXE: this.o.exe });
+      const out = await powershell(PROBE_SCRIPT, { env: { LAZYTO_EXE: this.o.exe } });
       this.firewall = firewallNotes(JSON.parse(out) as FirewallProbe);
     } catch (e) {
       // Constrained PowerShell or a policy that hides the rules: the
