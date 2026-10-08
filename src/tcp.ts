@@ -59,10 +59,11 @@ export interface ArchiveHooks {
   setAbandoned(setId: number): void;
 }
 
-/** The beamers (beamer.ts): who may use a station number, and whose syncs were refused. */
+/** The beamers (beamer.ts): who may use a station number, whose syncs were refused, and which beamer is at an address. */
 export interface BeamerGate {
   admit(station: number, from: string): boolean;
   wrongSecret(from: string): void;
+  stationIdAt(address: string): string | undefined;
 }
 
 /** The beamer sync (collect.ts): a verified sync in, the signed reply payload out. */
@@ -295,7 +296,7 @@ export class RelayTcpServer {
             reply = this.listSets(station);
             break;
           case RelayCmd.CMD_START_SET:
-            reply = await this.startSet(station, decodeStartSetReq(payload));
+            reply = await this.startSet(station, decodeStartSetReq(payload), from);
             break;
           case RelayCmd.CMD_REPORT_SCORE:
             reply = await this.reportScore(station, decodeReportScoreReq(payload), from);
@@ -401,7 +402,11 @@ export class RelayTcpServer {
   // req.stream is decoded but not used (current loaders send the game's 0;
   // older ones sent the card's stream= line): the stream setup is the
   // configured station (RelayDeps.stream).
-  private async startSet(station: number, req: { set_id: number; stream: number }): Promise<Reply> {
+  private async startSet(
+    station: number,
+    req: { set_id: number; stream: number },
+    from: string,
+  ): Promise<Reply> {
     const { cache, state, startgg, audit, stream } = this.deps;
 
     const claim = state.get(station);
@@ -438,7 +443,7 @@ export class RelayTcpServer {
 
     // From here the set IS in progress upstream, so the station gets the
     // claim even if the stream assignment below fails.
-    const claimed = this.recordClaim(station, set);
+    const claimed = this.recordClaim(station, set, from);
     this.deps.archive.setStarted(station, set);
 
     if (stream !== null && station === stream.station) {
@@ -456,7 +461,13 @@ export class RelayTcpServer {
     return { status: RelayStatus.ST_OK, msg: 'set started', payload: setGames(claimed) };
   }
 
-  private recordClaim(station: number, set: CachedSet): Claim {
+  /**
+   * The claim, audited with the beamer that made it (its address and, once
+   * it has synced, its station_id): after a restart the relay gives the
+   * station back to that beamer, not to whichever of a duplicate pair speaks
+   * first (audit.ts replayHolders, beamer.ts hold).
+   */
+  private recordClaim(station: number, set: CachedSet, from: string): Claim {
     const claim: Claim = {
       setId: set.id,
       p1Id: set.p1.id,
@@ -473,6 +484,8 @@ export class RelayTcpServer {
       p2Id: claim.p2Id,
       bestOf: claim.bestOf,
       games: claim.games,
+      from,
+      beamer: this.deps.beamers.stationIdAt(from) ?? null,
     });
     return claim;
   }

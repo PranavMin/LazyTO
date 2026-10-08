@@ -1,11 +1,15 @@
 // Duplicate station numbers (beamer.ts): two beamers on one number, only the
-// newcomer refused, over TCP (ST_DUP_STATION) and for telemetry, and the
-// status page's banner and beamer rows.
+// newcomer refused, over TCP (ST_DUP_STATION) and for telemetry, also after a
+// relay restart, and the status page's banner and beamer rows.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { BeamerSyncFlags, RelayStatus, TelemetryKind } from '../generated/wire.js';
 import { BeamerRegistry, DUP_WINDOW_MS, hexId } from '../src/beamer.js';
 import { FakeBeamer } from './fake-beamer.js';
+import { makeFake } from './fake-startgg.js';
 import { startHarness } from './harness.js';
 import { statusPayload, telemetryDatagram } from './telemetry-helpers.js';
 
@@ -145,4 +149,60 @@ test('over TCP: a second beamer on station 3 gets ST_DUP_STATION; the first keep
     await (await fetch(h.statusUrl)).text(),
     /Station 3 changed beamer .* ago: now a beamer \(127\.0\.0\.3\), before [0-9a-f]{8} \(127\.0\.0\.1\)/,
   );
+});
+
+test('after a relay restart the holder keeps its station, even when the newcomer speaks first', async (t) => {
+  const fake = makeFake();
+  await fake.start();
+  const dataDir = mkdtempSync(join(tmpdir(), 'lazyto-dup-restart-'));
+  t.after(async () => {
+    await fake.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+  const SET = 107949994;
+  const holder = new FakeBeamer(1, 3, '127.0.0.1');
+  const newcomer = new FakeBeamer(2, 3, '127.0.0.2');
+  await holder.listen();
+  await newcomer.listen();
+  t.after(() => Promise.all([holder.close(), newcomer.close()]));
+
+  const first = await startHarness({ fake, dataDir });
+  await holder.sync(first.tcpPort);
+  assert.equal((await first.wii(3, 0, '127.0.0.1').startSet(SET)).resp.status, RelayStatus.ST_OK);
+  const claim = first.auditEvents().find((e) => e.type === 'claim');
+  assert.equal(claim?.from, '127.0.0.1', 'the claim names the beamer that made it');
+  assert.equal(claim?.beamer, hexId(holder.stationId));
+  assert.equal(
+    (await first.wii(3, 0, '127.0.0.2').listSets()).resp.status,
+    RelayStatus.ST_DUP_STATION,
+  );
+  await first.close();
+
+  // Settings saved (or a crash relaunch): a new event on the same data dir.
+  // The newcomer's telemetry (every 5 s) arrives before anything from the holder.
+  const again = await startHarness({ fake, dataDir });
+  let againOpen = true;
+  t.after(() => (againOpen ? again.close() : undefined));
+  again.ev.telemetry.receive(
+    telemetryDatagram(TelemetryKind.TM_STATUS, 3, 0, statusPayload({})),
+    '127.0.0.2',
+  );
+  assert.equal(again.ev.telemetry.duplicateDropped(), 1, 'the newcomer is still the newcomer');
+  const refused = await again.wii(3, 0, '127.0.0.2').listSets();
+  assert.equal(refused.resp.status, RelayStatus.ST_DUP_STATION, 'it never sees the set');
+  const own = await again.wii(3, 0, '127.0.0.1').listSets();
+  assert.equal(own.resp.status, RelayStatus.ST_OK);
+  assert.deepEqual([own.sets[0]!.set_id, own.sets[0]!.state], [SET, 1], 'the holder keeps its set');
+  assert.equal((await again.wii(3, 0, '127.0.0.1').startSet(SET)).resp.msg, 'resumed');
+  againOpen = false;
+  await again.close();
+
+  // A holder that moved address while the relay was down is known by its sync.
+  const moved = await startHarness({ fake, dataDir });
+  t.after(moved.close);
+  const elsewhere = new FakeBeamer(1, 3, '127.0.0.3');
+  await elsewhere.listen();
+  t.after(() => elsewhere.close());
+  await elsewhere.sync(moved.tcpPort);
+  assert.equal((await moved.wii(3, 0, '127.0.0.3').listSets()).resp.status, RelayStatus.ST_OK);
 });

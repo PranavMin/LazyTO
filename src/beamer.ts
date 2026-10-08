@@ -17,6 +17,9 @@
 // beamer already holding the station keeps playing. Two addresses are the
 // same beamer when their syncs named the same station_id (a DHCP renewal). A
 // sync is never refused: collection goes on, and the status page names both.
+// The holder outlives a relay restart (settings saved, a crash relaunch):
+// the claim's audit record names the beamer that made it, and startEvent
+// gives a station with a live claim back to that beamer (hold).
 //
 // Downloads (fetchReplay): GET /SLIPPI/<name> from the address the beamer
 // synced from, at the http_port it gave, resumed with X-Replay-From (the
@@ -207,6 +210,19 @@ export class BeamerRegistry {
   admit(station: number, from: string, now = Date.now()): boolean {
     this.lastContactAt = now;
     return this.use(station, from, now);
+  }
+
+  /**
+   * After a relay restart: the beamer that claimed `station`'s live set
+   * (audit.ts replayHolders) holds the number again, as if it had just
+   * spoken, so the newcomer of a duplicate pair cannot take the station and
+   * its set by speaking first. It keeps it until it is silent for
+   * DUP_WINDOW_MS, like any holder. Its station_id, when known, lets its
+   * syncs from a new address count as the same beamer.
+   */
+  hold(station: number, address: string, stationId: string | null, now = Date.now()): void {
+    this.owners.set(station, { address, lastAt: now });
+    if (stationId !== null && !this.ids.has(address)) this.ids.set(address, stationId);
   }
 
   /** Duplicates refused within DUP_SHOWN_MS, lowest station first. */

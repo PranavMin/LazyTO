@@ -12,7 +12,7 @@
 
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AuditLog, auditPath, replayBestOf, replayClaims } from './audit.js';
+import { AuditLog, auditPath, replayBestOf, replayClaims, replayHolders } from './audit.js';
 import { Admin } from './admin.js';
 import { SetArchive, type ArchiveEvent } from './archive.js';
 import { BeamerRegistry } from './beamer.js';
@@ -95,16 +95,21 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
   }
 
   const state = new StationState();
+  const beamers = new BeamerRegistry();
   // The TO's best-of overrides from the status page (admin.ts) outlive restarts.
   for (const [setId, bestOf] of replayBestOf(audit.path)) cache.setBestOfOverride(setId, bestOf);
+  const holders = replayHolders(audit.path);
   for (const [station, claim] of replayClaims(audit.path)) {
     if (cache.get(claim.setId)) {
       state.claim(station, claim);
       audit.record({ type: 'replay', station, setId: claim.setId, games: claim.games.length });
+      // The station stays with the beamer that claimed it (D17), whichever
+      // beamer of a duplicate pair speaks first after the restart.
+      const holder = holders.get(station);
+      if (holder?.setId === claim.setId) beamers.hold(station, holder.address, holder.stationId);
     }
   }
 
-  const beamers = new BeamerRegistry();
   const archive = new SetArchive({
     dir: o.archive.dir,
     store,
