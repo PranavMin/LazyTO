@@ -126,7 +126,10 @@ export class SetArchive {
     for (const f of readdirSync(join(deps.dir, '.sets'))) {
       if (!f.endsWith('.json')) continue;
       try {
-        const r = JSON.parse(readFileSync(join(deps.dir, '.sets', f), 'utf8')) as SetRecord;
+        const r: unknown = JSON.parse(readFileSync(join(deps.dir, '.sets', f), 'utf8'));
+        // A record a protocol v1 relay wrote (game starts, bare game results)
+        // would throw in every poll; it is reported here instead.
+        if (!isSetRecord(r)) throw new Error('not a protocol v2 set record');
         this.sets.set(r.setId, r);
       } catch (e) {
         deps.audit.record({
@@ -439,6 +442,21 @@ export class SetArchive {
 }
 
 // ---- pure helpers (exported for tests) ----
+
+/** The shape this relay writes to .sets: every game a GameRecord with its result. */
+function isSetRecord(x: unknown): x is SetRecord {
+  if (typeof x !== 'object' || x === null) return false;
+  const r = x as Partial<SetRecord>;
+  return (
+    typeof r.setId === 'number' &&
+    typeof r.station === 'number' &&
+    Array.isArray(r.games) &&
+    r.games.every(
+      (g: Partial<GameRecord> | null) =>
+        typeof g === 'object' && g !== null && typeof g.result?.replay_id === 'number',
+    )
+  );
+}
 
 /** A new report over the old list: a game keeps its replay and first-report time while its replay_id stays. */
 export function reported(old: GameRecord[], games: GameResult[], now = Date.now()): GameRecord[] {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
@@ -410,6 +410,41 @@ test('a busy beamer is retried after Retry-After; a relay restart mid-set picks 
   again.setEnded(504, [played(1, T0)]);
   await again.tick();
   assert.ok(existsSync(join(dir, 'Alpha vs Bravo.zip')));
+});
+
+test('a set record a v1 relay wrote is reported at start, never polled', async (t) => {
+  const { dir, beamers, beamer } = await setup(t);
+  // v1 kept game starts beside bare game results (no replay ids).
+  writeFileSync(
+    join(dir, '.sets', '509.json'),
+    JSON.stringify({
+      setId: 509,
+      station: 3,
+      set: cachedSet(509),
+      startedAt: 0,
+      gameStarts: [],
+      games: [played(1, 0)],
+      endedAt: null,
+    }),
+  );
+  const audit: Record<string, unknown>[] = [];
+  const again = new SetArchive({
+    dir,
+    setTemplate: '{p1} vs {p2}',
+    gameTemplate: 'Game {game}',
+    beamerHttpPort: beamer.port(),
+    beamers,
+    event: EVENT,
+    audit: { record: (e) => audit.push(e) },
+    pollMs: 60_000,
+  });
+  assert.deepEqual(
+    audit.map((e) => [e.type, e.file]),
+    [['archive_error', '509.json']],
+  );
+  assert.match(String(audit[0]!.error), /not a protocol v2 set record/);
+  assert.equal(again.status().inProgress.length, 0);
+  await again.tick(); // would throw on the old shape
 });
 
 test('an abandoned set leaves nothing behind', async (t) => {
