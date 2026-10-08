@@ -178,6 +178,8 @@ The Pi is usually on Wi-Fi with no guaranteed address. Alternatives were a DHCP 
 
 Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. Reading the status page needs nothing; its actions, the settings and the SD-card zips need the admin password. A new secret is one tick on the settings page, after which every card needs its zip again.
 
+**Protocol v2: the secret lives on the beamer, and only a key derived from it travels.** (2026-10-07) The beamer writes `relay_auth`, and its 16 bytes are HMAC-SHA256 keyed with the secret over `LazyTO relay_auth`, not the secret. A beamer sends `relay_auth` to whichever host sent the last beacon, and the beacon has no authentication, so anyone on the Wi-Fi can collect that key with one beacon and then talk to the relay as a station, as before. But the secret also signs the sync reply that tells a beamer the laptop holds a replay, after which the beamer erases it. Had `relay_auth` carried the secret, the same beacon would have let a stranger answer "held" and erase replays nobody kept. A second provisioned key would have done the same job at the price of a second value on every beamer and in the settings.
+
 ### R17: who won a time-out
 
 **The game decides each game, and the kiosk reports that decision. Cards run Slippi's Gameplay: Both (LGL and anti-wobbling).** (2026-10-07)

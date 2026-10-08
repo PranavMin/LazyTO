@@ -15,7 +15,7 @@ the header. The rest of LazyTO stays GPL-2.0-only.
 | --- | --- | --- |
 | `PROTO_VERSION` | 1 | 2 |
 | Where the station and the secret live | `lazyto_station.txt` on the SD card | the beamer: its button (saved in flash) and `LAZYTO-SECRET` in its `CONFIG/config.txt` |
-| Who writes `relay_auth` | the kernel | the beamer, in front of every request and telemetry datagram it forwards |
+| Who writes `relay_auth` | the kernel, with the card's secret | the beamer, in front of every request, telemetry datagram and sync, with a key derived from its secret (never the secret) |
 | Mailbox (`BEAMER_MB_VERSION`) | 1 | 2: `beamer_hello` is 32 bytes; the request and telemetry sectors carry no `relay_auth` |
 | `exi_poll_hdr` | 12 bytes | 16 bytes: `no_beamer_reason`, `beamer_wifi`, `beamer_storage`, `last_fail` |
 | Poll flags | `PF_NO_NETWORK` 1, `PF_NO_CFG` 2, `PF_NO_SECRET` 4, `PF_NET_JOINING` 8, `PF_NO_BEAMER` 16 | 1, 2, 4 and 8 retired; `PF_NO_BEAMER` 16, `PF_NO_STATION` 32, `PF_NO_SECRET` 64 (the beamer's), `PF_RELAY_STALE` 128 |
@@ -37,7 +37,11 @@ Dongles have no over-the-air update. These never change with `PROTO_VERSION`, an
 - **`relay_beacon`** (12 bytes). A beamer accepts a datagram of exactly 12 bytes that starts
   `'M','T'` and has a nonzero `tcp_port`. It never reads `version`. The relay answers a beacon
   request (12 bytes, `'M','T'`, `tcp_port` 0) whatever its version.
-- **`relay_auth`** (20 bytes): `'M','K'`, two zero bytes, the secret NUL-padded to 16.
+- **`relay_auth`** (20 bytes): `'M','K'`, two zero bytes, then `key`: the first 16 bytes of
+  HMAC-SHA256 keyed with the secret NUL-padded to 16, over the 17 ASCII bytes `LazyTO relay_auth`.
+  Never the secret itself: a beamer sends `relay_auth` to whichever host sent the last beacon, so
+  one forged beacon collects it, and the secret signs the sync reply that lets a beamer erase.
+  (Until 2026-10-07 this field was the secret; it changed before any LazyTO firmware shipped.)
 - **`relay_hdr`** (8) and **`relay_resp`** (32).
 - **`CMD_BEAMER_SYNC` = 8**, **`BEAMER_SYNC_VERSION` = 1**, and the four sync structs:
   `beamer_sync_req` (100 + 84 per file), `sync_file` (84), `beamer_sync_resp` (52 + 36 per answer),
@@ -68,9 +72,10 @@ Record gate:  kiosk ─MEM2 0xD3003200─► kernel (want); kernel ─► kiosk 
 
 Accept:
 
-- **Framing.** `relay_auth` + `relay_hdr` + `len` bytes, one request per connection, as in v1. The
-  secret is now the beamer's, so `ST_BAD_SECRET` means "this beamer's `LAZYTO-SECRET` is not the
-  laptop's".
+- **Framing.** `relay_auth` + `relay_hdr` + `len` bytes, one request per connection, as in v1.
+  `relay_auth.key` must be the key the relay's secret gives (`relayAuthKey()` in `src/sync.ts`),
+  compared in constant time. The secret is now the beamer's, so `ST_BAD_SECRET` means "this
+  beamer's `LAZYTO-SECRET` is not the laptop's".
 - **Versions.** `relay_hdr.version` must be `PROTO_VERSION` (2) for every command except
   `CMD_BEAMER_SYNC`, which carries `BEAMER_SYNC_VERSION` (1). The reply's `relay_hdr.version` is
   the same rule. Anything else gets `ST_BAD_VERSION`. Done in `src/tcp.ts`.
@@ -105,6 +110,10 @@ Game results (`game_result`, 16 bytes):
   The one that held the number first keeps it. The newcomer's Wii requests get `ST_DUP_STATION`
   with a `msg` naming the number, and its telemetry is dropped and counted, until one of them is
   renumbered. The status page names both beamers.
+- The holder survives a relay restart (settings saved, a crash relaunch): the audit log's `claim`
+  record names the beamer that made it (`from`, and its `station_id` once it has synced), and a
+  station with a live claim goes back to that beamer, whichever of the two speaks first. It keeps
+  it until it is silent for about 15 s, like any holder.
 - A sync is never refused as a duplicate: collection goes on.
 
 `CMD_BEAMER_SYNC` (built: `src/collect.ts`, `src/rawstore.ts`, the signature in `src/sync.ts`;
@@ -118,22 +127,27 @@ Game results (`game_result`, 16 bytes):
    `SF_STATION_SET`), `fw_build`, `uptime_s`, the counts, free and leaked space
    (`card_mb - free_mb - used_mb`), the erase report, `storage`, `rssi`, `last_result`.
 4. Answer every file, `answers[i]` for `files[i]`, `answer_count = file_count`:
-   - `SA_HELD` with the SHA-256 of the stored copy, only for a file the laptop has stored (temp
-     file, fsync, rename, re-read, hash), can still stat at its size (re-hashed when its last check
-     is over 24 h old), and whose hash equals the one the beamer reports (`hashed` = 1). A file the
-     beamer did not hash this boot gets no `SA_HELD`, which it could not ack: it is `SA_WANTED`
-     again, so the beamer serves and hashes it;
+   - `SA_HELD` with the SHA-256 of the stored copy, only for a file the laptop has stored (the
+     part file fsynced, renamed into place and the rename fsynced, re-read and hashed, its
+     `index.jsonl` line fsynced), can still stat at its size (re-hashed when its last check is over
+     24 h old), and whose hash equals the one the beamer reports (`hashed` = 1). A file the beamer
+     did not hash this boot gets no `SA_HELD`, which it could not ack: it is `SA_WANTED` again, so
+     the beamer serves and hashes it. The copy that download brings is checked against the stored
+     one: if the stored copy no longer hashes as stored (changed in place at its size), the new
+     download replaces it;
    - `SA_WANTED` for a file it will download now (one download at a time per beamer, from the
      sync's source address and `http_port`, resumed with `X-Replay-From`, after a free-disk check:
      256 MB must stay free);
    - `SA_NOTED` otherwise (`SK_LIVE`, already downloading, a name that is not a plain `.slp`, the
      disk is full). A zero-filled answer is `SA_NOTED`.
 5. Put the laptop's `archive_id` in the reply. It is random, 16 bytes, kept in `archive.json` in
-   the archive folder, and never all zero.
-6. Sign: `hmac` = HMAC-SHA256, keyed with the secret's 16 bytes as `relay_auth` carries them
-   (NUL-padded), over the request's `nonce` (16 bytes), then the request's `station_id`
-   (16 bytes), then the reply payload after `hmac` (`20 + 36 * answer_count` bytes).
-   `signedSyncResp()` in `src/sync.ts` does it.
+   the archive folder, and never all zero. `archive.json` is read again before each reply: if the
+   TO deleted the archive folder while LazyTO runs, a new archive starts under a new id, so the
+   beamer drops its acks instead of erasing replays the laptop no longer has.
+6. Sign: `hmac` = HMAC-SHA256, keyed with the secret's 16 bytes (NUL-padded): the secret itself,
+   never `relay_auth`'s key, which any host that sends a beacon receives. Over the request's
+   `nonce` (16 bytes), then the request's `station_id` (16 bytes), then the reply payload after
+   `hmac` (`20 + 36 * answer_count` bytes). `signedSyncResp()` in `src/sync.ts` does it.
 7. Reply `ST_OK` with the signed `beamer_sync_resp`. The reply's `relay_hdr.version` is
    `BEAMER_SYNC_VERSION`.
 
@@ -179,6 +193,7 @@ Game results (`game_result`, 16 bytes):
   | | `NB_OLD_FIRMWARE` | mailbox v1 or `fw_build < BEAMER_FW_MIN` | UPDATE THE BEAMER |
   | | `NB_NEW_FIRMWARE` | a newer mailbox than this loader | UPDATE THE SD CARD |
   | | `NB_STARTING` | no hello yet, within about 45 s of boot or a USB change | WAITING FOR THE BEAMER (a wait, not an error) |
+  | | `NB_UNKNOWN` | a drive whose reads fail, or none that let a hello read through by the end of those 45 s (the USB lock stayed taken) | NO LINK TO THE BEAMER |
   | `flags` | `PF_NO_STATION` | no number on the beamer; clears by itself | THIS BEAMER HAS NO STATION NUMBER, press its button (a wait) |
   | | `PF_NO_SECRET` | no `LAZYTO-SECRET` | THE BEAMER HAS NO SECRET |
   | | `PF_RELAY_STALE` | beacon older than `BEACON_STALE_S` (10 s) | BEAMER HEARS NO RELAY / IS THE LAPTOP ON THIS WI-FI? |
@@ -221,7 +236,8 @@ the details. Not run on hardware yet: it needs the kernel with the gate and mail
   - Magic with `version > 2`: `PF_NO_BEAMER` + `NB_NEW_FIRMWARE`.
   - No magic: `NB_NOT_LAZYTO`; no drive: `NB_NO_DRIVE`; replays off or the game not on SD (USB is
     never started): `NB_REPLAYS_OFF`. For about 45 s after kernel boot or a USB removal, report
-    `NB_STARTING` instead of `NB_NO_DRIVE` or `NB_NOT_LAZYTO`.
+    `NB_STARTING` instead of `NB_NO_DRIVE` or `NB_NOT_LAZYTO`. `NB_STARTING` never outlasts that
+    window: if no hello read got the USB lock (or the mount) by its end, report `NB_UNKNOWN`.
 - **`exi_poll_hdr` on every poll**, from the latest valid hello:
   - `flags`: `PF_NO_BEAMER` as above; `PF_NO_STATION` without `BF_STATION_SET`; `PF_NO_SECRET`
     without `BF_SECRET`; `PF_RELAY_STALE` with `BF_RELAY` and `beacon_age_s > BEACON_STALE_S`.
@@ -257,6 +273,9 @@ the details. Not run on hardware yet: it needs the kernel with the gate and mail
     match in the same cycle. Record (or a cursor missing from the table, logged): open the file as
     now, then write `file_id = gameStartTime`, then `file_seq` = its seq, and flush line 1.
   - A match that never sent Game End: finish the open file and resume at the next match's start.
+    When the read that finds the next match began at a match's own start (a match cut off within
+    its first 4 KB), that match goes through the new-match step first, so its bytes never land in
+    the previous match's file.
 - **Early sync** (decided, not a wire change): one `f_sync` after the first data block of each
   recording, in every mode. Ship it with or after the beamer's scan fix.
 - **Deleted** with the network path: `lazyto_station.txt` and its parser, the beacon listener and
@@ -285,8 +304,8 @@ the details. Not run on hardware yet: it needs the kernel with the gate and mail
   beacon request may carry any version.
 - **Requests** (sector 1): `beamer_req_hdr` (`'M','Q'`, `len <= 500`), then `relay_hdr` +
   payload. Once per seq: no number, `BR_NO_STATION`; no secret, `BR_NO_SECRET`; not on Wi-Fi,
-  `BR_NO_WIFI`; no relay, `BR_NO_RELAY`; else connect to the relay, send `relay_auth` (its
-  `LAZYTO-SECRET`, NUL-padded) + the `len` bytes, read the reply to EOF into the response body
+  `BR_NO_WIFI`; no relay, `BR_NO_RELAY`; else connect to the relay, send `relay_auth` (the key
+  derived from its `LAZYTO-SECRET`) + the `len` bytes, read the reply to EOF into the response body
   (over 4084 bytes: `BR_TOO_LARGE`). The outgoing buffer needs `relay_auth`'s 20 bytes in front
   of up to 500 request bytes or 1012 telemetry bytes.
 - **Telemetry** (sectors 10-11): `beamer_tele_hdr` (`'M','E'`), then `telemetry_hdr` + payload.
@@ -310,7 +329,8 @@ the details. Not run on hardware yet: it needs the kernel with the gate and mail
   - Accept the reply only if: `relay_hdr` magic, version 1 and cmd 8; `relay_resp.status ==
     ST_OK`; payload length `52 + 36 * n` with `n == file_count`; `archive_id` not all zero; and
     `hmac` verifies (constant-time compare) as HMAC-SHA256 keyed with the NUL-padded 16-byte
-    secret over `nonce | station_id | payload[32..]`.
+    secret over `nonce | station_id | payload[32..]`. The secret never leaves the beamer: only
+    the key derived from it goes in `relay_auth`.
   - Then: if `archive_id` differs from the ack table's, drop every ack and adopt it. For each
     `SA_HELD` answer, ack `files[i]` only if its `sha256` equals the SHA-256 the beamer computed
     serving that file this boot. `SA_WANTED` and `SA_NOTED` need nothing.
@@ -325,8 +345,20 @@ It compiles its own copy of `relay_proto.h`: copy the new one and rebuild.
 - Fill the 16-byte `exi_poll_hdr` with zeros in the four new fields (and `host_build` 0, so the
   kiosk never touches the record gate).
 - Accept beacons by length and magic only.
-- It still writes `relay_auth` itself (`SlippiRelaySecret`) and stamps station 0.
+- It still writes `relay_auth` itself and stamps station 0, but `relay_auth.key` is now the key
+  derived from `SlippiRelaySecret` (HMAC-SHA256 keyed with it NUL-padded to 16, over `LazyTO
+  relay_auth`, first 16 bytes), not the secret: the header's field is now `uint8_t key[16]`, so
+  code that still copies the secret into `secret` no longer compiles. Until it does this, the relay
+  answers Dolphin with `ST_BAD_SECRET`.
 - Requests are length-driven; the 88-byte reports need no other change.
+
+## Test vector: relay_auth's key
+
+`test/protocol-frozen.test.ts` and the firmware's host tests (`hmac.rs`) check it.
+
+- Secret `venue-secret` (HMAC key: those 12 bytes and 4 NULs), message `LazyTO relay_auth`.
+- HMAC-SHA256 = `f5a1b91cb53cb4b14fd06c5ea683c2219d491313e1d8e47ce696dcd3510a8564`; `key` is its
+  first 16 bytes, so `relay_auth` = `4d4b0000f5a1b91cb53cb4b14fd06c5ea683c221`.
 
 ## Test vector: the sync signature
 

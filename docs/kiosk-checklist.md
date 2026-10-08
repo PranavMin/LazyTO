@@ -286,6 +286,7 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       WI-FI` / `STILL JOINING AFTER 60 SECONDS`. Errors (title / hint / dot): replays off or
       the game not on SD `REPLAYS ARE OFF IN THE LOADER` / `TURN ON REPLAYS, GAME ON SD` /
       `NO BEAMER`; no drive `NO BEAMER ON THIS WII` / `PLUG THE BEAMER INTO THIS WII`; a
+      drive that does not answer `NO LINK TO THE BEAMER` / `CHECK THE BEAMER IS PLUGGED IN`; a
       plain stick or `LAZYTO` off `NOT A LAZYTO BEAMER`; old firmware `UPDATE THE BEAMER` /
       `OLD BEAMER`; a newer mailbox `UPDATE THE SD CARD` / `OLD CARD`; no secret `THE
       BEAMER HAS NO SECRET`; Wi-Fi `NO WI-FI NAME ON THE BEAMER`, `THE BEAMER CANNOT JOIN

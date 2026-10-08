@@ -222,7 +222,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.
 - Every message is a fixed-size struct with a version byte. No JSON, no varints.
-- The beamer writes a 20-byte `relay_auth` (`'M','K'`, pad, 16-byte secret from its `CONFIG/config.txt`) before each request it forwards. The Wii never holds the secret. A missing or wrong secret gets `ST_BAD_SECRET` and nothing happens.
+- The beamer writes a 20-byte `relay_auth` (`'M','K'`, pad, a 16-byte key derived from the secret in its `CONFIG/config.txt`) before each request it forwards and before its own sync. The key is HMAC-SHA256 keyed with the secret over `LazyTO relay_auth`, cut to 16 bytes: the secret itself never travels, because it signs the sync replies that let a beamer erase (`src/sync.ts`). The Wii never holds the secret. A missing or wrong key gets `ST_BAD_SECRET` and nothing happens.
 - Every request and response starts with an 8-byte `relay_hdr` (`'M','T'`, version, command, station, length). Every response then has a 32-byte `relay_resp` (status, 30-character message for the menu).
 
 | Command | Request | Relay does |

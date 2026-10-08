@@ -142,8 +142,14 @@ with zeros.
   datagram it forwards. The Wii never holds it, so `beamer_req_hdr` and `beamer_tele_hdr` are
   followed by `relay_hdr` with no auth in front. No HTTP route serves config files, and `/status`
   must not show the secret.
+- **The secret never travels.** `relay_auth` carries a key derived from it (the first 16 bytes of
+  HMAC-SHA256 keyed with the secret, over `LazyTO relay_auth`), not the secret. A beamer sends
+  `relay_auth` to whichever host sent the last beacon, so anyone on the Wi-Fi can collect that key
+  with one forged beacon and talk to the relay as a station (R16). The secret itself signs the sync
+  reply (see [Self-erase](#self-erase)), so that key never makes a beamer erase.
 - **Who stamps what.** The kernel owns the protocol bytes; the beamer adds only the 20-byte
-  `relay_auth`. The beamer needs to know nothing else about LazyTO's protocol beyond the beacon.
+  `relay_auth`, with the key it derives from the secret. The beamer needs to know nothing else
+  about LazyTO's protocol beyond the beacon.
 
 ### The beamer stays a pipe
 
@@ -213,7 +219,8 @@ Use the protocol-change skill.
   and each beamer's `station_id` (from its MAC) in its announces and `/status`. Two `station_id`s
   on one number within about 15 s is a duplicate. The status page names both beamers. Only the newcomer is
   refused: its kiosk gets `ST_DUP_STATION` until one is renumbered, and the beamer already holding
-  the station keeps playing.
+  the station keeps playing. That survives a relay restart: the audit log's claim names the beamer
+  that made it, and a station with a live set goes back to that beamer, whichever speaks first.
 - **Moves and swaps.** The station follows the beamer, by design. A beamer replaced mid-event starts
   unset; once the TO sets its number, the status page notes the change. The relay records which
   `station_id` recorded each set and game, and fetches replays from that beamer, never from
@@ -445,7 +452,10 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
    - Files with a matching ack. The name hash, size, FAT modified time and a CRC32 of the first 1 KB
      are all re-checked, so a reused name (a Wii clock set back) never matches.
 3. **How a file gets an ack.**
-   - The laptop stores each original: temp file, fsync, rename, re-read, SHA-256.
+   - The laptop stores each original: temp file, fsync, rename (fsynced too), re-read, SHA-256,
+     then its index line, fsynced. Only then can it answer "held": a crash after an ack must not
+     lose the copy. A file downloaded again is checked against the stored copy, which it replaces
+     if that copy no longer reads back as stored.
    - The beamer computes SHA-256 while serving the file. It uses the hardware SHA on the raw bytes
      before gzip, and a resumed request hashes the skipped prefix first. Nothing is re-read at boot
      or when idle.
@@ -461,9 +471,11 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
    - The reply answers each entry "held" (with the laptop's hash), "wanted" or "noted". It is signed
      with HMAC-SHA256, keyed by the secret, over the nonce, `station_id` and body. Without the
      signature, anyone on the Wi-Fi could download a file, answer "held" with its hash, and make the
-     beamer erase replays nobody kept.
+     beamer erase replays nobody kept. The secret never leaves the beamer: `relay_auth` carries a
+     key derived from it, which any host that sends a beacon receives, and that key signs nothing.
    - A different `archive_id` (another laptop, a deleted archive folder) drops every ack, so the
-     files are collected again while the beamers are still powered.
+     files are collected again while the beamers are still powered. The laptop reads `archive.json`
+     again before each reply, so a folder deleted while LazyTO runs starts a new archive at once.
    - The sync layout has its own version byte and stays frozen, like the beacon. Dongles have no
      over-the-air update.
 5. **Storage on the beamer.**
@@ -525,7 +537,8 @@ The relay collects replays from each beamer over HTTP. Beamer Manager is not run
     games.
 - **WAITING FOR THE BEAMER.** For about 45 s after kernel boot or a USB removal, the kernel reports
   "starting" instead of "no drive". A beamer that is erasing or joining the Wi-Fi then doesn't show
-  as missing.
+  as missing. "Starting" never outlasts that window: a drive that let no hello read through by then
+  (the USB lock stayed taken) is NO LINK TO THE BEAMER.
 
 ### Edge cases
 

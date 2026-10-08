@@ -78,7 +78,8 @@ written. Collection itself can be tried:
   replay partition. No filesystem covers those sectors on either side.
 - **What the Wii does.** The kernel writes each request into the mailbox, stamped with the
   station number from the beamer's hello and without `relay_auth`, then polls for the beamer's
-  answer. The beamer puts its own `relay_auth` (its `LAZYTO-SECRET`) in front, forwards the bytes
+  answer. The beamer puts its own `relay_auth` (a key derived from its `LAZYTO-SECRET`, never the
+  secret) in front, forwards the bytes
   to the relay over Wi-Fi and finds the relay by its beacon. Mailbox v2:
   [protocol-v2.md](protocol-v2.md).
 - **Setup.** Every SD card is the same (`src/cards.ts`): Slippi replays on, Network off, the game
