@@ -13,7 +13,7 @@ In an existing clone, run `git submodule update --init`. CI checks out the submo
 
 | Repo | Branch | Builds |
 |---|---|---|
-| LazyTO (this repo) | `main` | the relay, the kiosk module (`kiosk/`), the protocol, the Pi's install and update scripts |
+| LazyTO (this repo) | `main` | the relay, the desktop app (`desktop/`), the kiosk module (`kiosk/`), the protocol, the Pi's install and update scripts |
 | [doldecomp/melee](https://github.com/doldecomp/melee) | `master`, pinned | nothing itself; the kiosk builds against it, unmodified |
 | [Nintendont](https://github.com/PranavMin/Nintendont) | `LazyTO` | the LazyTO loader |
 
@@ -29,7 +29,7 @@ check.
 |---|---|
 | `npm test` | The gate, also run by CI: checks `generated/` matches `protocol.yaml`, type-checks, and runs every test. Integration tests use the fake start.gg in `test/fake-startgg.ts`, never the real API. |
 | `npm run build` | Compiles to `dist/`. The Pi runs `dist/main.js`. |
-| `LAZYTO_DIR=<dir> npm start` | Runs the relay from source with its settings, audit log and setup code in `<dir>`. With no settings there it serves the setup page on port 29473. The fields are in [architecture.md](architecture.md#startup-and-event-discovery). |
+| `LAZYTO_DIR=<dir> npm start` | Runs the relay from source with its settings, audit log and setup code in `<dir>`. With no settings there it serves the setup page on port 29473. The fields are in [architecture.md](architecture.md#startup-and-event-discovery). Without `LAZYTO_DIR` the folder is `/var/lib/lazyto` on Linux and the desktop app's own folder on Windows and macOS (below). |
 | `npm run sim` | Load test: 12 simulated Wiis play sets for 10 minutes against an in-process relay and fake start.gg. Fails on any error or on 70 or more start.gg calls in a minute. For a shorter run: `npx tsx scripts/sim-wii.ts --duration=60`. |
 | `npx tsx scripts/preview-status.ts` | The status page on fake data at `http://127.0.0.1:29480/` (three Wiis, a flagged station, telemetry), for checking its layout at phone width. TO password `to-pass-9876`. `--page=setup` and `--page=failed` show the setup wizard and the "Not running" page; `--wii=<dir>` (an unpacked bundle's `wii/`) makes the SD cards page serve real zips; `--network` makes it a relay on the LAN (beacon, telemetry, TCP 29470) that a development Dolphin can play against. |
 
@@ -38,6 +38,42 @@ npm drops some flags after `--` (`--duration`), so run `npx tsx scripts/<name>.t
 one is ignored. A relay started through `npx` leaves its `tsx` child running when the wrapper
 stops; for long runs start one process, `node dist/main.js`. `tsx` takes over 3 s to start, so
 poll the port rather than sleeping a fixed time.
+
+## The desktop app
+
+`desktop/` is the LazyTO app for a TO's laptop ([laptop-setup.md](laptop-setup.md)): a thin
+Electron shell that runs the relay core from `src/` in its main process, plus the Beamers window
+(flashing with esptool-js, a beamer's `config.txt`). It has its own `package.json` and
+dependencies (Electron, electron-builder, esptool-js); `src/` still has none at runtime. Needs
+Node.js 24, the version Electron 44 embeds.
+
+```
+cd desktop
+npm install      # also downloads Electron (postinstall: install-electron)
+npm start        # compiles to desktop/dist/ and opens the app
+```
+
+| Command (in `desktop/`) | What it does |
+|---|---|
+| `npm start` | Builds and runs the app. Its settings are in Electron's userData for LazyTO (`%APPDATA%\LazyTO`, `~/Library/Application Support/LazyTO`), the same folder `npm start` at the root uses on those systems. `npx electron . --user-data-dir=<dir>` runs it on another folder. |
+| `npm run build` | `tsc` twice: the main process with the relay core (`tsconfig.json`), and the Beamers page (`beamers/tsconfig.json`, DOM only). |
+| `npm run smoke` | Starts the app on a fresh userData, checks that `GET /` on 29473 is the setup page, and quits. `npm run smoke -- <path to LazyTO.exe>` checks a packaged app. |
+| `npx electron-builder --win --dir` | Packages into `desktop/release/win-unpacked/` without an installer; `npm run package` makes the installer (or the dmg, the AppImage) as CI does. |
+
+- Only one LazyTO runs at a time, and port 29473 must be free: stop a relay started with `npm start`
+  at the root first.
+- `resources/wii/` and `resources/firmware/` are filled by CI. Copy a `main-build` bundle's `wii/`
+  into `resources/wii/` for real SD-card zips, and put a `beamer.bin` with its `beamer.bin.sha256`
+  into `resources/firmware/` to try the flasher.
+- The pure parts of the shell (the flash layout, `config.txt`, the firewall verdict, the crash
+  backoff) are tested by `npm test` at the root (`test/desktop.test.ts`).
+- On macOS, packaging needs `pip install macholib` for the afterPack hook
+  (`scripts/mach-o-uuid.cjs`), and the result is only signed ad hoc. Local Network permission is
+  never asked of an app run from a terminal, so test it with the packaged app.
+- The version comes from git: `npm run version-from-git` stamps `package.json` from the nearest
+  `v*` tag (CI runs it before packaging; don't commit the result).
+- The first launch of a new `electron.exe` or `LazyTO.exe` path on Windows brings up the firewall
+  prompt, as it would for a TO.
 
 ## The protocol
 
