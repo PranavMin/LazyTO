@@ -23,6 +23,7 @@ import { randomInt } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localAddresses } from './beacon.js';
+import type { Platform } from './platform.js';
 import { STARTGG_ENDPOINT, configPath, loadConfig, saveConfig, type Config } from './config.js';
 import { startEvent, type RunningEvent } from './relay.js';
 import { resolveEvent, type Resolved } from './resolve.js';
@@ -30,7 +31,17 @@ import { StartggClient, type StartggClientOptions } from './startgg.js';
 import { serveCards } from './cards.js';
 import { renderStatus, serveAction, serveLog, type StatusView } from './status.js';
 import { serveSetup } from './setup.js';
-import { WebServer, age, escapeHtml, page, redirect, sendHtml, sendText } from './web.js';
+import {
+  WebServer,
+  age,
+  escapeHtml,
+  page,
+  redirect,
+  redirectWithResult,
+  requirePassword,
+  sendHtml,
+  sendText,
+} from './web.js';
 
 export type UpdateChannel = 'release' | 'main' | 'off';
 export const UPDATE_CHANNELS: readonly UpdateChannel[] = ['release', 'main', 'off'];
@@ -62,6 +73,13 @@ export interface AppOptions {
   version?: string;
   /** Whether the system clock is set (the weekly fallback picks the weekly nearest "now"). */
   clockSynced?: () => boolean;
+  /**
+   * Where set archives go unless the settings name a folder (config.ts
+   * archiveDir): Documents/LazyTO in the desktop app; default <dataDir>/archive.
+   */
+  archiveDir?: string;
+  /** The desktop app's view of the laptop (platform.ts); absent when the relay runs on its own. */
+  platform?: Platform;
 }
 
 const DEFAULT_RETRY_DELAYS_MS = [30_000, 60_000, 120_000];
@@ -102,8 +120,20 @@ export class App {
   // ---- lifecycle ----
 
   async start(): Promise<void> {
+    await (
+      await this.serve()
+    ).applied;
+  }
+
+  /**
+   * start(), resolved as soon as the web server is up, so the desktop app can
+   * show the page while tonight's event is still being found. The mode is
+   * already "setup" or "starting" by then; `applied` settles once the event
+   * runs or has failed. Throws (EADDRINUSE) when port 29473 is taken.
+   */
+  async serve(): Promise<{ applied: Promise<void> }> {
     await this.web.listen(this.opts.httpPort, this.opts.host);
-    await this.apply();
+    return { applied: this.apply() };
   }
 
   async stop(): Promise<void> {
@@ -148,6 +178,21 @@ export class App {
     if (this.mode.kind !== 'running') return 0;
     const state = this.mode.ev.state;
     return state.stations().filter((s) => state.get(s) !== undefined).length;
+  }
+
+  /** The archive folder when the settings leave it blank. */
+  defaultArchiveDir(): string {
+    return this.opts.archiveDir ?? join(this.opts.dataDir, 'archive');
+  }
+
+  /** Where tonight's set archives go: the settings' folder, or the default one. */
+  archiveDir(config: Config): string {
+    return config.archiveDir === '' ? this.defaultArchiveDir() : config.archiveDir;
+  }
+
+  /** True in the desktop app, which checks for new versions itself (no update channel). */
+  updatesByApp(): boolean {
+    return this.opts.platform !== undefined;
   }
 
   /** Save new settings (and the update channel) and apply them now. */
@@ -264,6 +309,7 @@ export class App {
         host: this.opts.host,
         network: this.opts.network,
         archive: {
+          dir: this.archiveDir(config),
           setName: config.archiveSetName,
           gameName: config.archiveGameName,
           event: resolved,
@@ -283,7 +329,14 @@ export class App {
         streamStation,
         eventLabel: `${resolved.tournamentName} · ${resolved.eventName} (${resolved.eventId})`,
         beacon: running.beacon ?? {
-          status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }),
+          status: () => ({
+            targets: [],
+            sent: 0,
+            firstSentAt: null,
+            lastSentAt: null,
+            lastError: null,
+            lastErrorCode: null,
+          }),
         },
         tcp: running.tcp,
         telemetry: running.telemetry,
@@ -292,6 +345,7 @@ export class App {
         admin: running.admin,
         addresses: this.addresses(),
         version: this.version,
+        platform: this.opts.platform ?? null,
       };
       this.mode = { kind: 'running', ev: running, resolved, view };
       this.attempt = 0;
@@ -344,6 +398,14 @@ export class App {
     if (url.pathname === '/retry' && req.method === 'POST') {
       this.retryNow();
       redirect(res, '/');
+      return;
+    }
+    // The desktop app's one action (platform.ts): the firewall fix, behind the admin password.
+    if (url.pathname === '/platform' && req.method === 'POST' && this.opts.platform) {
+      if (!this.settings) return redirect(res, '/setup');
+      if (!requirePassword(req, res, this.settings.adminPassword)) return;
+      const r = await this.opts.platform.act(url.searchParams.get('action') ?? '');
+      redirectWithResult(res, r.ok, r.msg);
       return;
     }
     // SD cards need only the settings, so they work before tonight's event resolves.

@@ -38,8 +38,8 @@ export interface EventOptions {
   host?: string;
   /** Beacon, telemetry and the beamer announces on their fixed UDP ports. Tests leave them off. */
   network?: boolean;
-  /** The set archive's file-name templates (names.ts) and what it says about the event. */
-  archive: { setName: string; gameName: string; event: ArchiveEvent };
+  /** The set archive's folder, its file-name templates (names.ts) and what it says about the event. */
+  archive: { dir: string; setName: string; gameName: string; event: ArchiveEvent };
   /** The stations' beamers serve replays here; tests point it at test/fake-beamer.ts. */
   beamerHttpPort?: number;
 }
@@ -96,7 +96,7 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
     }
   }
   // The set archive (archive.ts): each station's beamer is found by its own
-  // announce; finished sets become zips in <dataDir>/archive.
+  // announce; finished sets become zips in the archive folder.
   let archive: SetArchive | null = null;
   const beamers = new BeamerDirectory({
     port: network ? ANNOUNCE_PORT : 0,
@@ -105,7 +105,7 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
   });
   await beamers.start();
   archive = new SetArchive({
-    dir: join(o.dataDir, 'archive'),
+    dir: o.archive.dir,
     setTemplate: o.archive.setName,
     gameTemplate: o.archive.gameName,
     beamerHttpPort: o.beamerHttpPort ?? BEAMER_HTTP_PORT,

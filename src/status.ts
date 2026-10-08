@@ -18,12 +18,19 @@
 //
 // "Beamers and set archives" is the experimental set archive (archive.ts):
 // each station's beamer as its announces placed it, and the zips written.
+//
+// At the top, what keeps stations from reaching the relay at all: macOS's
+// Local Network switch (the beacon fails with EHOSTUNREACH), the desktop
+// app's notes about the laptop (platform.ts: Windows Firewall, with its fix
+// button), and beacons answered by nobody for NO_CONTACT_MS. In the footer,
+// a newer LazyTO release, whose link is withheld while a station is mid-set.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SetCache } from './cache.js';
 import { wins, type StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
+import type { Platform } from './platform.js';
 import type { RefusedStatus } from './tcp.js';
 import {
   crashText,
@@ -75,6 +82,8 @@ export interface StatusView {
   /** The relay's own addresses and version, for the footer. */
   addresses: string[];
   version: string;
+  /** The desktop app's view of the laptop (platform.ts); null when the relay runs on its own. */
+  platform: Pick<Platform, 'notes' | 'latest'> | null;
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -84,6 +93,9 @@ const LOG_TAIL_LINES = 6;
 
 /** Cache older than this (3 missed 20 s refreshes) is flagged as stale. */
 export const STALE_CACHE_MS = 60_000;
+
+/** Beacons answered by nobody for this long: a firewall, or the laptop on the wrong network. */
+export const NO_CONTACT_MS = 120_000;
 
 /** GET /log?station=N: one Wii's whole kernel log as plain text. */
 export function serveLog(v: StatusView, res: ServerResponse, url: URL): void {
@@ -202,7 +214,7 @@ export function renderStatus(
     : '';
   const bs = beacon.status();
   const beaconLine = bs.lastError
-    ? `<p class="warn">✗ discovery beacon: ${escapeHtml(bs.lastError)} — Wiis cannot find the relay</p>`
+    ? `<p class="warn">✗ ${escapeHtml(beaconProblem(bs))}</p>`
     : `<p class="muted">Discovery beacon to ${bs.targets.map(escapeHtml).join(', ') || '—'}, last sent ${bs.lastSentAt ? `${age(bs.lastSentAt)} ago` : 'never'}.</p>`;
   const errorLine = cs.error
     ? `<p class="warn">✗ last refresh failed: ${escapeHtml(cs.error)}</p>`
@@ -268,7 +280,7 @@ export function renderStatus(
       : '';
 
   return page(
-    `${banner}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>${streamStation === null ? 'no stream' : `stream station ${streamStation} ★`} · refreshes every 5 s · <a href="/setup">settings</a> · <a href="/cards">SD cards</a></p>
+    `${banner}${renderReach(v)}<p class="sub"><b>${escapeHtml(eventLabel)}</b><br>${streamStation === null ? 'no stream' : `stream station ${streamStation} ★`} · refreshes every 5 s · <a href="/setup">settings</a> · <a href="/cards">SD cards</a></p>
 <h2>Stations</h2>
 ${cards.join('\n')}
 ${renderWaiting(v)}
@@ -283,6 +295,7 @@ ${beaconLine}
 ${refusedLine}
 ${staleLine}${errorLine}${warningLines}
 <p class="muted">LazyTO ${escapeHtml(v.version)} · this relay: ${v.addresses.map((a) => `http://${escapeHtml(a)}:29473`).join(', ') || '—'}</p>
+${renderUpdate(v, onStations)}
 </div>`,
     { refreshSeconds: 5 },
   );
@@ -383,4 +396,69 @@ function renderFreeConfirm(v: StatusView, station: number): string {
       `<div class="acts"><form method="post" action="/free?station=${station}&amp;set=${claim.setId}"><button class="danger">Free station ${station}</button></form>` +
       `<a class="btnlink" href="/">cancel</a></div>`,
   );
+}
+
+/** The beacon's send error as the TO should read it. */
+export function beaconProblem(bs: BeaconStatus, os: NodeJS.Platform = process.platform): string {
+  if (os === 'darwin' && bs.lastErrorCode === 'EHOSTUNREACH') {
+    return 'macOS is blocking LazyTO from your network: System Settings > Privacy & Security > Local Network > LazyTO on';
+  }
+  return `discovery beacon: ${bs.lastError ?? ''} — Wiis cannot find the relay`;
+}
+
+/**
+ * True when beacons have gone out for NO_CONTACT_MS and nothing has come back:
+ * no request, no Wii report, no beacon request, no beamer announce, not even
+ * a refused one.
+ */
+export function noContact(v: StatusView, now = Date.now()): boolean {
+  const first = v.beacon.status().firstSentAt;
+  if (first === null || now - first < NO_CONTACT_MS) return false;
+  const b = v.beamers.status();
+  return (
+    v.state.stations().length === 0 &&
+    v.tcp.refused() === null &&
+    v.telemetry.stations().length === 0 &&
+    v.telemetry.refused() === null &&
+    !v.telemetry.beaconRequested?.() &&
+    b.beamers.length === 0 &&
+    b.unnamed === 0 &&
+    b.bad === 0
+  );
+}
+
+/** What keeps stations from reaching the relay, most basic first; "" when nothing does. */
+function renderReach(
+  v: StatusView,
+  now = Date.now(),
+  os: NodeJS.Platform = process.platform,
+): string {
+  const lines: string[] = [];
+  const bs = v.beacon.status();
+  if (os === 'darwin' && bs.lastErrorCode === 'EHOSTUNREACH') {
+    lines.push(`<p class="warn">✗ ${escapeHtml(beaconProblem(bs, os))}</p>`);
+  }
+  for (const n of v.platform?.notes() ?? []) {
+    const button = n.action
+      ? ` <form method="post" action="/platform?action=${encodeURIComponent(n.action.name)}"><button>${escapeHtml(n.action.label)}</button></form>`
+      : '';
+    lines.push(`<p class="warn">⚠ ${escapeHtml(n.text)}${button}</p>`);
+  }
+  if (noContact(v, now)) {
+    const mins = Math.floor((now - bs.firstSentAt!) / 60_000);
+    lines.push(
+      `<p class="warn">⚠ No beamer has reached this ${v.platform ? 'laptop' : 'relay'}: its beacon has gone out for ${mins} min and nothing has answered. Is it on the stations' Wi-Fi, and allowed through its firewall?</p>`,
+    );
+  }
+  return lines.length ? `<div class="card bad">${lines.join('')}</div>` : '';
+}
+
+/** "LazyTO vX is out", with its link only while no station is mid-set: never update during a set. */
+function renderUpdate(v: StatusView, midSet: number): string {
+  const r = v.platform?.latest() ?? null;
+  if (!r) return '';
+  const name = `LazyTO v${escapeHtml(r.version)} is out`;
+  return midSet > 0
+    ? `<p class="muted">${name}. Its link is here when no station is in a set; update at home, not during an event.</p>`
+    : `<p>${name}: <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">release page</a>. Update at home, not during an event.</p>`;
 }
