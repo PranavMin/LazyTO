@@ -320,7 +320,7 @@ export class StartggClient {
     this.retryDelaysMs = opts.retryDelaysMs ?? [1000, 3000];
   }
 
-  /** Upstream calls (HTTP requests actually sent) in the last windowMs. */
+  /** GraphQL calls (HTTP requests actually sent, the ones the rate limit is about) in the last windowMs. */
   callsInWindow(windowMs = 60_000): number {
     const cutoff = Date.now() - windowMs;
     while (this.callTimes.length > 0 && this.callTimes[0] < cutoff) this.callTimes.shift();
@@ -441,10 +441,13 @@ export class StartggClient {
     return json;
   }
 
-  /** One HTTP request with the 5xx retries; a network failure is StartggError 'network'. */
-  private async send(url: string, init: RequestInit): Promise<Response> {
+  /**
+   * One HTTP request with the 5xx retries; a network failure is StartggError
+   * 'network'. counted: a GraphQL call, which callsInWindow counts.
+   */
+  private async send(url: string, init: RequestInit, counted: boolean): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
-      this.callTimes.push(Date.now());
+      if (counted) this.callTimes.push(Date.now());
       let res: Response;
       try {
         res = await fetch(url, init);
@@ -465,7 +468,7 @@ export class StartggClient {
   }
 
   private async rest(path: string): Promise<unknown> {
-    const res = await this.send(`${this.restOrigin}${path}`, { method: 'GET' });
+    const res = await this.send(`${this.restOrigin}${path}`, { method: 'GET' }, false);
     const text = await res.text();
     if (!res.ok) throw new StartggError('rejected', `start.gg REST ${path}: HTTP ${res.status}`);
     try {
@@ -480,14 +483,18 @@ export class StartggClient {
     variables: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     await this.bucket.take(this.maxWaitMs);
-    const res = await this.send(this.endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${this.token}`,
+    const res = await this.send(
+      this.endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({ query, variables }),
       },
-      body: JSON.stringify({ query, variables }),
-    });
+      true,
+    );
     const text = await res.text();
     let json: { data?: Record<string, unknown>; errors?: { message: string }[] };
     try {

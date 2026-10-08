@@ -105,10 +105,11 @@ test('startgg client', async (t) => {
     async () => {
       fake.failNext('restPhaseGroup', '5xx', 2);
       const c = client(fake);
-      const before = c.callsInWindow();
+      const before = fake.restCalls.length;
       const json = await c.getPhaseGroupRest(3290148);
       assert.equal(json.entities.groups.groupTypeId, 2);
-      assert.equal(c.callsInWindow(), before + 3);
+      assert.equal(fake.restCalls.length, before + 3);
+      assert.equal(c.callsInWindow(), 0, 'the call rate is GraphQL, the rate-limited API');
       const last = fake.restCalls.at(-1)!;
       assert.equal(
         last.path,
