@@ -1,0 +1,309 @@
+{
+  "entities": {
+    "groups": {
+      "id": 3000091,
+      "groupTypeId": 2,
+      "displayIdentifier": "1",
+      "state": 2,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    },
+    "seeds": [
+      {
+        "id": 8100910,
+        "seedNum": 1,
+        "groupSeedNum": 1,
+        "entrantId": 5000051,
+        "mutations": {
+          "entrants": {
+            "5000051": {
+              "id": 5000051,
+              "name": "C9 | | Ca$$h/Money?",
+              "participantIds": [
+                6000051
+              ],
+              "isPlaceholder": false
+            }
+          },
+          "participants": {
+            "6000051": {
+              "id": 6000051,
+              "gamerTag": "Ca$$h/Money?",
+              "playerId": 7000051,
+              "prefix": "C9 |"
+            }
+          }
+        }
+      },
+      {
+        "id": 8100911,
+        "seedNum": 2,
+        "groupSeedNum": 2,
+        "entrantId": 5000052,
+        "mutations": {
+          "entrants": {
+            "5000052": {
+              "id": 5000052,
+              "name": "Ünïcødé $& 🦊",
+              "participantIds": [
+                6000052
+              ],
+              "isPlaceholder": false
+            }
+          },
+          "participants": {
+            "6000052": {
+              "id": 6000052,
+              "gamerTag": "Ünïcødé $& 🦊",
+              "playerId": 7000052,
+              "prefix": null
+            }
+          }
+        }
+      },
+      {
+        "id": 8100912,
+        "seedNum": 3,
+        "groupSeedNum": 3,
+        "entrantId": 5000093,
+        "mutations": {
+          "entrants": {
+            "5000093": {
+              "id": 5000093,
+              "name": "Wisp",
+              "participantIds": [
+                6000093
+              ],
+              "isPlaceholder": false
+            }
+          },
+          "participants": {
+            "6000093": {
+              "id": 6000093,
+              "gamerTag": "Wisp",
+              "playerId": 7000093,
+              "prefix": null
+            }
+          }
+        }
+      },
+      {
+        "id": 8100913,
+        "seedNum": 4,
+        "groupSeedNum": 4,
+        "entrantId": 5000094,
+        "mutations": {
+          "entrants": {
+            "5000094": {
+              "id": 5000094,
+              "name": "Lark",
+              "participantIds": [
+                6000094
+              ],
+              "isPlaceholder": false
+            }
+          },
+          "participants": {
+            "6000094": {
+              "id": 6000094,
+              "gamerTag": "Lark",
+              "playerId": 7000094,
+              "prefix": null
+            }
+          }
+        }
+      }
+    ],
+    "sets": [
+      {
+        "isGF": false,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000051,
+        "entrant2Id": 5000094,
+        "winnerId": 5000051,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791070000,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "seed",
+        "entrant1PrereqId": 8100910,
+        "entrant1PrereqCondition": null,
+        "entrant2PrereqType": "seed",
+        "entrant2PrereqId": 8100913,
+        "entrant2PrereqCondition": null,
+        "id": 90000092,
+        "round": 1,
+        "fullRoundText": "Winners Semi-Final",
+        "callOrder": 1
+      },
+      {
+        "isGF": false,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000052,
+        "entrant2Id": 5000093,
+        "winnerId": 5000052,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791070300,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "seed",
+        "entrant1PrereqId": 8100911,
+        "entrant1PrereqCondition": null,
+        "entrant2PrereqType": "seed",
+        "entrant2PrereqId": 8100912,
+        "entrant2PrereqCondition": null,
+        "id": 90000093,
+        "round": 1,
+        "fullRoundText": "Winners Semi-Final",
+        "callOrder": 2
+      },
+      {
+        "isGF": false,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000051,
+        "entrant2Id": 5000052,
+        "winnerId": 5000051,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791072000,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 90000092,
+        "entrant1PrereqCondition": "winner",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 90000093,
+        "entrant2PrereqCondition": "winner",
+        "id": 90000094,
+        "round": 2,
+        "fullRoundText": "Winners Final",
+        "callOrder": 3
+      },
+      {
+        "isGF": false,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000094,
+        "entrant2Id": 5000093,
+        "winnerId": 5000093,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791071000,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 90000092,
+        "entrant1PrereqCondition": "loser",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 90000093,
+        "entrant2PrereqCondition": "loser",
+        "id": 90000095,
+        "round": -1,
+        "fullRoundText": "Losers Semi-Final",
+        "callOrder": 4
+      },
+      {
+        "isGF": false,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000052,
+        "entrant2Id": 5000093,
+        "winnerId": 5000052,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791075000,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 90000094,
+        "entrant1PrereqCondition": "loser",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 90000095,
+        "entrant2PrereqCondition": "winner",
+        "id": 90000096,
+        "round": -2,
+        "fullRoundText": "Losers Final",
+        "callOrder": 5
+      },
+      {
+        "isGF": true,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000051,
+        "entrant2Id": 5000052,
+        "winnerId": 5000052,
+        "state": 3,
+        "updatedAt": 1791040000,
+        "completedAt": 1791079000,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 90000094,
+        "entrant1PrereqCondition": "winner",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 90000096,
+        "entrant2PrereqCondition": "winner",
+        "id": 90000097,
+        "round": 3,
+        "fullRoundText": "Grand Final",
+        "callOrder": 6
+      },
+      {
+        "isGF": true,
+        "unreachable": false,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "entrant1Id": 5000051,
+        "entrant2Id": 5000052,
+        "winnerId": null,
+        "state": 2,
+        "updatedAt": 1791079500,
+        "completedAt": null,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": 8001,
+        "stationId": null,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 90000097,
+        "entrant1PrereqCondition": "loser",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 90000097,
+        "entrant2PrereqCondition": "winner",
+        "id": 90000091,
+        "round": 3,
+        "fullRoundText": "Grand Final Reset",
+        "callOrder": 7
+      }
+    ]
+  }
+}

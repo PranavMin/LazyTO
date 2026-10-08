@@ -1,0 +1,84 @@
+{
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "fixtures": [
+    {
+      "fixture": "01-bo3-2-0",
+      "zipName": "Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco).zip",
+      "entries": 3,
+      "zipBytes": 1855,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "02-bo5-3-2-charswitch",
+      "zipName": "Top 8 LF - Hollow (Fox, Falco, ICs) vs Quill (Falco, ICs, Fox, Ness).zip",
+      "entries": 6,
+      "zipBytes": 3741,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "03-bo3-port-swap",
+      "zipName": "Melee Singles WR1 - Marlow (Fox, Falco, ICs) vs Juniper (Falco, ICs, Fox).zip",
+      "entries": 4,
+      "zipBytes": 2525,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "04-sjis-long-tags",
+      "zipName": "Melee Singles WF - ソラとヒカリのスーパーマリオブラザーズ (Fox, Ness) vs Dr. Mario-Main_42!! (Falco, ICs).zip",
+      "entries": 4,
+      "zipBytes": 3022,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "05-gfr-edge-names",
+      "zipName": "Top 8 GFR - Ca$hMoney (Falco, ICs) vs Ünïcødé {playersChars} 🦊 (ICs, Fox, Ness).zip",
+      "entries": 4,
+      "zipBytes": 2799,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "06-copy-button-preview-ties",
+      "zipName": "Round Robin Pools R1 - Pebble (Falco) vs Saffron (ICs, Ness).zip",
+      "entries": 4,
+      "zipBytes": 2408,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "07-bo5-3-1-fixed-ports",
+      "zipName": "Melee Singles F - Wren (Falco, ICs) vs Tamsin (Fox, ICs).zip",
+      "entries": 5,
+      "zipBytes": 3050,
+      "fullGolden": "zip name, entry names and context.json equal the full golden; every .slp rebuilds to the full golden byte for byte"
+    },
+    {
+      "fixture": "06r-reported-ties",
+      "zipName": "Round Robin Pools R1 - Pebble (Falco) vs Saffron (ICs, Ness).zip",
+      "entries": 4,
+      "zipBytes": 2399,
+      "fullGolden": "n/a (variant; no full-replay golden)"
+    },
+    {
+      "fixture": "06z-reported-no-completedat",
+      "zipName": "Round Robin Pools R1 - Pebble (Falco) vs Saffron (ICs, Ness).zip",
+      "entries": 4,
+      "zipBytes": 2401,
+      "fullGolden": "n/a (variant; no full-replay golden)"
+    },
+    {
+      "fixture": "08-e2e-de4-wf",
+      "zipName": "Melee Singles WF - Kestrel (Fox, ICs) vs Ember (Falco).zip",
+      "entries": 3,
+      "zipBytes": 1853,
+      "fullGolden": "n/a (variant; no full-replay golden)"
+    },
+    {
+      "fixture": "09-e2e-de4-gfr",
+      "zipName": "Top 8 GFR - Ca$hMoney (Falco, ICs) vs Ünïcødé {playersChars} 🦊 (ICs, Fox, Ness).zip",
+      "entries": 4,
+      "zipBytes": 2799,
+      "fullGolden": "n/a (variant; no full-replay golden)"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "entities": {
+    "phase": {
+      "id": 2000081,
+      "name": "Bracket",
+      "state": 2
+    },
+    "groups": [
+      {
+        "id": 3000081,
+        "groupTypeId": 2,
+        "displayIdentifier": "1",
+        "state": 2,
+        "waveId": null,
+        "winnersTargetPhaseId": null
+      }
+    ]
+  }
+}

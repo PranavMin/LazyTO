@@ -8,3 +8,6 @@ deploy/**     text eol=lf
 # The kiosk's generated sources (relay_proto.h, texture and glyph tables) are written with LF.
 kiosk/include/** text eol=lf
 kiosk/src/**/*.inc text eol=lf
+# Replay Reporter's conformance bundle: compared byte for byte (context.json,
+# .slp, zips), so no checkout may rewrite a byte.
+test/rr-conformance/** -text

@@ -1,0 +1,262 @@
+{
+  "fixture": "02-bo5-3-2-charswitch",
+  "description": "Bo5 won 3-2 by entrant2 (Quill) in Top 8 Losers Final, on stream. Characters change between games for both players. The five decisive real replays only allow a 3-2 if the players swap ports once (after game 1: Quill moves P1 -> P2), so RR's port-ordered running score is wrong here too (see 03). Phase has siblings, so {phaseOrEvent} is the phase name.",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T21:15:47Z",
+  "zipName": "Top 8 LF - Hollow (Fox, Falco, ICs) vs Quill (Falco, ICs, Fox, Ness).zip",
+  "zipNameHex": "546f702038204c46202d20486f6c6c6f772028466f782c2046616c636f2c2049437329207673205175696c6c202846616c636f2c204943732c20466f782c204e657373292e7a6970",
+  "subdir": "Top 8 LF - Hollow (Fox, Falco, ICs) vs Quill (Falco, ICs, Fox, Ness)",
+  "contextSha256": "34483f42f3c4e6de6fe0603e45bc15b68bea5eb79bce5ecf7e290fa235d33eb7",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "replaySha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Quill (Falco), Hollow (Fox) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T19:31:04.059Z",
+      "outputSha256": "8983ad58ac00af3b820bc98e0bec55f74675a024774097f5f6005ee75aff482a",
+      "outputSize": 1268
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "replaySha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Hollow (Falco), Quill (ICs) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T20:15:06.059Z",
+      "outputSha256": "2eacccdf023e4641f3154a69a7867ea934d3201df6b40b9d7ca151fe2258cff4",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T213903.slp",
+      "replaySha256": "48d8195d275197165384e12bcdba3525397e3913a4157abf3dc9b20e7d8e60b3",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Hollow (Falco), Quill (ICs) - Dream Land.slp",
+      "startAt": "2026-10-03T20:20:36.059Z",
+      "outputSha256": "e356ad860c716fcc53c10c469a443d787ae08eb0185e46aec7e8f4b0cb68ec2a",
+      "outputSize": 1420
+    },
+    {
+      "game": 4,
+      "file": "game-4.slp",
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "replaySha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "4 - Hollow (ICs), Quill (Fox) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T21:08:16.059Z",
+      "outputSha256": "d88c793aa366ed65222de484496af20fdf61e78f4c14c2d8073514c46c733cc7",
+      "outputSize": 1420
+    },
+    {
+      "game": 5,
+      "file": "game-5.slp",
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "replaySha256": "6814ed983897ace66d8bbd2c84bf1c8316ebcd2da330b23dcf0b234536da5fa6",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "5 - Hollow (Falco), Quill (Ness) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T21:15:36.059Z",
+      "outputSha256": "7b753bd3baecdda2323d5d6cba476ddf6c55d2465369570fb24cf94643f6b9c5",
+      "outputSize": 1268
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "2 - Hollow (Falco), Quill (ICs) - Pokémon Stadium.slp",
+      "1 - Quill (Falco), Hollow (Fox) - Fountain of Dreams.slp",
+      "5 - Hollow (Falco), Quill (Ness) - Pokémon Stadium.slp",
+      "3 - Hollow (Falco), Quill (ICs) - Dream Land.slp",
+      "4 - Hollow (ICs), Quill (Fox) - Pokémon Stadium.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 6,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "eb361db2",
+        "uncompressedSize": 1943,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "34483f42f3c4e6de6fe0603e45bc15b68bea5eb79bce5ecf7e290fa235d33eb7"
+      },
+      {
+        "name": "2 - Hollow (Falco), Quill (ICs) - Pokémon Stadium.slp",
+        "nameHex": "32202d20486f6c6c6f77202846616c636f292c205175696c6c202849437329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "ff0ca236",
+        "uncompressedSize": 1420,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "2eacccdf023e4641f3154a69a7867ea934d3201df6b40b9d7ca151fe2258cff4"
+      },
+      {
+        "name": "1 - Quill (Falco), Hollow (Fox) - Fountain of Dreams.slp",
+        "nameHex": "31202d205175696c6c202846616c636f292c20486f6c6c6f772028466f7829202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "de9f10e9",
+        "uncompressedSize": 1268,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "8983ad58ac00af3b820bc98e0bec55f74675a024774097f5f6005ee75aff482a"
+      },
+      {
+        "name": "5 - Hollow (Falco), Quill (Ness) - Pokémon Stadium.slp",
+        "nameHex": "35202d20486f6c6c6f77202846616c636f292c205175696c6c20284e65737329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "4adc1478",
+        "uncompressedSize": 1268,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "7b753bd3baecdda2323d5d6cba476ddf6c55d2465369570fb24cf94643f6b9c5"
+      },
+      {
+        "name": "3 - Hollow (Falco), Quill (ICs) - Dream Land.slp",
+        "nameHex": "33202d20486f6c6c6f77202846616c636f292c205175696c6c202849437329202d20447265616d204c616e642e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "c46d8288",
+        "uncompressedSize": 1420,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "e356ad860c716fcc53c10c469a443d787ae08eb0185e46aec7e8f4b0cb68ec2a"
+      },
+      {
+        "name": "4 - Hollow (ICs), Quill (Fox) - Pokémon Stadium.slp",
+        "nameHex": "34202d20486f6c6c6f772028494373292c205175696c6c2028466f7829202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "ed07d854",
+        "uncompressedSize": 1420,
+        "dosTime": 43511,
+        "dosDate": 23875,
+        "sha256": "d88c793aa366ed65222de484496af20fdf61e78f4c14c2d8073514c46c733cc7"
+      }
+    ]
+  }
+}

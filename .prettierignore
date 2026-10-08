@@ -15,3 +15,5 @@ package-lock.json
 *.yaml
 desktop/release/
 desktop/resources/
+# Replay Reporter's conformance bundle: generated, compared byte for byte
+test/rr-conformance/

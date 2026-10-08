@@ -1,0 +1,17 @@
+{
+  "entities": {
+    "event": {
+      "id": 1000081,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "state": 2
+    },
+    "phase": [
+      {
+        "id": 2000081,
+        "name": "Bracket",
+        "state": 2
+      }
+    ]
+  }
+}

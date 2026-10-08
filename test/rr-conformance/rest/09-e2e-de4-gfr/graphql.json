@@ -1,0 +1,62 @@
+{
+  "note": "What the fetch stub answered for RR GraphQL lookups (startgg.ts:894-930, 267-298, 708-738).",
+  "pronounsByPlayerId": {
+    "7000051": "he/him",
+    "7000052": "any/all",
+    "7000093": null,
+    "7000094": null
+  },
+  "TournamentStreamsAndStationsQuery": {
+    "tournament": {
+      "stations": {
+        "nodes": []
+      },
+      "streams": [
+        {
+          "id": 8001,
+          "streamSource": "TWITCH",
+          "streamName": "lazytomelee"
+        }
+      ]
+    }
+  },
+  "TournamentParticipantsQuery": {
+    "tournament": {
+      "participants": {
+        "pageInfo": {
+          "totalPages": 1
+        },
+        "nodes": [
+          {
+            "player": {
+              "id": 7000051,
+              "user": {
+                "genderPronoun": "he/him"
+              }
+            }
+          },
+          {
+            "player": {
+              "id": 7000052,
+              "user": {
+                "genderPronoun": "any/all"
+              }
+            }
+          },
+          {
+            "player": {
+              "id": 7000093,
+              "user": null
+            }
+          },
+          {
+            "player": {
+              "id": 7000094,
+              "user": null
+            }
+          }
+        ]
+      }
+    }
+  }
+}

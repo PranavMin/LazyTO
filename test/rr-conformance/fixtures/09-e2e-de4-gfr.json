@@ -1,0 +1,209 @@
+{
+  "name": "09-e2e-de4-gfr",
+  "description": "End-to-end case: 05-gfr-edge-names's games and players, with the start.gg side taken from RR's own start.gg code run on the REST fixtures in rest/09-e2e-de4-gfr/ (make-e2e.ts). LazyTO's fake start.gg serves the same REST files.",
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "events": [
+      {
+        "id": 1000051,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "phases": [
+          {
+            "id": 2000051,
+            "name": "Pools",
+            "phaseGroups": [
+              {
+                "id": 3000050,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "B2",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": 4002,
+                "winnersTargetPhaseId": 2000052
+              }
+            ],
+            "state": 2
+          },
+          {
+            "id": 2000052,
+            "name": "Top 8",
+            "phaseGroups": [
+              {
+                "id": 3000051,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": null,
+                "winnersTargetPhaseId": null
+              }
+            ],
+            "state": 2
+          }
+        ]
+      },
+      {
+        "id": 1000052,
+        "name": "Melee Doubles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-doubles",
+        "state": 2,
+        "phases": []
+      }
+    ],
+    "stations": [],
+    "streams": [
+      {
+        "id": 8001,
+        "domain": "twitch",
+        "path": "lazytomelee"
+      }
+    ]
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000091,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": true
+    },
+    "phase": {
+      "id": 2000092,
+      "name": "Top 8",
+      "hasSiblings": true
+    },
+    "phaseGroup": {
+      "id": 3000091,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000091,
+    "sggId": 90000091,
+    "state": 2,
+    "round": 4,
+    "fullRoundText": "Grand Final Reset",
+    "winnerId": null,
+    "entrant1Id": 5000051,
+    "entrant1Participants": [
+      {
+        "id": 6000051,
+        "displayName": "Ca$$h/Money?",
+        "prefix": "C9 |",
+        "pronouns": "he/him"
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000052,
+    "entrant2Participants": [
+      {
+        "id": 6000052,
+        "displayName": "Ünïcødé $& 🦊",
+        "prefix": "",
+        "pronouns": "any/all"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": {
+      "id": 8001,
+      "domain": "twitch",
+      "path": "lazytomelee"
+    },
+    "station": null,
+    "ordinal": 0,
+    "wasReported": false,
+    "updatedAtMs": 1791079500000,
+    "completedAtMs": 0
+  },
+  "report": {
+    "updatedSetFields": {
+      "id": 90000091,
+      "sggId": 90000091,
+      "completedAtMs": 1791083559000,
+      "stream": {
+        "id": 8001,
+        "domain": "twitch",
+        "path": "lazytomelee"
+      }
+    }
+  },
+  "clock": "2026-10-04T03:12:41Z",
+  "games": [
+    {
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    }
+  ],
+  "mode": "start.gg",
+  "copySettings": {
+    "output": 2,
+    "writeContext": true,
+    "writeDisplayNames": true,
+    "writeFileNames": true,
+    "writeStartTimes": true
+  },
+  "folderNameFormat": "{phaseOrEvent} {roundShort} - {playersChars}",
+  "fileNameFormat": " - {playersChars} - {stage}",
+  "undoSubdir": "",
+  "host": {
+    "name": "",
+    "address": ""
+  }
+}

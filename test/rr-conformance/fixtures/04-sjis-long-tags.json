@@ -1,0 +1,168 @@
+{
+  "name": "04-sjis-long-tags",
+  "description": "Bo3 won 2-1 by entrant1 (port 2) with a 19-character Japanese tag (Shift-JIS, trail-byte remap overflow into port 3) against a 19-character ASCII tag with punctuation (full-width remap, 15-character cut). Game 3 is a 352-frame game RR marks \"less than 1 minute\" (selected by hand).",
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "events": [
+      {
+        "id": 1000041,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "phases": [
+          {
+            "id": 2000041,
+            "name": "Bracket",
+            "phaseGroups": [
+              {
+                "id": 3000041,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": null,
+                "winnersTargetPhaseId": null
+              }
+            ],
+            "state": 2
+          }
+        ]
+      }
+    ],
+    "stations": [],
+    "streams": []
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000041,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": false
+    },
+    "phase": {
+      "id": 2000041,
+      "name": "Bracket",
+      "hasSiblings": false
+    },
+    "phaseGroup": {
+      "id": 3000041,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000041,
+    "sggId": 90000041,
+    "state": 2,
+    "round": 3,
+    "fullRoundText": "Winners Final",
+    "winnerId": null,
+    "entrant1Id": 5000041,
+    "entrant1Participants": [
+      {
+        "id": 6000041,
+        "displayName": "ソラとヒカリのスーパーマリオブラザーズ",
+        "prefix": "日本",
+        "pronouns": ""
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000042,
+    "entrant2Participants": [
+      {
+        "id": 6000042,
+        "displayName": "Dr. Mario-Main_42!!",
+        "prefix": "X.Y",
+        "pronouns": "he/him"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": null,
+    "station": null,
+    "ordinal": -4,
+    "wasReported": false,
+    "updatedAtMs": 1791064200000,
+    "completedAtMs": 0
+  },
+  "report": {
+    "updatedSetFields": {
+      "id": 90000041,
+      "sggId": 90000041,
+      "completedAtMs": 1791065335000,
+      "stream": null
+    }
+  },
+  "clock": "2026-10-03T22:08:58Z",
+  "games": [
+    {
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ]
+    }
+  ],
+  "mode": "start.gg",
+  "copySettings": {
+    "output": 2,
+    "writeContext": true,
+    "writeDisplayNames": true,
+    "writeFileNames": true,
+    "writeStartTimes": true
+  },
+  "folderNameFormat": "{phaseOrEvent} {roundShort} - {playersChars}",
+  "fileNameFormat": " - {playersChars} - {stage}",
+  "undoSubdir": "",
+  "host": {
+    "name": "",
+    "address": ""
+  }
+}

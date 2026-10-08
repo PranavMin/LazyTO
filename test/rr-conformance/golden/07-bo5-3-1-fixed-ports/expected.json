@@ -1,0 +1,219 @@
+{
+  "fixture": "07-bo5-3-1-fixed-ports",
+  "description": "Bo5 won 3-1 by entrant2 (Tamsin, port 2 throughout) in a single-elimination final (bracketType 1, ordinal = callOrder). Both players switch characters (Tamsin Fox/ICs, Wren Falco -> ICs in game 4). No swaps, so the running score is right.",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T23:40:05Z",
+  "zipName": "Melee Singles F - Wren (Falco, ICs) vs Tamsin (Fox, ICs).zip",
+  "zipNameHex": "4d656c65652053696e676c65732046202d205772656e202846616c636f2c20494373292076732054616d73696e2028466f782c20494373292e7a6970",
+  "subdir": "Melee Singles F - Wren (Falco, ICs) vs Tamsin (Fox, ICs)",
+  "contextSha256": "292ea8de69a64b5a031d47ec685e1e421ba09294f1c7d0c3fd4c7bcce745cdca",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "replaySha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Wren (Falco), Tamsin (Fox) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T22:00:47.811Z",
+      "outputSha256": "1ff3d2953e58f1136b2ab7e9f7d47959f0e23b5ae31e7b3bc0dbddcf4f766296",
+      "outputSize": 1268
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "replaySha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Wren (Falco), Tamsin (ICs) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T22:44:49.811Z",
+      "outputSha256": "7340be6fb2ee2c2aa3b740ad144606a182d74c2f31e617a5ab00d259b7bbe16e",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T213903.slp",
+      "replaySha256": "48d8195d275197165384e12bcdba3525397e3913a4157abf3dc9b20e7d8e60b3",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Wren (Falco), Tamsin (ICs) - Dream Land.slp",
+      "startAt": "2026-10-03T22:50:19.811Z",
+      "outputSha256": "905ea74931d13ee682e61d09a4af37b8d4b305b955a8fbd8aa258c6dacef367d",
+      "outputSize": 1420
+    },
+    {
+      "game": 4,
+      "file": "game-4.slp",
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "replaySha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "4 - Wren (ICs), Tamsin (Fox) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T23:37:59.811Z",
+      "outputSha256": "7998f4ea313328e5bd0fd7c2a7e2d1f470d77e4b80ea5b4a5a8d3e3810563fa6",
+      "outputSize": 1420
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "4 - Wren (ICs), Tamsin (Fox) - Pokémon Stadium.slp",
+      "1 - Wren (Falco), Tamsin (Fox) - Fountain of Dreams.slp",
+      "3 - Wren (Falco), Tamsin (ICs) - Dream Land.slp",
+      "2 - Wren (Falco), Tamsin (ICs) - Pokémon Stadium.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 5,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "e3d8486c",
+        "uncompressedSize": 1637,
+        "dosTime": 48386,
+        "dosDate": 23875,
+        "sha256": "292ea8de69a64b5a031d47ec685e1e421ba09294f1c7d0c3fd4c7bcce745cdca"
+      },
+      {
+        "name": "4 - Wren (ICs), Tamsin (Fox) - Pokémon Stadium.slp",
+        "nameHex": "34202d205772656e2028494373292c2054616d73696e2028466f7829202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "18845c65",
+        "uncompressedSize": 1420,
+        "dosTime": 48386,
+        "dosDate": 23875,
+        "sha256": "7998f4ea313328e5bd0fd7c2a7e2d1f470d77e4b80ea5b4a5a8d3e3810563fa6"
+      },
+      {
+        "name": "1 - Wren (Falco), Tamsin (Fox) - Fountain of Dreams.slp",
+        "nameHex": "31202d205772656e202846616c636f292c2054616d73696e2028466f7829202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "9796e695",
+        "uncompressedSize": 1268,
+        "dosTime": 48386,
+        "dosDate": 23875,
+        "sha256": "1ff3d2953e58f1136b2ab7e9f7d47959f0e23b5ae31e7b3bc0dbddcf4f766296"
+      },
+      {
+        "name": "3 - Wren (Falco), Tamsin (ICs) - Dream Land.slp",
+        "nameHex": "33202d205772656e202846616c636f292c2054616d73696e202849437329202d20447265616d204c616e642e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "15e587a5",
+        "uncompressedSize": 1420,
+        "dosTime": 48386,
+        "dosDate": 23875,
+        "sha256": "905ea74931d13ee682e61d09a4af37b8d4b305b955a8fbd8aa258c6dacef367d"
+      },
+      {
+        "name": "2 - Wren (Falco), Tamsin (ICs) - Pokémon Stadium.slp",
+        "nameHex": "32202d205772656e202846616c636f292c2054616d73696e202849437329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "2b09bf10",
+        "uncompressedSize": 1420,
+        "dosTime": 48386,
+        "dosDate": 23875,
+        "sha256": "7340be6fb2ee2c2aa3b740ad144606a182d74c2f31e617a5ab00d259b7bbe16e"
+      }
+    ]
+  }
+}
