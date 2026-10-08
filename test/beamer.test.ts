@@ -1,6 +1,7 @@
 // Duplicate station numbers (beamer.ts): two beamers on one number, only the
 // newcomer refused, over TCP (ST_DUP_STATION) and for telemetry, also after a
-// relay restart, and the status page's banner and beamer rows.
+// relay restart, and the status page's banner and beamer rows. A renumbered
+// beamer's Wii stays one row under Wii consoles.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -205,4 +206,32 @@ test('after a relay restart the holder keeps its station, even when the newcomer
   t.after(() => elsewhere.close());
   await elsewhere.sync(moved.tcpPort);
   assert.equal((await moved.wii(3, 0, '127.0.0.3').listSets()).resp.status, RelayStatus.ST_OK);
+});
+
+test('a beamer renumbered from 1 up to 11 is one Wii on the status page, showing 11', async (t) => {
+  const h = await startHarness();
+  t.after(h.close);
+  const beamer = new FakeBeamer(1, 1, '127.0.0.1');
+  await beamer.listen();
+  t.after(() => beamer.close());
+  // Each press: the beamer's next sync names the new number, and its Wii's
+  // telemetry carries it (the kernel stamps it from the beamer's hello).
+  for (let st = 1; st <= 11; st++) {
+    beamer.station = st;
+    await beamer.sync(h.tcpPort);
+    h.ev.telemetry.receive(
+      telemetryDatagram(TelemetryKind.TM_STATUS, st, st - 1, statusPayload({})),
+      '127.0.0.1',
+    );
+  }
+  const rows = h.ev.telemetry.stations();
+  assert.deepEqual(
+    rows.map((r) => r.station),
+    [11],
+  );
+  const html = await (await fetch(h.statusUrl)).text();
+  const wiis = html.slice(html.indexOf('<h2>Wii consoles</h2>'), html.indexOf('<h2>Beamers'));
+  assert.equal(wiis.match(/heard .*? ago/g)?.length, 1, 'one Wii');
+  assert.match(wiis, /<span class="st">11<\/span>/);
+  assert.match(wiis, /href="\/log\?station=11"/);
 });

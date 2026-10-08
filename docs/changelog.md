@@ -9,6 +9,7 @@ The first public beta. Everything below is the work leading up to it, by date.
 ## 2026-10-08
 
 - **Every Wii says its station at the top right** (kiosk). `STATION n` sits in white on the set list's header row, in every view, so a player or the TO reads it at a glance; `STATION -` while the beamer has no number. The version text moves above it, still small and dim, and the side pane no longer repeats the number above the relay's address.
+- **A renumbered beamer's Wii stays one Wii on the status page** (relay). The Wii consoles table kept a row per station number, so a beamer pressed from 1 up to 11 showed its one Wii eleven times. A row is now the Wii behind one beamer (its station_id, or its address before its first sync), shows the beamer's current number, and its log notes each change.
 
 ## 2026-10-07
 

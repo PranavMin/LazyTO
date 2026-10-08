@@ -176,14 +176,14 @@ if (pageKind !== 'running') {
 async function startDemoSets(h: Awaited<ReturnType<typeof startHarness>>): Promise<void> {
   await h.wii(1, 1).startSet(107949994, 1);
   await h.wii(1, 1).reportScore(107949994, [game(1), game(2)]);
-  await h.wii(2).startSet(107949995);
+  await h.wii(2, 0, '127.0.0.2').startSet(107949995);
   h.fake.failNext('reportBracketSet', 'gqlError', 1, 'Set is already completed');
-  await h.wii(2).reportScore(107949995, [game(1)]);
+  await h.wii(2, 0, '127.0.0.2').reportScore(107949995, [game(1)]);
   await h.wii(3).startSet(107949996);
-  // Every Wii here is behind 127.0.0.1, so their telemetry comes from there too.
+  // A Wii's telemetry comes from its beamer's address, which is the Wii (telemetry.ts).
   for (const [station, from] of [
     [1, '127.0.0.1'],
-    [2, '127.0.0.1'],
+    [2, '127.0.0.2'],
   ] as const) {
     h.ev.telemetry.receive(
       telemetryDatagram(

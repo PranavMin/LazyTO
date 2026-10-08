@@ -30,7 +30,8 @@ your admin password; your browser asks for it once.
 its last action, and the result of its last start.gg call. ★ marks the stream station.
 
 **Wii consoles table.** One row per Wii that has sent its log: when it was last heard, whether
-the kiosk module loaded, and its last log lines. "full log" shows everything since boot.
+the kiosk module loaded, and its last log lines. "full log" shows everything since boot. A Wii
+whose beamer is renumbered keeps its row, which shows the new number.
 
 **Beamers.** One row per beamer, from its syncs: its station number, its card (free space,
 replays still to collect and collected replays waiting to be erased), when it was last unplugged

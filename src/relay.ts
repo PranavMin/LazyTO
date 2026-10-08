@@ -155,6 +155,7 @@ export async function startEvent(o: EventOptions): Promise<RunningEvent> {
     secret: o.secret,
     beaconPayload: beacon?.beaconPayload,
     admit: (station, from) => beamers.admit(station, from),
+    identify: (from) => beamers.stationIdAt(from),
     onLine: (station, line) => {
       try {
         appendFileSync(

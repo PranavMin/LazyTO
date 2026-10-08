@@ -12,6 +12,15 @@
 // station's row; so is a datagram from the newcomer of two beamers on one
 // station number (beamer.ts). Nothing is ever sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
 // lines cut to MAX_LINE_LEN.
+//
+// A row is one Wii, not one station number: the number is the beamer's
+// button, and a TO pressing it from 1 up to 11 made one Wii eleven rows
+// (hardware test, 2026-10-08). A datagram carries no station_id, only the
+// number and its source address, which is the beamer's (a beamer is its
+// Wii's only link). So a row is keyed by the station_id a sync from that
+// address named (beamer.ts stationIdAt), which also survives a DHCP renewal,
+// and by the address until the beamer's first sync. The row shows the
+// number of its latest datagram.
 
 import { createSocket, type Socket } from 'node:dgram';
 import { timingSafeEqual } from 'node:crypto';
@@ -127,6 +136,8 @@ export interface TelemetryOptions {
   beaconReplyPort?: number;
   /** Whether the beamer at `from` may report for `station`; false drops the datagram (beamer.ts). */
   admit?: (station: number, from: string) => boolean;
+  /** The station_id of the beamer at `from`, once one has synced from there (beamer.ts). */
+  identify?: (from: string) => string | undefined;
 }
 
 export interface BeaconRequestStatus {
@@ -164,7 +175,8 @@ export function moduleStateText(s: StationStatus): string {
 export class StationTelemetry {
   private socket: Socket | null = null;
   private readonly expectedKey: Buffer; // relay_auth's key for this relay's secret (sync.ts)
-  private readonly rows = new Map<number, StationTelemetryRow & { seq: number; partial: string }>();
+  // By the beamer's station_id, or `@address` until a sync from that address names one.
+  private readonly rows = new Map<string, StationTelemetryRow & { seq: number; partial: string }>();
   private refusals: TelemetryRefused | null = null;
   private beaconRequests: BeaconRequestStatus | null = null;
   private duplicates = 0;
@@ -202,13 +214,14 @@ export class StationTelemetry {
     if (s) await new Promise<void>((resolve) => s.close(() => resolve()));
   }
 
-  /** One row per station heard from, lowest station first. */
+  /** One row per Wii heard from, lowest station first. */
   stations(): StationTelemetryRow[] {
     return [...this.rows.values()]
-      .sort((a, b) => a.station - b.station)
+      .sort((a, b) => a.station - b.station || b.lastSeenAt - a.lastSeenAt)
       .map(({ seq: _seq, partial: _partial, ...row }) => ({ ...row, lines: [...row.lines] }));
   }
 
+  /** The Wii last heard as `station` (a silent one may still show a number another took since). */
   get(station: number): StationTelemetryRow | undefined {
     return this.stations().find((r) => r.station === station);
   }
@@ -276,7 +289,18 @@ export class StationTelemetry {
       return;
     }
 
-    let row = this.rows.get(hdr.station);
+    const id = this.opts.identify?.(from);
+    const byAddress = `@${from}`;
+    let row = id !== undefined ? this.rows.get(id) : undefined;
+    if (row) {
+      this.rows.delete(byAddress); // its datagrams before a sync named it, if any
+    } else {
+      row = this.rows.get(byAddress);
+      if (row && id !== undefined) {
+        this.rows.delete(byAddress);
+        this.rows.set(id, row);
+      }
+    }
     if (!row) {
       if (this.rows.size >= MAX_STATIONS) return;
       row = {
@@ -294,7 +318,7 @@ export class StationTelemetry {
         seq: -1,
         partial: '',
       };
-      this.rows.set(hdr.station, row);
+      this.rows.set(id ?? byAddress, row);
     }
     if (row.seq >= 0 && hdr.seq <= row.seq) {
       if (hdr.seq < row.seq) {
@@ -310,6 +334,11 @@ export class StationTelemetry {
       row.lost += hdr.seq - row.seq - 1;
     }
     row.seq = hdr.seq;
+    if (row.station !== hdr.station) {
+      const was = row.station;
+      row.station = hdr.station;
+      this.pushLine(row, `--- now station ${hdr.station} (was ${was}) ---`);
+    }
     row.from = from;
     row.lastSeenAt = now;
     row.uptimeMs = hdr.uptime_ms;
