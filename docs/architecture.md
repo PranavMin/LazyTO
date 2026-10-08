@@ -348,7 +348,9 @@ There is no beamer configuration and no announce.
   using the same number within 15 s is the newcomer: its Wii's requests get `ST_DUP_STATION`
   ("two beamers are station n") and its telemetry is dropped and counted, until one is renumbered
   or the holder falls silent. The station already playing keeps playing. Two addresses whose syncs
-  name one `station_id` are one beamer. A sync is never refused.
+  name one `station_id` are one beamer. A sync is never refused. A number another beamer takes
+  over after its holder fell silent (a beamer replaced mid-event) is noted on the status page for
+  10 minutes; each game's replay is still fetched from the beamer it was played through.
 - **One LazyTO per network** (`src/guard.ts`). Beamers follow the last beacon they heard, so the
   relay listens on the beacon port for any other relay's beacon. It does not start its event while
   one was heard in the last 10 s (the failed page says where), and a running relay shows the other

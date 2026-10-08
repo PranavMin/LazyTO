@@ -31,6 +31,8 @@ import { BeamerSyncFlags, type BeamerSyncReq } from '../generated/wire.js';
 export const DUP_WINDOW_MS = 15_000;
 /** A duplicate stays on the status page this long after its last refusal. */
 export const DUP_SHOWN_MS = 60_000;
+/** A station number that moved to another beamer is noted on the status page this long. */
+export const HANDOVER_SHOWN_MS = 10 * 60_000;
 /** A sync refused for its secret stays on the status page this long. */
 const WRONG_SECRET_SHOWN_MS = 5 * 60_000;
 
@@ -106,12 +108,21 @@ export interface WrongSecret {
   lastAt: number;
 }
 
+/** A station number taken over by another beamer after its holder fell silent (a beamer replaced mid-event). */
+export interface Handover {
+  station: number;
+  before: { address: string; stationId: string | null };
+  after: { address: string; stationId: string | null };
+  at: number;
+}
+
 export class BeamerRegistry {
   private readonly rows = new Map<string, BeamerRow>(); // by station_id
   private readonly ids = new Map<string, string>(); // address -> station_id, from syncs
   private readonly owners = new Map<number, { address: string; lastAt: number }>(); // by station number
   private readonly dups = new Map<string, Duplicate>(); // by `${station}|${newcomer address}`
   private readonly wrongSecrets = new Map<string, WrongSecret>(); // by address
+  private readonly handovers = new Map<number, Handover>(); // by station number, the latest
   private lastContactAt: number | null = null;
 
   /** A verified sync from `from`: the beamer's row, as it now stands. */
@@ -216,6 +227,13 @@ export class BeamerRegistry {
     return [...this.wrongSecrets.values()].filter((w) => now - w.lastAt < WRONG_SECRET_SHOWN_MS);
   }
 
+  /** Station numbers that moved to another beamer within `withinMs`. */
+  handedOver(now = Date.now(), withinMs = HANDOVER_SHOWN_MS): Handover[] {
+    return [...this.handovers.values()]
+      .filter((h) => now - h.at < withinMs)
+      .sort((a, b) => a.station - b.station);
+  }
+
   /** When anything last came from a beamer: a sync, a Wii request or telemetry; null if never. */
   lastContact(): number | null {
     return this.lastContactAt;
@@ -231,6 +249,14 @@ export class BeamerRegistry {
   private use(station: number, from: string, now: number): boolean {
     const owner = this.owners.get(station);
     if (!owner || this.same(owner.address, from) || now - owner.lastAt > DUP_WINDOW_MS) {
+      if (owner && !this.same(owner.address, from)) {
+        this.handovers.set(station, {
+          station,
+          before: { address: owner.address, stationId: this.ids.get(owner.address) ?? null },
+          after: { address: from, stationId: this.ids.get(from) ?? null },
+          at: now,
+        });
+      }
       this.owners.set(station, { address: from, lastAt: now });
       return true;
     }

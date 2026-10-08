@@ -83,7 +83,10 @@ export interface StatusView {
   };
   /** The set archive (archive.ts), the beamers (beamer.ts) and their downloads (collect.ts). */
   archive: Pick<SetArchive, 'status'>;
-  beamers: Pick<BeamerRegistry, 'list' | 'duplicates' | 'wrongSecretBeamers' | 'lastContact'>;
+  beamers: Pick<
+    BeamerRegistry,
+    'list' | 'duplicates' | 'wrongSecretBeamers' | 'lastContact' | 'handedOver'
+  >;
   collector: Pick<Collector, 'status' | 'busy'>;
   /** The archive folder, for the Replays section. */
   store: { dir: string; freeBytes(): number };
@@ -363,8 +366,17 @@ function renderBeamers(v: StatusView, now = Date.now()): string {
             'downloads in progress'
           }. Wait for "All replays collected" before unplugging beamers at the end of the night.</p>`;
   }
+  const short = (b: { address: string; stationId: string | null }) =>
+    `${b.stationId ? uuid(b.stationId).slice(0, 8) : 'a beamer'} (${b.address})`;
+  const handovers = v.beamers
+    .handedOver(now)
+    .map(
+      (h) =>
+        `<p class="muted">Station ${h.station} changed beamer ${age(h.at)} ago: now ${escapeHtml(short(h.after))}, before ${escapeHtml(short(h.before))}. Each beamer's replays are collected by its own id.</p>`,
+    )
+    .join('');
   return `<h2>Beamers</h2>
-${collected}
+${collected}${handovers}
 ${cards.join('\n')}`;
 }
 

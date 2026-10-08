@@ -41,6 +41,12 @@ test('registry: one number, two addresses within the window: the newcomer is ref
     true,
     'other numbers are free',
   );
+  const [h] = r.handedOver(t0 + 3000 + DUP_WINDOW_MS + 3);
+  assert.deepEqual(
+    [h!.station, h!.before.address, h!.after.address],
+    [3, '10.0.0.5', '10.0.0.9'],
+    'the status page notes that station 3 changed beamer',
+  );
 });
 
 test('registry: a beamer that changed address (its syncs name the same station_id) is not a duplicate', () => {
@@ -132,4 +138,11 @@ test('over TCP: a second beamer on station 3 gets ST_DUP_STATION; the first keep
   second.station = 4;
   await second.sync(h.tcpPort);
   assert.equal((await h.wii(4, 0, '127.0.0.2').listSets()).resp.status, RelayStatus.ST_OK);
+
+  // Station 3's beamer replaced: a third one takes the number once the first has been silent.
+  assert.equal(h.ev.beamers.admit(3, '127.0.0.3', Date.now() + DUP_WINDOW_MS + 1000), true);
+  assert.match(
+    await (await fetch(h.statusUrl)).text(),
+    /Station 3 changed beamer .* ago: now a beamer \(127\.0\.0\.3\), before [0-9a-f]{8} \(127\.0\.0\.1\)/,
+  );
 });
