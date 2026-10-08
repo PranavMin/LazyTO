@@ -33,7 +33,10 @@ const FIREWALL_EVERY_MS = 30_000;
 const POWERSHELL_TIMEOUT_MS = 30_000;
 const FIX_TIMEOUT_MS = 5 * 60_000;
 
-/** Run a PowerShell script; resolves with its stdout, rejects with its error output. */
+/**
+ * Run a PowerShell script; resolves with its stdout, rejects with the first
+ * line of its error output (PowerShell adds "At line:1 char:..." after it).
+ */
 function powershell(
   script: string,
   o: { env?: Record<string, string>; timeoutMs?: number } = {},
@@ -49,7 +52,9 @@ function powershell(
       },
       (err, stdout, stderr) => {
         if (!err) return resolve(stdout);
-        const why = stderr.trim() || (err.killed ? 'timed out' : `exit code ${String(err.code)}`);
+        const why =
+          stderr.trim().split(/\r?\n/)[0] ||
+          (err.killed ? 'timed out' : `exit code ${String(err.code)}`);
         reject(new Error(why));
       },
     );

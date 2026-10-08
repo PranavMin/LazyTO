@@ -280,7 +280,12 @@ test('the firewall fix: one elevated PowerShell, the path quoted inside it, the 
   assert.match(script, /-Profile Any -RemoteAddress LocalSubnet/);
   assert.match(script, /foreach \(\$protocol in 'TCP', 'UDP'\)/);
   const outer = elevate(script);
-  assert.match(outer, /^\$p = Start-Process -FilePath powershell\.exe -Verb RunAs /);
+  // 'Stop' first: a UAC "No" must fail the call, not exit 0 as if the fix had run.
+  assert.match(
+    outer,
+    /^\$ErrorActionPreference = 'Stop'; \$p = Start-Process -FilePath powershell\.exe -Verb RunAs /,
+  );
+  assert.match(outer, /; exit \$p\.ExitCode$/);
   const encoded = /'-EncodedCommand','([A-Za-z0-9+/=]+)'/.exec(outer)![1]!;
   assert.equal(Buffer.from(encoded, 'base64').toString('utf16le'), script);
 });

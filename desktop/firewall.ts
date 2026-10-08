@@ -81,11 +81,15 @@ foreach ($protocol in 'TCP', 'UDP') {
 /**
  * The non-elevated PowerShell that asks for admin once and runs `script`
  * elevated. The script travels base64-encoded (-EncodedCommand), so no path
- * needs quoting through Start-Process; it exits non-zero when the TO says No.
+ * needs quoting through Start-Process. When the TO says No, Start-Process
+ * fails with "The operation was canceled by the user": 'Stop' makes that exit
+ * non-zero with the message on stderr. (Without it, $p is null and
+ * `exit $p.ExitCode` exits 0, as if the fix had run.)
  */
 export function elevate(script: string): string {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
   return (
+    `$ErrorActionPreference = 'Stop'; ` +
     `$p = Start-Process -FilePath powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -PassThru ` +
     `-ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','${encoded}'; exit $p.ExitCode`
   );

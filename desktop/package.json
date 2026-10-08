@@ -41,11 +41,19 @@
     "extraResources": [
       {
         "from": "resources/wii",
-        "to": "wii"
+        "to": "wii",
+        "filter": [
+          "**/*",
+          "!README.md"
+        ]
       },
       {
         "from": "resources/firmware",
-        "to": "firmware"
+        "to": "firmware",
+        "filter": [
+          "**/*",
+          "!README.md"
+        ]
       }
     ],
     "electronLanguages": [
