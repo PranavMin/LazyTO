@@ -46,7 +46,7 @@ export const STALL_MS = 10_000;
 export interface CollectorDeps {
   store: RawStore;
   beamers: BeamerRegistry;
-  /** Keys the reply's HMAC: the secret every beamer's relay_auth carries. */
+  /** Keys the reply's HMAC: the secret itself, which never travels (relay_auth carries a key derived from it, sync.ts). */
   secret: string;
   /** The set archive: where a stored copy goes, and that it arrived. */
   archive: {

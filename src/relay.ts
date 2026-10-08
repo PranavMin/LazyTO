@@ -30,7 +30,7 @@ export interface EventOptions {
   startgg: StartggClient;
   eventId: number;
   setFormat: SetFormat;
-  /** Shared secret every beamer puts in relay_auth and that signs sync replies (decisions.md R16). */
+  /** Shared secret (decisions.md R16): relay_auth carries a key derived from it, and it signs sync replies (sync.ts). */
   secret: string;
   /** The stream setup's station and its start.gg stream; null = no stream. */
   stream: { station: number; streamId: number } | null;

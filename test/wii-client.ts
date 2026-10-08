@@ -28,6 +28,7 @@ import {
   type RelayHdr,
   type RelayResp,
 } from '../generated/wire.js';
+import { relayAuthKey } from '../src/sync.js';
 
 /** The secret tests and the sim use; a relay under test is configured with it. */
 export const TEST_SECRET = 'test-secret-1234';
@@ -51,7 +52,10 @@ export function rawRequest(
     localAddress = undefined as string | undefined,
   } = {},
 ): Promise<WireReply> {
-  const auth = encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
+  const auth = encodeRelayAuth({
+    magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]),
+    key: relayAuthKey(secret),
+  });
   const req = Buffer.concat([
     auth,
     encodeRelayHdr({

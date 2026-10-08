@@ -7,7 +7,8 @@
 //     503 + Retry-After while `busy`. A whole file served (resumed or not)
 //     is hashed as the firmware does, over its raw bytes, and remembered for
 //     this boot.
-//   - Sync: relay_auth + relay_hdr (version BEAMER_SYNC_VERSION, cmd 8) +
+//   - Sync: relay_auth (the key from the secret, never the secret) +
+//     relay_hdr (version BEAMER_SYNC_VERSION, cmd 8) +
 //     beamer_sync_req listing the files without an ack (served-this-boot
 //     first, then finished, incomplete, live; 16 at most, SF_MORE beyond),
 //     then the reply checked the way the firmware must: magic, version,
@@ -51,6 +52,7 @@ import {
   type BeamerSyncReq,
   type SyncFile,
 } from '../generated/wire.js';
+import { relayAuthKey } from '../src/sync.js';
 import { TEST_SECRET } from './wii-client.js';
 
 export interface FakeFile {
@@ -262,7 +264,10 @@ export class FakeBeamer {
     const req = this.syncRequest();
     const payload = encodeBeamerSyncReq(req);
     const out = Buffer.concat([
-      encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret: this.secret }),
+      encodeRelayAuth({
+        magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]),
+        key: relayAuthKey(this.secret),
+      }),
       encodeRelayHdr({
         magic: new Uint8Array([MAGIC_0, MAGIC_1]),
         version: BEAMER_SYNC_VERSION,

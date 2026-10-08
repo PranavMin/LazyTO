@@ -44,6 +44,7 @@ import { StationState, wins, type Claim } from './state.js';
 import { StartggClient, StartggError, RateLimitedError, type GameDataInput } from './startgg.js';
 import { toStartggCharacter } from './chars.js';
 import { toStartggStage } from './stages.js';
+import { relayAuthKey } from './sync.js';
 
 /** Where audit records go; audit.ts is the JSONL implementation. */
 export interface AuditSink {
@@ -83,7 +84,7 @@ export interface RelayDeps {
    * another. null = no stream tonight.
    */
   stream: { station: number; streamId: number } | null;
-  /** Shared secret every request's relay_auth must carry (decisions.md R16). */
+  /** Shared secret (decisions.md R16): every request's relay_auth must carry the key it gives (sync.ts relayAuthKey). */
   secret: string;
 }
 
@@ -107,14 +108,13 @@ interface Reply {
 
 export class RelayTcpServer {
   private readonly server: Server;
-  private readonly expectedSecret: Buffer; // SECRET_LEN bytes, NUL-padded, as relay_auth carries it
+  private readonly expectedKey: Buffer; // relay_auth's key for this relay's secret (sync.ts)
   private refusals: RefusedStatus | null = null;
   /** Connections that have not sent a whole request yet; close() drops them. */
   private readonly waiting = new Set<Socket>();
 
   constructor(private readonly deps: RelayDeps) {
-    this.expectedSecret = Buffer.alloc(SECRET_LEN);
-    this.expectedSecret.write(deps.secret, 'ascii');
+    this.expectedKey = relayAuthKey(deps.secret);
     this.server = createServer((socket) => this.onConnection(socket));
   }
 
@@ -151,7 +151,7 @@ export class RelayTcpServer {
 
   // ---- framing ----
 
-  // A request is relay_auth (the host's shared secret, decisions.md R16), then the
+  // A request is relay_auth (the key from the shared secret, decisions.md R16), then the
   // game's relay_hdr + payload. Anything else is not our protocol and is dropped.
   private onConnection(socket: Socket): void {
     const chunks: Buffer[] = [];
@@ -185,7 +185,7 @@ export class RelayTcpServer {
 
       handled = true;
       this.waiting.delete(socket);
-      const secretOk = timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedSecret);
+      const secretOk = timingSafeEqual(buf.subarray(4, 4 + SECRET_LEN), this.expectedKey);
       const payload = buf.subarray(payloadOff, payloadOff + hdr.len);
       const from = socket.remoteAddress ?? '?';
       const pending: Promise<Reply> = !secretOk

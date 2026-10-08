@@ -6,7 +6,8 @@
 // module silently refused to load and only the SD log said why).
 //
 // Every datagram is relay_auth + telemetry_hdr + payload, from the station's
-// beamer. A wrong or missing secret is dropped and counted, exactly like a TCP
+// beamer. A key that is not this secret's (sync.ts relayAuthKey), or none, is
+// dropped and counted, exactly like a TCP
 // request (decisions.md R16), so nobody else on the venue Wi-Fi can paint a
 // station's row; so is a datagram from the newcomer of two beamers on one
 // station number (beamer.ts). Nothing is ever sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
@@ -40,6 +41,7 @@ import {
   type CrashReport,
   type StationStatus,
 } from '../generated/wire.js';
+import { relayAuthKey } from './sync.js';
 
 export const MAX_STATIONS = 64;
 export const MAX_LINES = 400;
@@ -161,15 +163,14 @@ export function moduleStateText(s: StationStatus): string {
 
 export class StationTelemetry {
   private socket: Socket | null = null;
-  private readonly expectedSecret: Buffer;
+  private readonly expectedKey: Buffer; // relay_auth's key for this relay's secret (sync.ts)
   private readonly rows = new Map<number, StationTelemetryRow & { seq: number; partial: string }>();
   private refusals: TelemetryRefused | null = null;
   private beaconRequests: BeaconRequestStatus | null = null;
   private duplicates = 0;
 
   constructor(private readonly opts: TelemetryOptions) {
-    this.expectedSecret = Buffer.alloc(SECRET_LEN);
-    this.expectedSecret.write(opts.secret, 'ascii');
+    this.expectedKey = relayAuthKey(opts.secret);
   }
 
   async start(): Promise<void> {
@@ -260,7 +261,7 @@ export class StationTelemetry {
     if (msg.length < payloadOff + hdr.len) return;
 
     const secretOk =
-      authed && timingSafeEqual(Buffer.from(msg.subarray(4, 4 + SECRET_LEN)), this.expectedSecret);
+      authed && timingSafeEqual(Buffer.from(msg.subarray(4, 4 + SECRET_LEN)), this.expectedKey);
     if (!secretOk) {
       this.refusals = {
         count: (this.refusals?.count ?? 0) + 1,

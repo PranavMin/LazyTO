@@ -23,7 +23,7 @@ export const RELAY_REPLY_MAX = 4080; // longest reply (relay_hdr + relay_resp + 
 export const BEACON_PORT = 29471; // UDP port the relay broadcasts relay_beacon to and every beamer (and the Dolphin forwarder) listens on (decisions.md R15)
 export const BEACON_INTERVAL_MS = 2000; // the relay sends one relay_beacon per interval on every IPv4 interface
 export const BEACON_STALE_S = 10; // a beamer_hello whose beacon_age_s is above this is a stale beacon: the kernel sets PF_RELAY_STALE (five beacons missed)
-export const SECRET_LEN = 16; // relay shared secret, printable ASCII, NUL-padded (decisions.md R16); in v2 it lives on the beamer (CONFIG/config.txt LAZYTO-SECRET), never on the Wii
+export const SECRET_LEN = 16; // relay shared secret, printable ASCII, NUL-padded (decisions.md R16); in v2 it lives on the beamer (CONFIG/config.txt LAZYTO-SECRET), never on the Wii, and never travels: relay_auth carries a key derived from it, and it keys beamer_sync_resp's hmac. Also the length of relay_auth's key
 export const AUTH_MAGIC_0 = 77; // 'M', first byte of relay_auth
 export const AUTH_MAGIC_1 = 75; // 'K', second byte of relay_auth; differs from relay_hdr's 'T' so a host that sends no relay_auth is told so
 export const TELEMETRY_PORT = 29472; // UDP port on the relay that beamers forward telemetry datagrams to (kernel log lines and the module's load status) and send beacon requests to, at the address the beacon came from
@@ -74,7 +74,7 @@ export enum RelayStatus {
   ST_STARTGG_ERROR = 5, // upstream rejected; see status page
   ST_RATE_LIMITED = 6,
   ST_INTERNAL = 7,
-  ST_BAD_SECRET = 8, // relay_auth missing or its secret wrong; check LAZYTO-SECRET in the beamer's CONFIG/config.txt (decisions.md R16)
+  ST_BAD_SECRET = 8, // relay_auth missing, or its key not the one this relay's secret gives; check LAZYTO-SECRET in the beamer's CONFIG/config.txt (decisions.md R16)
   ST_DUP_STATION = 9, // another beamer (another station_id) already plays as this station number: this one, the newcomer, is refused until one of them is renumbered; msg names the number
 }
 
@@ -155,7 +155,7 @@ export enum BeamerFlags {
   BF_WIFI = 1, // joined the Wi-Fi and has an address (exactly when wifi is WIFI_UP)
   BF_RELAY = 2, // has heard the relay's beacon; relay_ip, relay_port and beacon_age_s are valid
   BF_STATION_SET = 4, // station is valid: the beamer has a number (LazyTO mode: saved in its flash, unset until the first click)
-  BF_SECRET = 8, // its CONFIG/config.txt has a LAZYTO-SECRET, which it puts in relay_auth
+  BF_SECRET = 8, // its CONFIG/config.txt has a LAZYTO-SECRET, from which it derives relay_auth's key and checks sync replies
 }
 
 /** beamer_hello.wifi, copied as-is into exi_poll_hdr.beamer_wifi: the beamer's Wi-Fi state. 0 = up (in exi_poll_hdr: up or unknown) */
@@ -330,10 +330,10 @@ export function decodeRelayBeacon(buf: Uint8Array, off = 0): RelayBeacon {
 
 // ---- relay_auth (20 bytes) ----
 
-/** FROZEN. Relay shared secret (decisions.md R16). Not part of the game's messages: the beamer writes it on the TCP connection before the kernel's relay_hdr + payload, and in front of each telemetry datagram, with LAZYTO-SECRET from its CONFIG/config.txt (the Dolphin forwarder uses SlippiRelaySecret). The Wii never holds the secret. The relay compares the secret with its config in constant time and answers a missing or wrong one with ST_BAD_SECRET without acting on the request. Responses carry no relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi traffic. */
+/** FROZEN. Relay authentication (decisions.md R16). Not part of the game's messages: the beamer writes it on the TCP connection before the kernel's relay_hdr + payload and before its own sync, and in front of each telemetry datagram. key is derived from LAZYTO-SECRET in its CONFIG/config.txt: the first SECRET_LEN bytes of HMAC-SHA256 keyed with the secret's SECRET_LEN bytes (NUL-padded) over the 17 ASCII bytes "LazyTO relay_auth" (the Dolphin forwarder derives it from SlippiRelaySecret). The secret itself never travels: a beamer sends relay_auth to whichever host sent the last beacon, and the secret keys beamer_sync_resp's hmac, which lets a beamer erase. The Wii holds neither. The relay compares the key with the one its secret gives, in constant time, and answers a missing or wrong one with ST_BAD_SECRET without acting on the request. Responses carry no relay_auth. Plaintext on the LAN: it keeps passers-by on a shared Wi-Fi out, not someone capturing the Wi-Fi traffic or posing as the relay, who can replay the key to the relay but cannot sign a sync reply with it. */
 export interface RelayAuth {
   magic: Uint8Array; // AUTH_MAGIC_0, AUTH_MAGIC_1 ('M','K')
-  secret: string; // the shared secret, NUL-padded
+  key: Uint8Array; // HMAC-SHA256(secret NUL-padded to SECRET_LEN, "LazyTO relay_auth"), its first SECRET_LEN bytes; never the secret
 }
 export const RELAY_AUTH_SIZE = 20;
 
@@ -341,7 +341,7 @@ export function encodeRelayAuth(v: RelayAuth): Uint8Array {
   const bytes = new Uint8Array(RELAY_AUTH_SIZE);
   const dv = new DataView(bytes.buffer);
   bytes.set(v.magic.subarray(0, 2), 0);
-  putAscii(bytes, 4, SECRET_LEN, v.secret);
+  bytes.set(v.key.subarray(0, SECRET_LEN), 4);
   return bytes;
 }
 
@@ -350,7 +350,7 @@ export function decodeRelayAuth(buf: Uint8Array, off = 0): RelayAuth {
   const dv = new DataView(buf.buffer, buf.byteOffset);
   return {
     magic: buf.slice(off + 0, off + 0 + 2),
-    secret: getAscii(buf, off + 4, SECRET_LEN),
+    key: buf.slice(off + 4, off + 4 + SECRET_LEN),
   };
 }
 
@@ -975,7 +975,7 @@ export function decodeBeamerHello(buf: Uint8Array, off = 0): BeamerHello {
 
 // ---- beamer_req_hdr (12 bytes) ----
 
-/** Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes, relay_hdr + payload exactly as the relay is to get them after relay_auth. The beamer refuses the request locally with BR_NO_STATION or BR_NO_SECRET when it has no number or no secret; otherwise it sends relay_auth (its LAZYTO-SECRET) + those bytes to the relay once per seq (a repeated write of the same seq, for example a USB retry, is not sent again) and answers in the response sectors. */
+/** Start of mailbox sector BEAMER_MB_REQ (Wii to beamer): then len bytes, relay_hdr + payload exactly as the relay is to get them after relay_auth. The beamer refuses the request locally with BR_NO_STATION or BR_NO_SECRET when it has no number or no secret; otherwise it sends relay_auth (the key from its LAZYTO-SECRET) + those bytes to the relay once per seq (a repeated write of the same seq, for example a USB retry, is not sent again) and answers in the response sectors. */
 export interface BeamerReqHdr {
   magic: Uint8Array; // 'M','Q'
   seq: number; // nonzero; counts up by one per request. The beamer stays powered across Wii reboots and keeps its last response, so whenever the kernel finds the beamer (first valid beamer_hello after boot or a USB change) it starts one past the seq in the response sector (or at 1 if that is 0)
@@ -1241,7 +1241,7 @@ export function decodeSyncAnswer(buf: Uint8Array, off = 0): SyncAnswer {
 
 // ---- beamer_sync_resp (52 bytes + variable tail) ----
 
-/** FROZEN. CMD_BEAMER_SYNC response payload after relay_resp (ST_OK only). hmac = HMAC-SHA256 keyed with the secret's SECRET_LEN bytes exactly as relay_auth carries them (NUL-padded), over the request's nonce (16 bytes), then the request's station_id (16 bytes), then this payload from archive_id to its end (20 + 36 * answer_count bytes). A beamer drops a reply whose hmac does not verify, whose answer_count differs from its file_count, or whose archive_id is all zero. A verified reply with another archive_id than the ack table's drops every ack and adopts the new id before its answers are applied. */
+/** FROZEN. CMD_BEAMER_SYNC response payload after relay_resp (ST_OK only). hmac = HMAC-SHA256 keyed with the secret's SECRET_LEN bytes (NUL-padded): the secret itself, which never travels, not relay_auth's key, which any host that sent a beacon receives. It covers the request's nonce (16 bytes), then the request's station_id (16 bytes), then this payload from archive_id to its end (20 + 36 * answer_count bytes). A beamer drops a reply whose hmac does not verify, whose answer_count differs from its file_count, or whose archive_id is all zero. A verified reply with another archive_id than the ack table's drops every ack and adopts the new id before its answers are applied. */
 export interface BeamerSyncResp {
   hmac: Uint8Array;
   archive_id: Uint8Array; // the laptop's archive (archive.json in its archive folder); never all zero

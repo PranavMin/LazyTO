@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import {
   AUTH_MAGIC_0,
   AUTH_MAGIC_1,
@@ -20,6 +20,7 @@ import {
   RELAY_HDR_SIZE,
   RELAY_RESP_SIZE,
   RelayCmd,
+  SECRET_LEN,
   SYNC_ANSWER_SIZE,
   SYNC_FILE_SIZE,
   SyncAnswerKind,
@@ -31,7 +32,7 @@ import {
   encodeRelayHdr,
   encodeRelayResp,
 } from '../generated/wire.js';
-import { signedSyncResp, syncHmac } from '../src/sync.js';
+import { relayAuthKey, signedSyncResp, syncHmac } from '../src/sync.js';
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 const seq = (from: number, n = 16) => Uint8Array.from({ length: n }, (_, i) => (from + i) & 0xff);
@@ -66,14 +67,16 @@ test('frozen: relay_beacon, relay_auth, relay_hdr and relay_resp bytes', () => {
     ),
     '4d540200731e000000189cd2',
   );
+  // relay_auth carries the key derived from the secret, never the secret
+  // (76656e75652d736563726574 would be "venue-secret" itself).
   assert.equal(
     hex(
       encodeRelayAuth({
         magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]),
-        secret: 'venue-secret',
+        key: relayAuthKey('venue-secret'),
       }),
     ),
-    '4d4b0000' + '76656e75652d736563726574' + '00000000',
+    '4d4b0000' + 'f5a1b91cb53cb4b14fd06c5ea683c221',
   );
   assert.equal(
     hex(
@@ -190,4 +193,20 @@ test('frozen: the sync reply signature (the vector docs/protocol-v2.md gives the
     r.answers.map((a) => a.answer),
     [SyncAnswerKind.SA_HELD, SyncAnswerKind.SA_WANTED, SyncAnswerKind.SA_NOTED],
   );
+});
+
+test('relay_auth never carries what signs a sync reply', () => {
+  // A beamer sends relay_auth to whichever host sent the last beacon, so the
+  // key it carries must not be the HMAC key of beamer_sync_resp.
+  const key = relayAuthKey('venue-secret');
+  assert.equal(key.length, SECRET_LEN);
+  assert.equal(hex(key), 'f5a1b91cb53cb4b14fd06c5ea683c221');
+  const padded = Buffer.alloc(SECRET_LEN);
+  padded.write('venue-secret', 'ascii');
+  assert.notEqual(hex(key), hex(padded), 'not the secret itself');
+  const body = Buffer.alloc(20);
+  const signed = syncHmac('venue-secret', seq(0x00), seq(0x10), body);
+  const withKey = createHmac('sha256', key).update(seq(0x00)).update(seq(0x10)).update(body);
+  assert.notEqual(hex(withKey.digest()), hex(signed), 'the captured key does not sign');
+  assert.notEqual(hex(relayAuthKey('other-secret')), hex(key));
 });
