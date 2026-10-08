@@ -476,9 +476,11 @@ function label(r: SetRecord): string {
 }
 
 /**
- * A new report over the old list: a game keeps its replay, beamer and
- * first-report time while its replay_id stays; a new or replayed game takes
- * the reporting beamer.
+ * A new report over the old list: a game keeps its beamer and first-report
+ * time while its replay_id stays, and its bound replay while the rest of its
+ * result stays too (a changed result binds again from the stored copy, so
+ * the content check sees the new one); a new or replayed game takes the
+ * reporting beamer.
  */
 export function reported(
   old: GameRecord[],
@@ -490,7 +492,10 @@ export function reported(
   return games.map((result, i) => {
     const prev = old[i];
     if (prev !== undefined && prev.result.replay_id === result.replay_id) {
-      return { ...prev, result };
+      const same = (Object.keys(result) as (keyof GameResult)[]).every(
+        (k) => prev.result[k] === result[k],
+      );
+      return { ...prev, result, replay: same ? prev.replay : null };
     }
     return { at: now, result, beamer, from, replay: null };
   });

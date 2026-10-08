@@ -539,6 +539,22 @@ test('the content check flags a mismatch and still binds; stocks are compared on
     [1, 2],
   );
   assert.equal(e.archive.status().inProgress[0]!.bound, 3, 'all three bound: the id decides');
+  // Game 2 corrected by the next report (same replay): checked again, from the stored copy.
+  const fetched = e.beamer.gets.length;
+  e.archive.scored(
+    507,
+    [
+      played(1, T0, FD, [2, 0]),
+      played(1, T0 + 300, BF, [2, 0]),
+      played(1, T0 + 600, BF, [0xff, 0xff]),
+    ],
+    FROM,
+  );
+  assert.deepEqual(
+    e.archive.status().flagged.map((f) => f.game),
+    [1],
+  );
+  assert.equal(e.beamer.gets.length, fetched, 'no download');
 });
 
 test('an incomplete recording is kept in unmatched/, and its set gets no zip', async (t) => {
