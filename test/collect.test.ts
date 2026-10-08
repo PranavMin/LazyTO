@@ -79,8 +79,8 @@ test('wanted, downloaded, then held and acked; erased at a cold boot', async (t)
   ]);
   assert.ok(existsSync(join(dir, 'unmatched', sid, 'Game_0017AB12CD34_20261007T201502.slp')));
   assert.deepEqual(
-    beamer.gets.map((g) => [g.name, g.from, g.gzip]),
-    [['Game_0017AB12CD34_20261007T201502.slp', null, true]],
+    beamer.gets.map((g) => [g.name, g.from, g.gzip, g.connection]),
+    [['Game_0017AB12CD34_20261007T201502.slp', null, true, 'close']],
   );
   const second = await sync();
   assert.equal(second.answers[0]!.answer, A.SA_HELD);

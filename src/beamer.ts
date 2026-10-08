@@ -20,9 +20,9 @@
 //
 // Downloads (fetchReplay): GET /SLIPPI/<name> from the address the beamer
 // synced from, at the http_port it gave, resumed with X-Replay-From (the
-// beamer echoes the header when it honours it), gzip accepted. A transfer
-// that stalls for stallMs is aborted. One attempt: the beamer's next sync
-// asks again.
+// beamer echoes the header when it honours it), gzip accepted, the
+// connection closed after each file. A transfer that stalls for stallMs is
+// aborted. One attempt: the beamer's next sync asks again.
 
 import { openSync, closeSync, writeSync } from 'node:fs';
 import { BeamerSyncFlags, type BeamerSyncReq } from '../generated/wire.js';
@@ -313,7 +313,10 @@ export async function fetchReplay(
     timer = setTimeout(abort, stallMs);
   };
   try {
-    const headers: Record<string, string> = { 'accept-encoding': 'gzip' };
+    // Connection: close. A beamer has two TCP connections in all and, in LazyTO
+    // mode, one HTTP socket; a kept-alive download would hold one that its
+    // Wii's next request to the relay needs.
+    const headers: Record<string, string> = { 'accept-encoding': 'gzip', connection: 'close' };
     if (from > 0) headers['x-replay-from'] = String(from);
     const res = await fetch(url, { headers, signal: ctl.signal });
     stall();

@@ -93,8 +93,8 @@ export class FakeBeamer {
   /** Files served whole this boot: name -> SHA-256 of their raw bytes. */
   readonly hashes = new Map<string, string>();
   archiveId: Uint8Array = new Uint8Array(16);
-  /** Every HTTP request: the file, its X-Replay-From (null = none), whether gzip was asked for. */
-  readonly gets: { name: string; from: number | null; gzip: boolean }[] = [];
+  /** Every HTTP request: the file, its X-Replay-From (null = none), whether gzip was asked for, its Connection header. */
+  readonly gets: { name: string; from: number | null; gzip: boolean; connection: string }[] = [];
   erasedAtBoot = { erased: 0, empty: 0 };
   private readonly server: Server;
 
@@ -114,7 +114,7 @@ export class FakeBeamer {
       const fromHeader = req.headers['x-replay-from'];
       const from = typeof fromHeader === 'string' ? Number(fromHeader) : null;
       const gzip = /gzip/.test(String(req.headers['accept-encoding'] ?? ''));
-      this.gets.push({ name, from, gzip });
+      this.gets.push({ name, from, gzip, connection: String(req.headers.connection ?? '') });
       if (this.busy) {
         res.writeHead(503, { 'Retry-After': '1', 'Content-Type': 'application/json' }).end('{}');
         return;
