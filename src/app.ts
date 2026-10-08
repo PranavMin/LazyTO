@@ -6,13 +6,18 @@
 //   starting  settings saved: finding tonight's tournament and event
 //   failed    the event couldn't be found or started (bad token, short URL on
 //             no tournament, start.gg or the internet down, the clock not set
-//             yet): the page shows why, with Retry; it also retries by itself
-//             after 30 s, 60 s, then every 2 min
+//             yet, another LazyTO relay on the network): the page shows why,
+//             with Retry; it also retries by itself after 30 s, 60 s, then
+//             every 2 min
 //   running   relay.ts startEvent: TCP, beacon, telemetry; the status page
 //
 // Saving settings rewrites the file and applies it in this process: the
 // running event stops and starts again from the new file. Claims survive,
 // because the same event replays the same audit log.
+//
+// One LazyTO per network (guard.ts): with the network side on, the relay
+// listens for other relays' beacons from the start, and an event does not
+// start while another relay's beacon has been heard.
 //
 // Two accepted exceptions to fail-fast (CLAUDE.md): without valid settings the
 // relay serves only the setup page, and a set-up relay whose event can't be
@@ -23,14 +28,8 @@ import { randomInt } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localAddresses } from './beacon.js';
-import {
-  STARTGG_ENDPOINT,
-  configPath,
-  defaultArchiveDir,
-  loadConfig,
-  saveConfig,
-  type Config,
-} from './config.js';
+import { RelayGuard } from './guard.js';
+import { STARTGG_ENDPOINT, configPath, loadConfig, saveConfig, type Config } from './config.js';
 import type { RawStoreOptions } from './rawstore.js';
 import { startEvent, type RunningEvent } from './relay.js';
 import { resolveEvent, type Resolved } from './resolve.js';
@@ -39,6 +38,7 @@ import { serveCards } from './cards.js';
 import { renderStatus, serveAction, serveLog, type StatusView } from './status.js';
 import { serveSetup } from './setup.js';
 import { WebServer, age, escapeHtml, page, redirect, sendHtml, sendText } from './web.js';
+import { BEACON_PORT } from '../generated/wire.js';
 
 export type UpdateChannel = 'release' | 'main' | 'off';
 export const UPDATE_CHANNELS: readonly UpdateChannel[] = ['release', 'main', 'off'];
@@ -62,14 +62,19 @@ export interface AppOptions {
   network?: boolean;
   /**
    * The archive folder: raw replays, unmatched/, archive.json and the set
-   * zips (rawstore.ts, archive.ts). Default Documents/LazyTO
-   * (config.ts defaultArchiveDir); the desktop app passes its Documents
-   * folder's, tests a temporary one.
+   * zips (rawstore.ts, archive.ts). main.ts passes Documents/LazyTO
+   * (config.ts defaultArchiveDir), the desktop app its Documents folder's,
+   * tests a temporary one, so no test ever writes to the real one.
    */
-  archiveDir?: string;
+  archiveDir: string;
   /** Tests stand in a full disk and shorten the download stall timeout. */
   rawStore?: RawStoreOptions;
   stallMs?: number;
+  /**
+   * The one-relay-per-network guard; by default one on BEACON_PORT with the
+   * network side on, none without it. Tests pass one on an ephemeral port.
+   */
+  guard?: RelayGuard;
   /** start.gg's GraphQL URL; tests point it at the fake. */
   startggEndpoint?: string;
   startggOptions?: Pick<StartggClientOptions, 'limits' | 'retryDelaysMs'>;
@@ -109,9 +114,12 @@ export class App {
   private attempt = 0;
   private retryTimer: NodeJS.Timeout | null = null;
   private codeFailures: number[] = [];
+  private readonly guard: RelayGuard | null;
 
   constructor(private readonly opts: AppOptions) {
     this.version = opts.version ?? 'dev';
+    this.guard =
+      opts.guard ?? (opts.network === false ? null : new RelayGuard({ port: BEACON_PORT }));
     this.web = new WebServer((req, res, url) => this.route(req, res, url));
   }
 
@@ -119,6 +127,8 @@ export class App {
 
   async start(): Promise<void> {
     await this.web.listen(this.opts.httpPort, this.opts.host);
+    // Listening from the start, so another relay is heard before the event would start.
+    await this.guard?.listen();
     await this.apply();
   }
 
@@ -130,6 +140,7 @@ export class App {
       m.ev.audit.record({ type: 'shutdown' });
       await m.ev.stop();
     }
+    await this.guard?.stop();
     await this.web.close();
   }
 
@@ -261,6 +272,12 @@ export class App {
       );
       return;
     }
+    const blocked = this.guard ? await this.guard.check() : null;
+    if (gen !== this.generation) return;
+    if (blocked) {
+      this.fail(gen, blocked);
+      return;
+    }
     let ev: RunningEvent | null = null;
     try {
       const startgg = this.startgg(config.token);
@@ -280,7 +297,7 @@ export class App {
         host: this.opts.host,
         network: this.opts.network,
         archive: {
-          dir: this.opts.archiveDir ?? defaultArchiveDir(),
+          dir: this.opts.archiveDir,
           setName: config.archiveSetName,
           gameName: config.archiveGameName,
           event: resolved,
@@ -316,6 +333,7 @@ export class App {
         beamers: running.beamers,
         collector: running.collector,
         store: running.store,
+        otherRelay: () => this.guard?.heard() ?? null,
         admin: running.admin,
         addresses: this.addresses(),
         version: this.version,

@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { App } from '../src/app.js';
+import type { RelayGuard } from '../src/guard.js';
 import { configPath, saveConfig, type Config } from '../src/config.js';
 import type { RunningEvent } from '../src/relay.js';
 import type { StartggClient } from '../src/startgg.js';
@@ -50,6 +51,8 @@ export interface HarnessOptions {
   archiveDir?: string;
   /** A stand-in free-disk figure for the archive's disk. */
   freeBytes?: () => number;
+  /** The one-relay-per-network guard (guard.ts); none by default without the network side. */
+  guard?: RelayGuard;
 }
 
 export interface Harness {
@@ -108,6 +111,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     archiveDir: opts.archiveDir ?? join(dataDir, 'archive'),
     rawStore: opts.freeBytes ? { freeBytes: opts.freeBytes } : undefined,
     stallMs: 2000,
+    guard: opts.guard,
   });
   await app.start();
   const m = app.current();

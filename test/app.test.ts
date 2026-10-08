@@ -23,6 +23,7 @@ async function startApp(
 ) {
   const app = new App({
     dataDir,
+    archiveDir: join(dataDir, 'archive'),
     httpPort: 0,
     tcpPort: 0,
     host: '127.0.0.1',

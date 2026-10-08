@@ -24,10 +24,11 @@
 // night. "Replays" lists the sets skipped for Lucky Stats with the game
 // that has no replay and why, the zips written, and the strays kept.
 //
-// At the top, what keeps stations or replays from reaching the relay: two
-// beamers on one station number (the newcomer is refused), a beamer with
-// another secret, macOS's Local Network switch (the beacon fails with
-// EHOSTUNREACH), and beacons answered by no beamer for NO_CONTACT_MS.
+// At the top, what keeps stations or replays from reaching the relay:
+// another LazyTO relay on the network (guard.ts), two beamers on one station
+// number (the newcomer is refused), a beamer with another secret, macOS's
+// Local Network switch (the beacon fails with EHOSTUNREACH), and beacons
+// answered by no beamer for NO_CONTACT_MS.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SetCache } from './cache.js';
@@ -47,6 +48,7 @@ import { BEAMER_FW_MIN, BeamerResult, BeamerStorage, ModuleState } from '../gene
 import type { SetArchive } from './archive.js';
 import { uuid, type BeamerRegistry, type BeamerRow } from './beamer.js';
 import type { Collector } from './collect.js';
+import type { OtherRelay } from './guard.js';
 import { BEST_OF_CHOICES, type Admin, type AdminResult } from './admin.js';
 import {
   age,
@@ -85,6 +87,8 @@ export interface StatusView {
   collector: Pick<Collector, 'status' | 'busy'>;
   /** The archive folder, for the Replays section. */
   store: { dir: string; freeBytes(): number };
+  /** Another LazyTO relay heard on this network (guard.ts); null when none. */
+  otherRelay?: () => OtherRelay | null;
   admin: Admin;
   /** The relay's own addresses and version, for the footer. */
   addresses: string[];
@@ -484,6 +488,12 @@ function renderReach(
   os: NodeJS.Platform = process.platform,
 ): string {
   const lines: string[] = [];
+  const other = v.otherRelay?.() ?? null;
+  if (other) {
+    lines.push(
+      `<p class="warn">✗ Another LazyTO relay is on this network, at ${escapeHtml(other.address)} (event ${other.eventId}). Beamers follow whichever relay they heard last: close the other one.</p>`,
+    );
+  }
   const bs = v.beacon.status();
   if (os === 'darwin' && bs.lastErrorCode === 'EHOSTUNREACH') {
     lines.push(`<p class="warn">✗ ${escapeHtml(beaconProblem(bs, os))}</p>`);
