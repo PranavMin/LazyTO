@@ -580,6 +580,26 @@ RELAY_STATIC_ASSERT(offsetof(struct game_result, p2_port) == 9, game_result_p2_p
 RELAY_STATIC_ASSERT(offsetof(struct game_result, _pad) == 10, game_result__pad);
 RELAY_STATIC_ASSERT(offsetof(struct game_result, replay_id) == 12, game_result_replay_id);
 
+/* CMD_START_SET response payload (ST_OK only): the games the relay holds for
+ * the set, laid out like end_set_req. game_count is 0 for a set just started.
+ * On a resume (the station's own set, asked for again after the Wii rebooted)
+ * it is the claim's games as last reported, each with its ports and replay_id,
+ * so the kiosk carries on from them instead of 0-0 and its next report does
+ * not overwrite the earlier games on start.gg (docs/redesign.md, N3).
+ */
+struct start_set_resp {
+    uint32_t           set_id;
+    uint8_t            game_count;  /* 0-5 valid entries in games */
+    uint8_t            _pad[3];
+    struct game_result games[MAX_GAMES];
+};  /* 88 bytes */
+
+RELAY_STATIC_ASSERT(sizeof(struct start_set_resp) == 88, start_set_resp_size);
+RELAY_STATIC_ASSERT(offsetof(struct start_set_resp, set_id) == 0, start_set_resp_set_id);
+RELAY_STATIC_ASSERT(offsetof(struct start_set_resp, game_count) == 4, start_set_resp_game_count);
+RELAY_STATIC_ASSERT(offsetof(struct start_set_resp, _pad) == 5, start_set_resp__pad);
+RELAY_STATIC_ASSERT(offsetof(struct start_set_resp, games) == 8, start_set_resp_games);
+
 /* CMD_REPORT_SCORE request payload. Always the full game list; the relay does
  * a full overwrite (idempotent).
  */
@@ -855,7 +875,7 @@ RELAY_STATIC_ASSERT(offsetof(struct beamer_sync_resp, answers) == 52, beamer_syn
  * relay_resp (ST_OK response).
  *
  *   CMD_LIST_SETS     req: -                  resp payload: list_sets_resp
- *   CMD_START_SET     req: start_set_req      resp payload: -
+ *   CMD_START_SET     req: start_set_req      resp payload: start_set_resp
  *   CMD_REPORT_SCORE  req: report_score_req   resp payload: -
  *   CMD_END_SET       req: end_set_req        resp payload: -
  *   CMD_ABANDON_SET   req: abandon_set_req    resp payload: -

@@ -790,6 +790,41 @@ export function decodeGameResult(buf: Uint8Array, off = 0): GameResult {
 }
 
 
+// ---- start_set_resp (88 bytes) ----
+
+/** CMD_START_SET response payload (ST_OK only): the games the relay holds for the set, laid out like end_set_req. game_count is 0 for a set just started. On a resume (the station's own set, asked for again after the Wii rebooted) it is the claim's games as last reported, each with its ports and replay_id, so the kiosk carries on from them instead of 0-0 and its next report does not overwrite the earlier games on start.gg (docs/redesign.md, N3). */
+export interface StartSetResp {
+  set_id: number;
+  game_count: number; // 0-5 valid entries in games
+  games: GameResult[];
+}
+export const START_SET_RESP_SIZE = 88;
+
+export function encodeStartSetResp(v: StartSetResp): Uint8Array {
+  const bytes = new Uint8Array(START_SET_RESP_SIZE);
+  const dv = new DataView(bytes.buffer);
+  dv.setUint32(0, v.set_id, false);
+  dv.setUint8(4, v.game_count);
+  if (v.games.length > MAX_GAMES) {
+    throw new RangeError(`start_set_resp.games: ${v.games.length} entries, max ` + MAX_GAMES);
+  }
+  for (let i = 0; i < v.games.length; i++) {
+    bytes.set(encodeGameResult(v.games[i]), 8 + i * GAME_RESULT_SIZE);
+  }
+  return bytes;
+}
+
+export function decodeStartSetResp(buf: Uint8Array, off = 0): StartSetResp {
+  checkLen(buf, off, START_SET_RESP_SIZE, 'start_set_resp');
+  const dv = new DataView(buf.buffer, buf.byteOffset);
+  return {
+    set_id: dv.getUint32(off + 0, false),
+    game_count: dv.getUint8(off + 4),
+    games: Array.from({ length: MAX_GAMES }, (_, i) => decodeGameResult(buf, off + 8 + i * GAME_RESULT_SIZE)),
+  };
+}
+
+
 // ---- report_score_req (88 bytes) ----
 
 /** CMD_REPORT_SCORE request payload. Always the full game list; the relay does a full overwrite (idempotent). */

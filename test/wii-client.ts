@@ -11,6 +11,7 @@ import {
   RELAY_RESP_SIZE,
   RelayCmd,
   decodeListSetsResp,
+  decodeStartSetResp,
   decodeRelayHdr,
   decodeRelayResp,
   NO_PORT,
@@ -23,6 +24,7 @@ import {
   encodeStartSetReq,
   type GameResult,
   type ListSetsResp,
+  type StartSetResp,
   type RelayHdr,
   type RelayResp,
 } from '../generated/wire.js';
@@ -103,6 +105,17 @@ export class WiiClient {
 
   startSet(setId: number, stream = this.stream): Promise<WireReply> {
     return this.request(RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: setId, stream }));
+  }
+
+  /** START_SET, with the games the relay holds for the set (none unless it is a resume). */
+  async startSetGames(
+    setId: number,
+    stream = this.stream,
+  ): Promise<{ resp: RelayResp; games: GameResult[] | null; reply: StartSetResp | null }> {
+    const r = await this.startSet(setId, stream);
+    if (r.resp.status !== 0) return { resp: r.resp, games: null, reply: null };
+    const reply = decodeStartSetResp(r.payload);
+    return { resp: r.resp, games: reply.games.slice(0, reply.game_count), reply };
   }
 
   reportScore(setId: number, games: GameResult[]): Promise<WireReply> {

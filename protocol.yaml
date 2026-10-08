@@ -561,6 +561,22 @@ structs:
       - {name: _pad,        type: u16}
       - {name: replay_id,   type: u32, doc: "the game's replay: record_gate.file_id of its match (a tiebreak game reports its main game's); 0 = no replay (no beamer, replays off, a stalled writer, Dolphin, or a hand-scored game whose match was not recorded)"}
 
+  start_set_resp:
+    doc: >-
+      CMD_START_SET response payload (ST_OK only): the games the relay holds
+      for the set, laid out like end_set_req. game_count is 0 for a set just
+      started. On a resume (the station's own set, asked for again after the
+      Wii rebooted) it is the claim's games as last reported, each with its
+      ports and replay_id, so the kiosk carries on from them instead of 0-0
+      and its next report does not overwrite the earlier games on start.gg
+      (docs/redesign.md, N3).
+    size: 88
+    fields:
+      - {name: set_id,     type: u32}
+      - {name: game_count, type: u8, doc: "0-5 valid entries in games"}
+      - {name: _pad,       type: u8, array: 3}
+      - {name: games,      type: game_result, array: MAX_GAMES}
+
   report_score_req:
     doc: >-
       CMD_REPORT_SCORE request payload. Always the full game list;
@@ -744,7 +760,7 @@ structs:
 # follows relay_resp in an ST_OK response.
 messages:
   CMD_LIST_SETS:    {request: null,             response_payload: list_sets_resp}
-  CMD_START_SET:    {request: start_set_req,    response_payload: null}
+  CMD_START_SET:    {request: start_set_req,    response_payload: start_set_resp}
   CMD_REPORT_SCORE: {request: report_score_req, response_payload: null}
   CMD_END_SET:      {request: end_set_req,      response_payload: null}
   CMD_ABANDON_SET:  {request: abandon_set_req,  response_payload: null}

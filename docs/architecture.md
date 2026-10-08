@@ -220,7 +220,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | Command | Request | Relay does |
 |---------|---------|------------|
 | `CMD_LIST_SETS` | nothing | Returns up to 56 `set_entry` rows (72 bytes each), this station's set first, then earliest round first |
-| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station |
+| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station. The reply carries the games the relay holds for the set: none for a new set, the claim's games on a resume after a reboot |
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
@@ -306,7 +306,7 @@ The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` qu
    └────────────────────────────────────────┘
 ```
 
-A station in `IN_SET` that lists again (after a reboot) gets its own set first with state 1. Selecting it is a no-op resume. The relay only moves a start.gg set forward (1 not started, 2 in progress, 3 complete), plus `resetSet` for an abandon before any games.
+A station in `IN_SET` that lists again (after a reboot) gets its own set first with state 1. Selecting it is a resume with no upstream call, and the reply hands the Wii the set's games as last reported, so it carries on from them. The relay only moves a start.gg set forward (1 not started, 2 in progress, 3 complete), plus `resetSet` for an abandon before any games.
 
 ### start.gg calls
 

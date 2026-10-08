@@ -29,6 +29,7 @@ import {
   encodeRelayHdr,
   encodeRelayResp,
   encodeListSetsResp,
+  encodeStartSetResp,
   type GameResult,
   type SetEntry,
 } from '../generated/wire.js';
@@ -358,9 +359,11 @@ export class RelayTcpServer {
 
     const claim = state.get(station);
     if (claim?.setId === req.set_id) {
-      // Rebooted station resuming its own set: no upstream call.
-      audit.record({ type: 'resume', station, setId: req.set_id });
-      return { status: RelayStatus.ST_OK, msg: 'resumed' };
+      // Rebooted station resuming its own set: no upstream call. The reply
+      // carries the claim's games, so the kiosk goes on from them instead of
+      // 0-0 and its next report keeps them (redesign.md, N3).
+      audit.record({ type: 'resume', station, setId: req.set_id, games: claim.games.length });
+      return { status: RelayStatus.ST_OK, msg: 'resumed', payload: setGames(claim) };
     }
     if (claim) {
       return { status: RelayStatus.ST_INTERNAL, msg: 'finish current set first' };
@@ -388,7 +391,7 @@ export class RelayTcpServer {
 
     // From here the set IS in progress upstream, so the station gets the
     // claim even if the stream assignment below fails.
-    this.recordClaim(station, set);
+    const claimed = this.recordClaim(station, set);
     this.deps.archive.setStarted(station, set);
 
     if (stream !== null && station === stream.station) {
@@ -403,10 +406,10 @@ export class RelayTcpServer {
       }
     }
 
-    return { status: RelayStatus.ST_OK, msg: 'set started' };
+    return { status: RelayStatus.ST_OK, msg: 'set started', payload: setGames(claimed) };
   }
 
-  private recordClaim(station: number, set: CachedSet): void {
+  private recordClaim(station: number, set: CachedSet): Claim {
     const claim: Claim = {
       setId: set.id,
       p1Id: set.p1.id,
@@ -424,6 +427,7 @@ export class RelayTcpServer {
       bestOf: claim.bestOf,
       games: claim.games,
     });
+    return claim;
   }
 
   // ---- CMD_REPORT_SCORE ----
@@ -498,6 +502,15 @@ export class RelayTcpServer {
 }
 
 // ---- pure helpers ----
+
+/** start_set_resp: the games the relay holds for the claimed set (none for a set just started). */
+function setGames(claim: Claim): Uint8Array {
+  return encodeStartSetResp({
+    set_id: claim.setId,
+    game_count: claim.games.length,
+    games: claim.games,
+  });
+}
 
 function toEntry(s: CachedSet, state: 0 | 1): SetEntry {
   return {
