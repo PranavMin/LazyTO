@@ -1,10 +1,20 @@
 // The beamer sync (collect.ts, rawstore.ts) over TCP through the relay, with
 // test/fake-beamer.ts checking every reply the way the firmware must:
-// held, wanted and noted, the signature and archive_id, resumed downloads,
-// a full disk, name collisions, and the stat and re-hash rules behind "held".
+// held, wanted and noted, the signature and archive_id (also when the archive
+// folder is deleted mid-run), resumed downloads, a full disk, name
+// collisions, and the stat and re-hash rules behind "held".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RelayStatus, SyncAnswerKind, SyncKind } from '../generated/wire.js';
 import { hexId } from '../src/beamer.js';
@@ -222,4 +232,66 @@ test('names that are not a plain .slp are never downloaded', async (t) => {
     [A.SA_NOTED, A.SA_NOTED],
   );
   assert.equal(beamer.gets.length, 0);
+});
+
+test('the archive folder deleted while LazyTO runs: a new archive_id, so the beamer drops its acks and the files are collected again', async (t) => {
+  const { h, beamer, dir, sid, sync } = await setup(t);
+  const name = 'Game_0017AB12CD34_20261007T201502.slp';
+  beamer.add(name, slp(1000));
+  await sync(); // downloaded
+  assert.deepEqual((await sync()).acked, [name]);
+  const before = hexId(beamer.archiveId);
+  // The TO deletes Documents/LazyTO with the app open, before the beamer's power-on erase.
+  rmSync(dir, { recursive: true, force: true });
+  const r = await sync();
+  assert.equal(r.verified, true);
+  const after = JSON.parse(readFileSync(join(dir, 'archive.json'), 'utf8')).archive_id;
+  assert.notEqual(after, before, 'a new archive, under a new id');
+  assert.equal(hexId(beamer.archiveId), after);
+  assert.equal(beamer.acks.size, 0, 'the beamer dropped the ack for the replay that was deleted');
+  assert.deepEqual(beamer.boot(), { erased: 0, empty: 0 }, 'so a power-on erases nothing');
+  assert.deepEqual(answers(await sync()), [[name, A.SA_WANTED]]);
+  assert.ok(existsSync(join(dir, 'unmatched', sid, name)), 'collected again');
+  assert.deepEqual((await sync()).acked, [name]);
+  assert.ok(
+    h.auditEvents().some((e) => e.type === 'archive_reset' && e.from === before && e.to === after),
+  );
+});
+
+test('a repeat download is checked against the stored copy: one changed in place at its size is replaced, never acked', async (t) => {
+  const { h, beamer, dir, sid, sync } = await setup(t);
+  const name = 'Game_0017AB12CD34_20261007T201502.slp';
+  const good = slp(1000);
+  beamer.add(name, good);
+  await sync(); // downloaded
+  beamer.boot(); // rebooted before its next sync: served again so it can hash it
+  // Meanwhile the stored copy is damaged in place, same size (a sync tool, the disk).
+  const path = join(dir, 'unmatched', sid, name);
+  const bad = Buffer.from(good);
+  bad[bad.length - 1] ^= 0xff;
+  writeFileSync(path, bad);
+  assert.deepEqual(answers(await sync()), [[name, A.SA_WANTED]]);
+  assert.deepEqual(readFileSync(path), good, 'the fresh download replaced the damaged copy');
+  assert.equal(h.ev.store.all().length, 1, 'still one copy');
+  assert.deepEqual(
+    (await sync()).acked,
+    [name],
+    'acked only once the laptop holds the right bytes',
+  );
+});
+
+test('a stored copy can be answered "held" only once its index line is written', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'lazyto-store-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const store = new RawStore(dir);
+  const sid = '00'.repeat(16);
+  const data = slp(1000);
+  const f = { name: 'Game_0017AB12CD34_20261007T201502.slp', bytes: data.length, mtime: 7 };
+  // The index cannot be appended to (here a folder stands in its place).
+  mkdirSync(join(dir, 'index.jsonl'));
+  const part = store.part(sid, f);
+  writeFileSync(part.path, data);
+  assert.throws(() => store.commit(sid, f, part.path, 'raw', SyncKind.SK_FINISHED, true));
+  assert.equal(store.all().length, 0, 'no record without its index line');
+  assert.deepEqual(await store.held(sid, f), []);
 });

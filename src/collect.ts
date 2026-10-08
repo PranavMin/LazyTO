@@ -81,6 +81,18 @@ export class Collector {
 
   /** Handle one verified sync from `from`; returns the signed beamer_sync_resp payload. */
   async sync(req: BeamerSyncReq, from: string, now = Date.now()): Promise<Uint8Array> {
+    // The archive folder first: deleted while LazyTO runs, it starts again
+    // under a new id, which makes the beamer drop its acks (rawstore.ts).
+    const was = hexId(this.deps.store.archiveId);
+    const archiveId = this.deps.store.checkedArchiveId();
+    if (hexId(archiveId) !== was) {
+      this.deps.audit.record({
+        type: 'archive_reset',
+        dir: this.deps.store.dir,
+        from: was,
+        to: hexId(archiveId),
+      });
+    }
     const row = this.deps.beamers.synced(req, from, now);
     const w = this.worker(row.stationId);
     const answers: SyncAnswer[] = [];
@@ -103,10 +115,7 @@ export class Collector {
     // The latest sync is the beamer's truth: what it lists and we want, in its order.
     w.queue = wanted;
     this.kick(w);
-    return signedSyncResp(this.deps.secret, req, {
-      archive_id: this.deps.store.archiveId,
-      answers,
-    });
+    return signedSyncResp(this.deps.secret, req, { archive_id: archiveId, answers });
   }
 
   status(): WorkerStatus[] {
