@@ -41,7 +41,14 @@ import {
 } from '../generated/wire.js';
 import type { SetCache, CachedSet } from './cache.js';
 import { StationState, wins, type Claim } from './state.js';
-import { StartggClient, StartggError, RateLimitedError, type GameDataInput } from './startgg.js';
+import {
+  StartggClient,
+  StartggError,
+  RateLimitedError,
+  type GameDataInput,
+  type ReportedSet,
+  type StartedSet,
+} from './startgg.js';
 import { toStartggCharacter } from './chars.js';
 import { toStartggStage } from './stages.js';
 
@@ -50,11 +57,15 @@ export interface AuditSink {
   record(event: Record<string, unknown>): void;
 }
 
-/** The set archive (archive.ts), told about each successful set action and the beamer address it came from. */
+/**
+ * The set archive (archive.ts), told about each successful set action and the
+ * beamer address it came from, with what start.gg answered: the set's
+ * participants at START_SET, its completedAt and stream at END_SET.
+ */
 export interface ArchiveHooks {
-  setStarted(station: number, set: CachedSet): void;
+  setStarted(station: number, set: CachedSet, started: StartedSet): void;
   scored(setId: number, games: GameResult[], from: string): void;
-  setEnded(setId: number, games: GameResult[], from: string): void;
+  setEnded(setId: number, games: GameResult[], from: string, reported: ReportedSet | null): void;
   setAbandoned(setId: number): void;
 }
 
@@ -428,18 +439,21 @@ export class RelayTcpServer {
       // by hand on start.gg. Not ours to take.
       return { status: RelayStatus.ST_SET_TAKEN, msg: 'in progress on start.gg' };
     }
+    let started: StartedSet = { entrants: [] };
     const markFailure = await this.upstream(
       station,
       'markSetInProgress',
       { setId: req.set_id },
-      () => startgg.markSetInProgress(req.set_id),
+      async () => {
+        started = await startgg.markSetInProgress(req.set_id);
+      },
     );
     if (markFailure) return markFailure;
 
     // From here the set IS in progress upstream, so the station gets the
     // claim even if the stream assignment below fails.
     const claimed = this.recordClaim(station, set);
-    this.deps.archive.setStarted(station, set);
+    this.deps.archive.setStarted(station, set, started);
 
     if (stream !== null && station === stream.station) {
       const assignFailure = await this.upstream(
@@ -535,17 +549,20 @@ export class RelayTcpServer {
       };
     }
 
+    let reported: ReportedSet | null = null;
     const failure = await this.upstream(
       station,
       'reportBracketSet',
       { setId: req.set_id, winnerId, games: games.list.length },
-      () => startgg.reportWinner(req.set_id, winnerId, games.data),
+      async () => {
+        reported = await startgg.reportWinner(req.set_id, winnerId, games.data);
+      },
     );
     if (failure) return failure;
 
     state.release(station);
     audit.record({ type: 'release', station, setId: req.set_id, reason: 'end_set', winnerId });
-    this.deps.archive.setEnded(req.set_id, games.list, from);
+    this.deps.archive.setEnded(req.set_id, games.list, from, reported);
     return { status: RelayStatus.ST_OK, msg: `final ${scoreText(games.list)}` };
   }
 }

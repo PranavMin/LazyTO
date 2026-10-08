@@ -54,7 +54,7 @@ import { stageName } from './stages.js';
 /** What the archive needs to know about an event (resolve.ts). */
 export interface ArchiveEvent {
   tournamentName: string;
-  tournamentLocation: string;
+  tournamentLocation: string | null;
   eventId: number;
   eventName: string;
   eventSlug: string;

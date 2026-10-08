@@ -22,17 +22,36 @@
 //   - currentUser.tournaments(filter: {tournamentView: "admin"}): paged
 //     {slug, shortSlug} of the token owner's tournaments (resolve.ts).
 //   - tournament(slug): events {id name type videogame {id}} and streams.
+//   - markSetInProgress answers the set's slots with each entrant's
+//     participants {id gamerTag prefix player {user {genderPronoun}}}, and
+//     reportBracketSet a list of sets {id state completedAt stream}.
+//
+// The REST API (GET on the same origin, no token; startgg.ts), shaped as
+// Replay Reporter for Slippi reads it -- start.gg's REST was never probed:
+//   - /tournament/<slug>?expand[]=event: {entities: {tournament, event[]}}.
+//   - /phase_group/<id>?expand[]=sets&expand[]=entrants&expand[]=seeds
+//     &bustCache=true: {entities: {groups, seeds, sets}}, made up from the
+//     fixture's sets of that group (each set's ordinal is then its
+//     callOrder), unless setRest() gave the path a response of its own.
 //
 // Test hooks: failNext() injects 5xx or GraphQL errors, calls[] records
-// every upstream call with a timestamp for retry-count and rate assertions.
+// every GraphQL call with a timestamp for retry-count and rate assertions,
+// restCalls[] every REST request.
 
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+export interface FakeParticipant {
+  gamerTag: string | null;
+  id?: number; // default: the entrant id + 1_000_000
+  prefix?: string | null;
+  pronouns?: string | null; // player.user.genderPronoun
+}
+
 export interface FakeEntrant {
   id: number;
   name: string; // the display name, sponsor prefix included ("C9 | Mang0")
-  participants?: { gamerTag: string | null }[]; // default: one, gamerTag = name
+  participants?: FakeParticipant[]; // default: one, gamerTag = name
 }
 
 export interface FakeGame {
@@ -54,6 +73,16 @@ export interface FakeSet {
   slots: [FakeEntrant | null, FakeEntrant | null];
   games: FakeGame[];
   stream: { id: number; streamName: string; streamSource: string } | null;
+  /** What reportBracketSet with a winner sets completedAt to (unix seconds); default the time of that report. */
+  completedAt?: number | null;
+  /** The pool as the event-sets query returns it; default FIXTURE_PHASE_GROUP with phaseGroupId and phaseOrder. */
+  phaseGroup?: {
+    id: number;
+    displayIdentifier: string;
+    bracketType: string | null;
+    wave: { id: number } | null;
+    phase: { id: number; name: string; groupCount: number | null; phaseOrder: number };
+  };
 }
 
 export interface FakeTournament {
@@ -63,7 +92,8 @@ export interface FakeTournament {
   startAt: number | null; // unix seconds
   id: number;
   name: string;
-  venueAddress?: string;
+  /** The REST tournament's locationDisplayName; default null. */
+  locationDisplayName?: string | null;
   events: {
     id: number;
     name: string;
@@ -71,6 +101,8 @@ export interface FakeTournament {
     type: number;
     videogame: { id: number };
     phases?: { id: number }[];
+    /** The REST event's teamRosterSize; default null (singles), or 2 to 2 for a doubles event (type 5). */
+    teamRosterSize?: { minPlayers: number; maxPlayers: number } | null;
   }[];
   streams: { id: number; streamName: string }[];
 }
@@ -92,7 +124,17 @@ const OPS = [
   'adminTournaments',
   'tournament',
 ] as const;
-type Op = (typeof OPS)[number];
+type GqlOp = (typeof OPS)[number];
+type Op = GqlOp | RestOp;
+type RestOp = 'restTournament' | 'restPhaseGroup';
+
+/** The REST paths the relay asks for, exactly as Replay Reporter does. */
+export function restTournamentPath(slug: string): string {
+  return `/tournament/${slug}?expand[]=event`;
+}
+export function restPhaseGroupPath(id: number): string {
+  return `/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true`;
+}
 
 function gqlErrorBody(message: string): string {
   return JSON.stringify({ errors: [{ message }] });
@@ -100,6 +142,9 @@ function gqlErrorBody(message: string): string {
 
 export class FakeStartgg {
   readonly calls: RecordedCall[] = [];
+  /** Every REST request: path and query as sent, and its Authorization header (none expected). */
+  readonly restCalls: { path: string; at: number; auth: string | null }[] = [];
+  private readonly restResponses = new Map<string, unknown>();
   private server: Server;
   private baseUrl = '';
   private nextGameId = 500_000;
@@ -116,10 +161,10 @@ export class FakeStartgg {
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
-        const { status, body } = this.handle(
-          req.headers.authorization,
-          Buffer.concat(chunks).toString('utf8'),
-        );
+        const { status, body } =
+          req.method === 'GET'
+            ? this.handleRest(req.url ?? '', req.headers.authorization ?? null)
+            : this.handle(req.headers.authorization, Buffer.concat(chunks).toString('utf8'));
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(body);
       });
@@ -159,10 +204,123 @@ export class FakeStartgg {
     return this.calls.filter((c) => c.op === op);
   }
 
+  /** Answer a REST path (path and query, as restTournamentPath/restPhaseGroupPath build them) with this JSON. */
+  setRest(path: string, json: unknown): void {
+    this.restResponses.set(path, json);
+  }
+
   getSet(id: number | string): FakeSet {
     const set = this.sets.find((s) => s.id === id);
     if (!set) throw new Error(`fake: no set ${id}`);
     return set;
+  }
+
+  // ---- REST ----
+
+  private handleRest(url: string, auth: string | null): { status: number; body: string } {
+    const op: RestOp = url.startsWith('/phase_group/') ? 'restPhaseGroup' : 'restTournament';
+    this.restCalls.push({ path: url, at: Date.now(), auth });
+    const failure = this.failures.find((f) => f.op === op && f.times > 0);
+    if (failure) {
+      failure.times--;
+      return { status: failure.mode === '5xx' ? 503 : 400, body: '{}' };
+    }
+    const given = this.restResponses.get(url);
+    if (given !== undefined) return { status: 200, body: JSON.stringify(given) };
+    const t = /^\/tournament\/([A-Za-z0-9-]+)\?expand\[\]=event$/.exec(url);
+    if (t) {
+      const found = this.tournaments.find((x) => x.slug === `tournament/${t[1]}`);
+      return found
+        ? { status: 200, body: JSON.stringify(this.restTournament(found)) }
+        : { status: 404, body: '{"success":false}' };
+    }
+    const pg =
+      /^\/phase_group\/(\d+)\?expand\[\]=sets&expand\[\]=entrants&expand\[\]=seeds&bustCache=true$/.exec(
+        url,
+      );
+    if (pg) return { status: 200, body: JSON.stringify(this.restPhaseGroup(Number(pg[1]))) };
+    return { status: 404, body: '{"success":false}' };
+  }
+
+  private restTournament(t: FakeTournament) {
+    return {
+      entities: {
+        tournament: {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          locationDisplayName: t.locationDisplayName ?? null,
+        },
+        event: t.events.map((e) => ({
+          id: e.id,
+          name: e.name,
+          slug: e.slug ?? eventSlug(t, e.name),
+          state: 2,
+          videogameId: e.videogame.id,
+          teamRosterSize:
+            e.teamRosterSize !== undefined
+              ? e.teamRosterSize
+              : e.type === 5
+                ? { minPlayers: 2, maxPlayers: 2 }
+                : null,
+        })),
+      },
+    };
+  }
+
+  /** The phase group as the REST API shapes it, from the fixture's sets in it. */
+  private restPhaseGroup(id: number) {
+    const sets = this.sets.filter((s) => (s.phaseGroupId ?? FIXTURE_POOL) === id);
+    const entrants = new Map<number, FakeEntrant>();
+    for (const s of sets) for (const e of s.slots) if (e) entrants.set(e.id, e);
+    return {
+      entities: {
+        groups: {
+          id,
+          groupTypeId: 2,
+          displayIdentifier: FIXTURE_PHASE_GROUP.displayIdentifier,
+          state: 2,
+          waveId: null,
+          winnersTargetPhaseId: null,
+        },
+        seeds: [...entrants.values()].map((e, i) => ({
+          id: 8_000_000 + i,
+          seedNum: i + 1,
+          groupSeedNum: i + 1,
+          entrantId: e.id,
+          mutations: {
+            entrants: {
+              [e.id]: {
+                id: e.id,
+                name: e.name,
+                participantIds: participantsOf(e).map((p) => p.id),
+              },
+            },
+            participants: Object.fromEntries(
+              participantsOf(e).map((p) => [
+                p.id,
+                { id: p.id, gamerTag: p.gamerTag, playerId: p.id + 1, prefix: p.prefix },
+              ]),
+            ),
+          },
+        })),
+        sets: sets.map((s, i) => ({
+          id: s.id,
+          round: s.round,
+          fullRoundText: s.fullRoundText,
+          isGF: s.fullRoundText.startsWith('Grand Final'),
+          unreachable: false,
+          entrant1Id: s.slots[0]?.id ?? null,
+          entrant2Id: s.slots[1]?.id ?? null,
+          entrant1PrereqType: 'seed',
+          entrant2PrereqType: 'seed',
+          wProgressionSeedId: null,
+          lProgressionSeedId: null,
+          callOrder: i + 1,
+          state: s.state,
+        })),
+      },
+    };
   }
 
   // ---- request handling ----
@@ -219,7 +377,7 @@ export class FakeStartgg {
     }
   }
 
-  private classify(query: string): Op | null {
+  private classify(query: string): GqlOp | null {
     if (query.includes('currentUser')) return 'adminTournaments';
     if (/\btournament\s*\(\s*slug\s*:/.test(query)) return 'tournament';
     for (const op of OPS) {
@@ -252,7 +410,7 @@ export class FakeStartgg {
         ? set.games.map((g) => ({ id: g.id, orderNum: g.orderNum, winnerId: g.winnerId }))
         : null, // the real API returns null, not [], for a set with no games
       stream: set.stream,
-      phaseGroup: {
+      phaseGroup: set.phaseGroup ?? {
         ...FIXTURE_PHASE_GROUP,
         id: set.phaseGroupId ?? FIXTURE_POOL,
         phase: { ...FIXTURE_PHASE_GROUP.phase, phaseOrder: set.phaseOrder ?? FIXTURE_PHASE_ORDER },
@@ -289,7 +447,27 @@ export class FakeStartgg {
     set.state = 2;
     return {
       status: 200,
-      body: JSON.stringify({ data: { markSetInProgress: { id: set.id, state: set.state } } }),
+      body: JSON.stringify({
+        data: {
+          markSetInProgress: {
+            id: set.id,
+            state: set.state,
+            slots: set.slots.map((e) => ({
+              entrant: e
+                ? {
+                    id: e.id,
+                    participants: participantsOf(e).map((p) => ({
+                      id: p.id,
+                      gamerTag: p.gamerTag,
+                      prefix: p.prefix,
+                      player: { user: p.pronouns === null ? null : { genderPronoun: p.pronouns } },
+                    })),
+                  }
+                : null,
+            })),
+          },
+        },
+      }),
     };
   }
 
@@ -383,10 +561,22 @@ export class FakeStartgg {
         };
       }
       set.state = 3;
+      if (set.completedAt === undefined) set.completedAt = Math.floor(Date.now() / 1000);
     }
     return {
       status: 200,
-      body: JSON.stringify({ data: { reportBracketSet: [{ id: set.id, state: set.state }] } }),
+      body: JSON.stringify({
+        data: {
+          reportBracketSet: [
+            {
+              id: set.id,
+              state: set.state,
+              completedAt: set.state === 3 ? set.completedAt : null,
+              stream: set.stream,
+            },
+          ],
+        },
+      }),
     };
   }
 
@@ -413,9 +603,8 @@ export class FakeStartgg {
       id: t.id,
       name: t.name,
       slug: t.slug,
-      venueAddress: t.venueAddress ?? null,
-      events: t.events.map((e) => ({
-        slug: `${t.slug}/event/${e.name.toLowerCase().replace(/\s+/g, '-')}`,
+      events: t.events.map(({ teamRosterSize: _, ...e }) => ({
+        slug: eventSlug(t, e.name),
         phases: [{ id: 1700 }],
         ...e,
       })),
@@ -438,6 +627,22 @@ export class FakeStartgg {
       body: JSON.stringify({ data: { resetSet: { id: set.id, state: set.state } } }),
     };
   }
+}
+
+function eventSlug(t: FakeTournament, name: string): string {
+  return `${t.slug}/event/${name.toLowerCase().replace(/\s+/g, '-')}`;
+}
+
+/** An entrant's participants with every field filled: the defaults FakeParticipant names. */
+function participantsOf(
+  e: FakeEntrant,
+): { id: number; gamerTag: string | null; prefix: string | null; pronouns: string | null }[] {
+  return (e.participants ?? [{ gamerTag: e.name }]).map((p, i) => ({
+    id: p.id ?? e.id + 1_000_000 + i,
+    gamerTag: p.gamerTag,
+    prefix: p.prefix ?? null,
+    pronouns: p.pronouns ?? null,
+  }));
 }
 
 // ---- default fixture: the shape of the real test tournament ----

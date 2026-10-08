@@ -8,6 +8,16 @@
 
 // The endpoint (https://api.start.gg/gql/alpha in production) comes from
 // config.startggEndpoint; there is no built-in default.
+//
+// Two REST reads, for the set archive's context.json only, are the ones
+// Replay Reporter for Slippi makes (its src/main/startgg.ts), because the
+// GraphQL schema lacks what they give (docs/redesign.md, The zip and Lucky
+// Stats): the tournament once at startup (its locationDisplayName and the
+// events Replay Reporter counts) and a set's phase group once per START_SET
+// (bracket type, wave, winners target phase, and what the set's ordinal is
+// worked out from). They go to the GraphQL endpoint's origin, without the
+// token, as Replay Reporter sends them; the 5xx rule above applies, the rate
+// limiter (a GraphQL limit) does not.
 
 export type StartggErrorKind = 'upstream_5xx' | 'rejected' | 'network';
 
@@ -70,6 +80,57 @@ export interface UpstreamEntrant {
   participants?: { gamerTag: string | null }[] | null;
 }
 
+/** A participant as START_SET's markSetInProgress returns it: the bare gamerTag, untrimmed; prefix and pronouns "" when start.gg has none. */
+export interface StartedParticipant {
+  id: number;
+  gamerTag: string;
+  prefix: string;
+  pronouns: string;
+}
+
+/** The set as markSetInProgress returns it at START_SET: each slot's entrant and participants. */
+export interface StartedSet {
+  entrants: { id: number; participants: StartedParticipant[] }[];
+}
+
+/** The set as END_SET's reportBracketSet returns it: completedAt (unix seconds) and its stream. */
+export interface ReportedSet {
+  completedAt: number | null;
+  stream: { id: number; streamName: string | null; streamSource: string | null } | null;
+}
+
+/** start.gg's REST tournament (GET /tournament/<slug>?expand[]=event), what the relay reads of it. */
+export interface RestTournament {
+  entities: {
+    tournament: { name: string; slug: string; locationDisplayName: string | null };
+    event: {
+      id: number;
+      name: string;
+      slug: string;
+      videogameId: number;
+      teamRosterSize: { minPlayers: number; maxPlayers: number } | null;
+    }[];
+  };
+}
+
+/**
+ * start.gg's REST phase group (GET /phase_group/<id>?expand[]=sets&...): the
+ * group's facts, its seeds and every set, which phasegroup.ts reads as
+ * Replay Reporter does. Sets are left loose; only some of their fields are read.
+ */
+export interface RestPhaseGroup {
+  entities: {
+    groups: {
+      groupTypeId: number;
+      displayIdentifier: string;
+      waveId: number | null;
+      winnersTargetPhaseId: number | null;
+    };
+    seeds?: unknown;
+    sets?: Record<string, any>[];
+  };
+}
+
 /** A tournament as the admin list returns it (resolve.ts finds tonight's by short URL). */
 export interface AdminTournament {
   slug: string; // "tournament/my-bar-weekly-160"
@@ -83,7 +144,6 @@ export interface TournamentDetail {
   id: number;
   name: string;
   slug: string;
-  venueAddress: string | null;
   events: {
     id: number;
     name: string;
@@ -113,7 +173,6 @@ const TOURNAMENT_QUERY = `query Tournament($slug: String!) {
     id
     name
     slug
-    venueAddress
     events { id name slug type videogame { id } phases { id } }
     streams { id streamName }
   }
@@ -139,7 +198,19 @@ const EVENT_SETS_QUERY = `query EventSets($eventId: ID!) {
   }
 }`;
 
+// START_SET: the participants are the set archive's names, prefixes and
+// pronouns (archive.ts), taken here because the set leaves the cache once it
+// completes. Replay Reporter takes the same fields from the same mutation.
 const MARK_IN_PROGRESS = `mutation Start($setId: ID!) {
+  markSetInProgress(setId: $setId) {
+    id
+    state
+    slots { entrant { id participants { id gamerTag prefix player { user { genderPronoun } } } } }
+  }
+}`;
+
+// Starting a pool from a preview id needs only the set's new id.
+const START_POOL = `mutation StartPool($setId: ID!) {
   markSetInProgress(setId: $setId) { id state }
 }`;
 
@@ -151,13 +222,35 @@ const REPORT_GAMES = `mutation Report($setId: ID!, $gameData: [BracketSetGameDat
   reportBracketSet(setId: $setId, gameData: $gameData) { id state }
 }`;
 
+// END_SET: completedAt anchors the archive's re-timed replays, and the stream
+// goes into its context.json (archive.ts).
 const REPORT_WINNER = `mutation ReportWin($setId: ID!, $winnerId: ID!, $gameData: [BracketSetGameDataInput]) {
-  reportBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) { id state }
+  reportBracketSet(setId: $setId, winnerId: $winnerId, gameData: $gameData) {
+    id
+    state
+    completedAt
+    stream { id streamName streamSource }
+  }
 }`;
 
 const RESET_SET = `mutation Reset($setId: ID!) {
   resetSet(setId: $setId) { id state }
 }`;
+
+/** A slot as markSetInProgress answers it. */
+interface ApiSlot {
+  entrant: {
+    id: number;
+    participants:
+      | {
+          id: number;
+          gamerTag: string | null;
+          prefix: string | null;
+          player: { user: { genderPronoun: string | null } | null } | null;
+        }[]
+      | null;
+  } | null;
+}
 
 class TokenBucket {
   private tokens: number;
@@ -209,6 +302,8 @@ export interface StartggClientOptions {
 
 export class StartggClient {
   private readonly endpoint: string;
+  /** Where the REST API is: the GraphQL endpoint's origin (https://api.start.gg). */
+  private readonly restOrigin: string;
   private readonly token: string;
   private readonly bucket: TokenBucket;
   private readonly maxWaitMs: number;
@@ -217,6 +312,7 @@ export class StartggClient {
 
   constructor(opts: StartggClientOptions) {
     this.endpoint = opts.endpoint;
+    this.restOrigin = new URL(opts.endpoint).origin;
     this.token = opts.token;
     const limits = opts.limits ?? { capacity: 70, refillPerMinute: 70, maxWaitMs: 2000 };
     this.bucket = new TokenBucket(limits.capacity, limits.refillPerMinute);
@@ -259,8 +355,28 @@ export class StartggClient {
     return event.sets.nodes;
   }
 
-  async markSetInProgress(setId: number): Promise<void> {
-    await this.gql(MARK_IN_PROGRESS, { setId });
+  /** Start the set; its entrants and their participants as start.gg answers. */
+  async markSetInProgress(setId: number): Promise<StartedSet> {
+    const data = await this.gql(MARK_IN_PROGRESS, { setId });
+    const set = data.markSetInProgress as { slots: ApiSlot[] | null } | null;
+    if (!set) throw new StartggError('rejected', 'markSetInProgress returned no set');
+    return {
+      entrants: (set.slots ?? []).flatMap((slot) =>
+        slot.entrant
+          ? [
+              {
+                id: slot.entrant.id,
+                participants: (slot.entrant.participants ?? []).map((p) => ({
+                  id: p.id,
+                  gamerTag: p.gamerTag ?? '',
+                  prefix: p.prefix || '',
+                  pronouns: p.player?.user?.genderPronoun || '',
+                })),
+              },
+            ]
+          : [],
+      ),
+    };
   }
 
   /**
@@ -270,7 +386,7 @@ export class StartggClient {
    * so that set is put straight back to pending (probe, 2026-10-02).
    */
   async startPool(previewSetId: string): Promise<void> {
-    const data = await this.gql(MARK_IN_PROGRESS, { setId: previewSetId });
+    const data = await this.gql(START_POOL, { setId: previewSetId });
     const set = data.markSetInProgress as { id: number } | null;
     if (!set) throw new StartggError('rejected', 'markSetInProgress returned no set');
     await this.gql(RESET_SET, { setId: set.id });
@@ -285,13 +401,78 @@ export class StartggClient {
     await this.gql(REPORT_GAMES, { setId, gameData });
   }
 
-  /** Final report: winner + full game list; completes the set. */
-  async reportWinner(setId: number, winnerId: number, gameData: GameDataInput[]): Promise<void> {
-    await this.gql(REPORT_WINNER, { setId, winnerId, gameData });
+  /**
+   * Final report: winner + full game list; completes the set. reportBracketSet
+   * answers with a list of sets; this one is the element with its id (null if
+   * start.gg left it out).
+   */
+  async reportWinner(
+    setId: number,
+    winnerId: number,
+    gameData: GameDataInput[],
+  ): Promise<ReportedSet | null> {
+    const data = await this.gql(REPORT_WINNER, { setId, winnerId, gameData });
+    const sets = (data.reportBracketSet ?? []) as ({ id: number | string } & ReportedSet)[];
+    const set = sets.find((x) => String(x.id) === String(setId));
+    return set ? { completedAt: set.completedAt ?? null, stream: set.stream ?? null } : null;
   }
 
   async resetSet(setId: number): Promise<void> {
     await this.gql(RESET_SET, { setId });
+  }
+
+  /** REST: the tournament with its events, by its slug without "tournament/". */
+  async getTournamentRest(slug: string): Promise<RestTournament> {
+    const json = (await this.rest(`/tournament/${slug}?expand[]=event`)) as RestTournament | null;
+    if (typeof json?.entities?.tournament !== 'object' || !Array.isArray(json.entities.event)) {
+      throw new StartggError('rejected', `start.gg REST: no tournament ${slug}`);
+    }
+    return json;
+  }
+
+  /** REST: a phase group with its sets, entrants and seeds, Replay Reporter's exact request. */
+  async getPhaseGroupRest(id: number): Promise<RestPhaseGroup> {
+    const json = (await this.rest(
+      `/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true`,
+    )) as RestPhaseGroup | null;
+    if (typeof json?.entities?.groups !== 'object' || json.entities.groups === null) {
+      throw new StartggError('rejected', `start.gg REST: no phase group ${id}`);
+    }
+    return json;
+  }
+
+  /** One HTTP request with the 5xx retries; a network failure is StartggError 'network'. */
+  private async send(url: string, init: RequestInit): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      this.callTimes.push(Date.now());
+      let res: Response;
+      try {
+        res = await fetch(url, init);
+      } catch (e) {
+        throw new StartggError('network', `start.gg unreachable: ${(e as Error).message}`);
+      }
+      if (res.status < 500) return res;
+      if (attempt < this.retryDelaysMs.length) {
+        await res.body?.cancel();
+        await new Promise((r) => setTimeout(r, this.retryDelaysMs[attempt]));
+        continue;
+      }
+      throw new StartggError(
+        'upstream_5xx',
+        `start.gg HTTP ${res.status} after ${attempt + 1} attempts`,
+      );
+    }
+  }
+
+  private async rest(path: string): Promise<unknown> {
+    const res = await this.send(`${this.restOrigin}${path}`, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) throw new StartggError('rejected', `start.gg REST ${path}: HTTP ${res.status}`);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new StartggError('rejected', `start.gg REST ${path}: unparseable response`);
+    }
   }
 
   private async gql(
@@ -299,45 +480,25 @@ export class StartggClient {
     variables: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     await this.bucket.take(this.maxWaitMs);
-    for (let attempt = 0; ; attempt++) {
-      this.callTimes.push(Date.now());
-      let res: Response;
-      try {
-        res = await fetch(this.endpoint, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify({ query, variables }),
-        });
-      } catch (e) {
-        throw new StartggError('network', `start.gg unreachable: ${(e as Error).message}`);
-      }
-
-      if (res.status >= 500) {
-        if (attempt < this.retryDelaysMs.length) {
-          await new Promise((r) => setTimeout(r, this.retryDelaysMs[attempt]));
-          continue;
-        }
-        throw new StartggError(
-          'upstream_5xx',
-          `start.gg HTTP ${res.status} after ${attempt + 1} attempts`,
-        );
-      }
-
-      const text = await res.text();
-      let json: { data?: Record<string, unknown>; errors?: { message: string }[] };
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new StartggError('rejected', `start.gg HTTP ${res.status}: unparseable response`);
-      }
-      if (!res.ok || json.errors || !json.data) {
-        const msg = json.errors?.map((e) => e.message).join('; ') ?? `HTTP ${res.status}`;
-        throw new StartggError('rejected', `start.gg rejected: ${msg}`);
-      }
-      return json.data;
+    const res = await this.send(this.endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    const text = await res.text();
+    let json: { data?: Record<string, unknown>; errors?: { message: string }[] };
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new StartggError('rejected', `start.gg HTTP ${res.status}: unparseable response`);
     }
+    if (!res.ok || json.errors || !json.data) {
+      const msg = json.errors?.map((e) => e.message).join('; ') ?? `HTTP ${res.status}`;
+      throw new StartggError('rejected', `start.gg rejected: ${msg}`);
+    }
+    return json.data;
   }
 }
