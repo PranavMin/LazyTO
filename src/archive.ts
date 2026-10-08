@@ -207,12 +207,14 @@ export class SetArchive {
     this.guarded('setAbandoned', setId, () => {
       const r = this.sets.get(setId);
       if (!r) return;
+      // The record first, so a failed move below cannot bring the set back
+      // after a restart; a copy that does not move simply stays in raw/.
       this.sets.delete(setId);
+      rmSync(join(this.deps.dir, '.sets', `${setId}.json`), { force: true });
       for (const g of r.games) {
         const stored = g.replay && this.deps.store.get(g.replay.id);
         if (stored) this.deps.store.move(stored, 'unmatched');
       }
-      rmSync(join(this.deps.dir, '.sets', `${setId}.json`), { force: true });
     });
   }
 
