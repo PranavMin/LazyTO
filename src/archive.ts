@@ -1,41 +1,43 @@
-// archive.ts -- the set archive: every finished set becomes one zip of its
-// replays, named from the config's templates (names.ts), each replay
-// labelled with the players' tags, plus a context.json that links it to the
-// start.gg set (the format Replay Reporter for Slippi writes and Lucky
-// Stats' "Import Tournament Game Data" reads).
+// archive.ts -- the set archive: every finished set whose games all have a
+// replay becomes one zip of them, named from the config's templates
+// (names.ts), each replay labelled with the players' tags, plus a
+// context.json that links it to the start.gg set (the format Replay Reporter
+// for Slippi writes and Lucky Stats' "Import Tournament Game Data" reads).
 //
-// How a replay is matched to a game (protocol v2, docs/protocol-v2.md). Every
-// reported game_result carries the entrants' ports and replay_id: the
-// gameStartTime of its match's Slippi replay, whose file on the station's
-// beamer (beamer.ts) is Game_<Wii MAC>_<replay_id as UTC YYYYMMDDTHHMMSS>.slp.
-// While the station has a set, the relay polls its beamer and downloads the
-// file of each reported game it has no replay for yet. A game with replay_id
-// 0 has no replay. The replay's stage, characters and costumes are checked
-// against the report and a mismatch is logged, never refused: the id
-// decides. Game N of the archive is the replay of game N of the last report
-// (a game played again after an undo carries the new match's id).
+// How a replay is matched to its game (protocol v2, docs/redesign.md:
+// Matching a replay to its game). Every reported game_result carries the
+// entrants' ports and replay_id: the gameStartTime of its match's Slippi
+// replay, whose file is Game_<Wii MAC>_<replay_id as UTC YYYYMMDDTHHMMSS>.slp
+// on the beamer the game was reported through. That beamer is the one whose
+// sync came from the report's source address (beamer.ts): its station_id,
+// never "whoever is station N now". The beamers' files reach the laptop by
+// their own syncs (collect.ts, rawstore.ts), in any order with the reports:
+// a game binds when both are there. A game with replay_id 0 has no replay.
+// The replay's stage, characters and costumes on their ports, and the
+// stocks when the game sent them, are checked against the report and a
+// mismatch is flagged, never refused: the id decides. Game N of the zip is
+// the replay of game N of the last report.
 //
-// State lives on disk under archiveDir, so a relay restart mid-set loses
-// nothing: .sets/<setId>.json per set in progress, .raw/<setId>/ for its
-// replays. A zip is written (atomically) when every scored game that has a
-// replay_id has its replay, or FINALIZE_TIMEOUT_MS after the set ended with
-// what there is.
+// Placing a stored copy (placeFor): a finished replay a reported game names
+// goes to raw/, anything else (a stray, an undone game's recording, an
+// incomplete recording) to unmatched/. A late report that names an unmatched
+// replay moves it to raw/. Raw copies are never deleted here.
+//
+// Zips. A set that ended is zipped once every game has a complete replay
+// (D12: a set with a game without one gets no zip, so Lucky Stats never sees
+// a short set; the status page lists it with the reason per game). A replay
+// that arrives later, even at a later event, zips it then, or writes the
+// zip again when a game's replay changed. Set records stay on disk in
+// <archive>/.sets/<setId>.json for that, each with the event it belongs to.
 // The archive never blocks or fails a Wii request: its errors go to the
 // status page and the audit log.
 
-import {
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { NO_PORT, type GameResult } from '../generated/wire.js';
 import type { CachedSet } from './cache.js';
-import { BeamerBusy, BeamerClient, type BeamerDirectory } from './beamer.js';
+import type { Folder, RawStore, StoredReplay } from './rawstore.js';
 import { parseSlp, withDisplayNames, humanPorts, type SlpInfo } from './slp.js';
 import { buildZip, type ZipEntry } from './zip.js';
 import {
@@ -49,10 +51,7 @@ import {
 import { characterName } from './chars.js';
 import { stageName } from './stages.js';
 
-export const POLL_MS = 5000;
-export const FINALIZE_TIMEOUT_MS = 3 * 60_000;
-
-/** What the archive needs to know about tonight's event (resolve.ts). */
+/** What the archive needs to know about an event (resolve.ts). */
 export interface ArchiveEvent {
   tournamentName: string;
   tournamentLocation: string;
@@ -63,73 +62,83 @@ export interface ArchiveEvent {
   eventPhaseCount: number;
 }
 
+export interface BoundReplay {
+  /** The stored copy (rawstore.ts StoredReplay.id) and where it was when bound. */
+  id: string;
+  path: string;
+  sha256: string;
+  lastFrame: number | null;
+  complete: boolean;
+  /** What disagrees with the report, or null. */
+  mismatch: string | null;
+}
+
 export interface GameRecord {
   at: number; // when the relay first had this game (this replay_id) reported
   result: GameResult; // as last reported
-  replay: { file: string; lastFrame: number | null } | null;
+  /** station_id of the beamer the game was reported through; null until that beamer has synced. */
+  beamer: string | null;
+  /** The report's source address: the beamer's, which a later sync names. */
+  from: string;
+  replay: BoundReplay | null;
 }
 
 export interface SetRecord {
   setId: number;
   station: number;
   set: CachedSet; // snapshot at START_SET: the set leaves the cache once completed
+  event: ArchiveEvent;
   startedAt: number;
   games: GameRecord[]; // the last reported list, index 0 = game 1
   endedAt: number | null;
+  /** The zip's file name in the archive folder, once written. */
+  zip: string | null;
+  /** The bound replays the zip was written from, to know when to write it again. */
+  zipOf: string | null;
 }
 
 export interface ArchiveResult {
   setId: number;
   station: number;
-  file: string | null; // zip path; null when nothing could be archived
+  file: string; // zip path
   games: number; // replays in the zip
-  missing: number[]; // scored games without a replay
   at: number;
   note: string;
+  /** Written again: a late replay, or a game's replay changed. */
+  again: boolean;
+}
+
+/** A reported game without a usable replay, and why. */
+export interface MissingReplay {
+  game: number;
+  why: string;
 }
 
 export interface ArchiveDeps {
+  /** The archive folder: zips, .sets/, and the raw store's files. */
   dir: string;
+  store: RawStore;
+  /** The station_id of the beamer that synced from an address (beamer.ts). */
+  beamerAt(address: string): string | undefined;
   setTemplate: string;
   gameTemplate: string;
-  beamerHttpPort: number;
-  beamers: BeamerDirectory;
   event: ArchiveEvent;
   audit: { record(event: Record<string, unknown>): void };
-  /** Tests shorten these. */
-  pollMs?: number;
-  finalizeTimeoutMs?: number;
-}
-
-interface StationWatch {
-  unreadable: Set<string>; // replay names that did not parse: not downloaded again
-  busyUntil: number;
-  running: Promise<void> | null; // the poll in progress
-  again: boolean; // asked for while one was in progress: poll once more after it
-  lastError: string | null;
-  downloaded: number;
 }
 
 export class SetArchive {
   private readonly sets = new Map<number, SetRecord>(); // by set id
-  private readonly watches = new Map<number, StationWatch>(); // by station
   private readonly results: ArchiveResult[] = [];
-  private timer: NodeJS.Timeout | null = null;
-  private readonly pollMs: number;
-  private readonly finalizeTimeoutMs: number;
 
   constructor(private readonly deps: ArchiveDeps) {
-    this.pollMs = deps.pollMs ?? POLL_MS;
-    this.finalizeTimeoutMs = deps.finalizeTimeoutMs ?? FINALIZE_TIMEOUT_MS;
     mkdirSync(join(deps.dir, '.sets'), { recursive: true });
-    mkdirSync(join(deps.dir, '.raw'), { recursive: true });
     for (const f of readdirSync(join(deps.dir, '.sets'))) {
       if (!f.endsWith('.json')) continue;
       try {
         const r: unknown = JSON.parse(readFileSync(join(deps.dir, '.sets', f), 'utf8'));
-        // A record a protocol v1 relay wrote (game starts, bare game results)
-        // would throw in every poll; it is reported here instead.
-        if (!isSetRecord(r)) throw new Error('not a protocol v2 set record');
+        // A record an older relay wrote (protocol v1's game starts, or the
+        // first v2 archive's per-set raw folder) is reported, not used.
+        if (!isSetRecord(r)) throw new Error('not a set record of this relay version');
         this.sets.set(r.setId, r);
       } catch (e) {
         deps.audit.record({
@@ -141,17 +150,6 @@ export class SetArchive {
     }
   }
 
-  start(): void {
-    if (this.timer) throw new Error('archive already started');
-    this.timer = setInterval(() => void this.tick(), this.pollMs);
-    this.timer.unref();
-  }
-
-  stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-  }
-
   // ---- hooks from tcp.ts (after the request succeeded) ----
 
   setStarted(station: number, set: CachedSet): void {
@@ -160,205 +158,243 @@ export class SetArchive {
       setId: set.id,
       station,
       set,
+      event: this.deps.event,
       startedAt: Date.now(),
       games: [],
       endedAt: null,
+      zip: null,
+      zipOf: null,
     });
   }
 
-  scored(setId: number, games: GameResult[]): void {
+  scored(setId: number, games: GameResult[], from: string): void {
     const r = this.sets.get(setId);
     if (!r) return;
-    r.games = reported(r.games, games);
+    r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
+    this.bindSet(r);
     this.save(r);
-    void this.poll(r.station);
   }
 
-  setEnded(setId: number, games: GameResult[]): void {
+  setEnded(setId: number, games: GameResult[], from: string): void {
     const r = this.sets.get(setId);
     if (!r) return;
-    r.games = reported(r.games, games);
+    r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
     r.endedAt = Date.now();
+    this.bindSet(r);
     this.save(r);
-    void this.poll(r.station).then(() => this.maybeFinalize(r));
+    this.maybeZip(r);
   }
 
+  /** The set was freed or reset: its record goes, and its replays become strays. */
   setAbandoned(setId: number): void {
     const r = this.sets.get(setId);
     if (!r) return;
-    this.drop(r);
+    for (const g of r.games) {
+      const stored = g.replay && this.deps.store.get(g.replay.id);
+      if (stored) this.deps.store.move(stored, 'unmatched');
+    }
+    this.sets.delete(setId);
+    rmSync(join(this.deps.dir, '.sets', `${setId}.json`), { force: true });
   }
 
-  /** A beamer announced a game event: look at its index now rather than at the next tick. */
-  onAnnounce(station: number): void {
-    if (this.activeStations().has(station)) void this.poll(station);
+  // ---- hooks from collect.ts ----
+
+  /** Where a downloaded copy goes: raw/ when finished and a reported game names it, else unmatched/. */
+  placeFor(stationId: string, name: string, complete: boolean): Folder {
+    if (!complete) return 'unmatched';
+    const stamp = fileStamp(name);
+    if (stamp === null) return 'unmatched';
+    for (const r of this.sets.values()) {
+      for (const g of r.games) {
+        if (g.result.replay_id === 0 || replayStamp(g.result.replay_id) !== stamp) continue;
+        if (this.beamerOf(g) === stationId) return 'raw';
+      }
+    }
+    return 'unmatched';
+  }
+
+  /** A copy was stored: bind it to the game that names it, and zip that set if it is now whole. */
+  stored(copy: StoredReplay): void {
+    const stamp = fileStamp(copy.name);
+    if (stamp === null) return;
+    for (const r of this.sets.values()) {
+      const names = r.games.some(
+        (g) =>
+          g.result.replay_id !== 0 &&
+          replayStamp(g.result.replay_id) === stamp &&
+          this.beamerOf(g) === copy.stationId,
+      );
+      if (!names) continue;
+      if (this.bindSet(r)) {
+        this.save(r);
+        this.maybeZip(r);
+      }
+    }
   }
 
   // ---- status ----
 
   status(): {
-    inProgress: { setId: number; station: number; games: number; bound: number; ended: boolean }[];
+    inProgress: { setId: number; station: number; label: string; games: number; bound: number }[];
+    /** Sets of this event that ended without a zip, with what is missing. */
+    skipped: {
+      setId: number;
+      station: number;
+      label: string;
+      endedAt: number;
+      missing: MissingReplay[];
+    }[];
+    /** Games of sets still being played that have no replay or disagree with it. */
+    flagged: { setId: number; station: number; game: number; why: string }[];
     recent: ArchiveResult[];
-    watches: [number, { downloaded: number; lastError: string | null }][];
+    unmatched: number;
   } {
+    const all = [...this.sets.values()];
+    const playing = all.filter((r) => r.endedAt === null);
     return {
-      inProgress: [...this.sets.values()].map((r) => ({
+      inProgress: playing.map((r) => ({
         setId: r.setId,
         station: r.station,
+        label: label(r),
         games: r.games.length,
-        bound: r.games.filter((g) => g.replay).length,
-        ended: r.endedAt !== null,
+        bound: r.games.filter((g) => g.replay?.complete).length,
       })),
+      skipped: all
+        .filter(
+          (r) =>
+            r.endedAt !== null && r.zip === null && r.event.eventId === this.deps.event.eventId,
+        )
+        .sort((a, b) => b.endedAt! - a.endedAt!)
+        .map((r) => ({
+          setId: r.setId,
+          station: r.station,
+          label: label(r),
+          endedAt: r.endedAt!,
+          missing: this.missing(r),
+        })),
+      flagged: playing.flatMap((r) =>
+        r.games.flatMap((g, i) => {
+          if (g.result.replay_id === 0) {
+            return [{ setId: r.setId, station: r.station, game: i + 1, why: 'not recorded' }];
+          }
+          if (g.replay?.mismatch) {
+            const why = `replay disagrees: ${g.replay.mismatch}`;
+            return [{ setId: r.setId, station: r.station, game: i + 1, why }];
+          }
+          return [];
+        }),
+      ),
       recent: this.results.slice(-20).reverse(),
-      watches: [...this.watches.entries()].map(([s, w]) => [
-        s,
-        { downloaded: w.downloaded, lastError: w.lastError },
-      ]),
+      unmatched: this.deps.store.all().filter((c) => c.path.startsWith('unmatched/')).length,
     };
   }
 
-  // ---- polling ----
-
-  private activeStations(): Set<number> {
-    return new Set([...this.sets.values()].map((r) => r.station));
+  /** Each game of the set without a complete replay, and why. */
+  missing(r: SetRecord): MissingReplay[] {
+    return r.games.flatMap((g, i): MissingReplay[] => {
+      if (g.replay?.complete) return [];
+      const why =
+        g.result.replay_id === 0
+          ? 'not recorded'
+          : g.replay
+            ? 'incomplete recording'
+            : this.beamerOf(g) === null
+              ? 'its beamer has not synced'
+              : 'not collected yet';
+      return [{ game: i + 1, why }];
+    });
   }
 
-  /** One tick: poll every station with a set, then finalize what is due. */
-  async tick(): Promise<void> {
-    for (const station of this.activeStations()) await this.poll(station);
-    for (const r of [...this.sets.values()]) this.maybeFinalize(r);
+  // ---- binding ----
+
+  private beamerOf(g: GameRecord): string | null {
+    return g.beamer ?? this.deps.beamerAt(g.from) ?? null;
   }
 
-  private watch(station: number): StationWatch {
-    let w = this.watches.get(station);
-    if (!w) {
-      w = {
-        unreadable: new Set(),
-        busyUntil: 0,
-        running: null,
-        again: false,
-        lastError: null,
-        downloaded: 0,
-      };
-      this.watches.set(station, w);
-    }
-    return w;
-  }
-
-  /**
-   * Read the station's beamer index and download the replay of every reported
-   * game that has none yet. One poll per station at a time: a call during a
-   * poll makes it run once more, and resolves when that is done.
-   */
-  poll(station: number): Promise<void> {
-    const w = this.watch(station);
-    if (w.running) {
-      w.again = true;
-      return w.running;
-    }
-    w.running = (async () => {
-      do {
-        w.again = false;
-        await this.pollOnce(station, w);
-      } while (w.again);
-      w.running = null;
-    })();
-    return w.running;
-  }
-
-  private async pollOnce(station: number, w: StationWatch): Promise<void> {
-    // The station's reported games still waiting for their replay, by the
-    // replay's time stamp.
-    const wanted = new Map<string, { r: SetRecord; i: number }>();
-    for (const r of this.sets.values()) {
-      if (r.station !== station) continue;
-      r.games.forEach((g, i) => {
-        if (!g.replay && g.result.replay_id !== 0)
-          wanted.set(replayStamp(g.result.replay_id), { r, i });
-      });
-    }
-    // A replay already stored for its set (a game undone, then reported
-    // again with the same id) binds from disk.
-    for (const [stamp, hit] of wanted) {
-      const dir = join(this.deps.dir, '.raw', String(hit.r.setId));
-      const name = existsSync(dir)
-        ? readdirSync(dir).find((n) => fileStamp(n) === stamp)
-        : undefined;
-      if (name === undefined) continue;
-      this.take(station, hit.r, hit.i, name, readFileSync(join(dir, name)));
-      wanted.delete(stamp);
-    }
-    const beamer = this.deps.beamers.get(station);
-    if (wanted.size === 0 || !beamer || Date.now() < w.busyUntil) return;
-    try {
-      const client = BeamerClient.at(beamer.address, this.deps.beamerHttpPort);
-      for (const f of await client.list()) {
-        const hit = wanted.get(fileStamp(f.name) ?? '');
-        if (!hit || w.unreadable.has(f.name)) continue;
-        const data = await client.fetchReplay(f.name);
-        w.downloaded++;
-        if (!this.take(station, hit.r, hit.i, f.name, data)) w.unreadable.add(f.name);
+  /** Bind every game that names a stored copy it does not have yet. True if anything changed. */
+  private bindSet(r: SetRecord): boolean {
+    let changed = false;
+    r.games.forEach((g, i) => {
+      if (g.result.replay_id === 0 || g.replay?.complete) return;
+      const beamer = this.beamerOf(g);
+      if (beamer === null) return;
+      if (g.beamer === null) {
+        g.beamer = beamer;
+        changed = true;
       }
-      w.lastError = null;
-    } catch (e) {
-      if (e instanceof BeamerBusy) w.busyUntil = Date.now() + e.retryAfterMs;
-      else w.lastError = e instanceof Error ? e.message : String(e);
-    }
+      const best = this.deps.store
+        .byStamp(beamer, replayStamp(g.result.replay_id))
+        .sort((a, b) => Number(b.complete) - Number(a.complete) || b.storedAt - a.storedAt)[0];
+      if (!best || best.id === g.replay?.id) return;
+      this.bind(r, i, best);
+      changed = true;
+    });
+    return changed;
   }
 
-  /** The replay named by game i's replay_id: bind it, flagging a content mismatch. False if it does not parse. */
-  private take(station: number, r: SetRecord, i: number, name: string, data: Buffer): boolean {
-    let info: SlpInfo;
-    try {
-      info = parseSlp(data);
-    } catch (e) {
-      this.deps.audit.record({ type: 'archive_skip', station, replay: name, reason: String(e) });
-      return false;
-    }
+  private bind(r: SetRecord, i: number, copy: StoredReplay): void {
     const g = r.games[i]!;
-    if (!matches(g.result, info)) {
+    const stored = copy.complete ? this.deps.store.move(copy, 'raw') : copy;
+    let info: SlpInfo | null = null;
+    try {
+      info = parseSlp(readFileSync(this.deps.store.absolute(stored)));
+    } catch (e) {
       this.deps.audit.record({
-        type: 'archive_mismatch',
-        station,
-        setId: r.setId,
-        game: i + 1,
-        replay: name,
+        type: 'archive_skip',
+        station: r.station,
+        replay: stored.name,
+        reason: String(e),
       });
     }
-    const dir = join(this.deps.dir, '.raw', String(r.setId));
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, name), data);
-    g.replay = { file: name, lastFrame: info.lastFrame };
-    this.save(r);
+    const mismatch = info ? contentMismatch(g.result, info) : null;
+    g.replay = {
+      id: stored.id,
+      path: stored.path,
+      sha256: stored.sha256,
+      lastFrame: info?.lastFrame ?? null,
+      complete: stored.complete && info !== null,
+      mismatch,
+    };
     this.deps.audit.record({
       type: 'archive_bind',
-      station,
+      station: r.station,
       setId: r.setId,
       game: i + 1,
-      replay: name,
+      replay: stored.name,
+      complete: g.replay.complete,
     });
-    return true;
+    if (mismatch) {
+      this.deps.audit.record({
+        type: 'archive_mismatch',
+        station: r.station,
+        setId: r.setId,
+        game: i + 1,
+        replay: stored.name,
+        mismatch,
+      });
+    }
   }
 
-  // ---- finalizing ----
+  // ---- zips ----
 
-  private maybeFinalize(r: SetRecord): void {
-    if (r.endedAt === null || !this.sets.has(r.setId)) return;
-    const complete = r.games.every((g) => g.replay || g.result.replay_id === 0);
-    if (complete || Date.now() - r.endedAt >= this.finalizeTimeoutMs) this.finalize(r);
+  private maybeZip(r: SetRecord): void {
+    if (r.endedAt === null || r.games.length === 0) return;
+    if (!r.games.every((g) => g.replay?.complete)) return;
+    const of = r.games.map((g) => g.replay!.id).join(',');
+    if (r.zipOf === of) return;
+    this.writeZip(r, of);
   }
 
-  private finalize(r: SetRecord): void {
-    const missing = r.games.flatMap((g, i) => (g.replay ? [] : [i + 1]));
-    const fields = setFields(r, this.deps.event);
-    let result: ArchiveResult;
+  private writeZip(r: SetRecord, of: string): void {
+    const fields = setFields(r);
     try {
       const entries: ZipEntry[] = [];
       const used = new Set<string>();
-      const slots: GameRecord[] = [];
       r.games.forEach((g, i) => {
-        if (!g.replay) return;
-        const raw = readFileSync(join(this.deps.dir, '.raw', String(r.setId), g.replay.file));
+        const copy = this.deps.store.get(g.replay!.id);
+        const raw = readFileSync(
+          copy ? this.deps.store.absolute(copy) : join(this.deps.dir, ...g.replay!.path.split('/')),
+        );
         const names: (string | null)[] = [null, null, null, null];
         const ports = entrantPorts(g.result);
         if (ports) {
@@ -370,59 +406,37 @@ export class SetArchive {
           used,
         );
         entries.push({ name, data: withDisplayNames(raw, names), date: new Date(g.at) });
-        slots.push(g);
       });
-      if (entries.length === 0) {
-        result = {
-          setId: r.setId,
-          station: r.station,
-          file: null,
-          games: 0,
-          missing,
-          at: Date.now(),
-          note: 'no replays',
-        };
-      } else {
-        const ctx = context(r, this.deps.event, slots);
-        if (ctx) entries.unshift({ name: 'context.json', data: Buffer.from(JSON.stringify(ctx)) });
-        const zipName = unique(
+      const ctx = context(r, r.games);
+      if (ctx) entries.unshift({ name: 'context.json', data: Buffer.from(JSON.stringify(ctx)) });
+      const again = r.zip !== null;
+      const zipName =
+        r.zip ??
+        unique(
           fillName(this.deps.setTemplate, fields) + '.zip',
           new Set(readdirSync(this.deps.dir)),
         );
-        const tmp = join(this.deps.dir, `.${zipName}.tmp`);
-        writeFileSync(tmp, buildZip(entries));
-        renameSync(tmp, join(this.deps.dir, zipName));
-        const notes = [
-          ctx ? '' : 'no context.json (no L + R claim on a game)',
-          missing.length ? `missing game ${missing.join(', ')}` : '',
-        ]
-          .filter(Boolean)
-          .join('; ');
-        result = {
-          setId: r.setId,
-          station: r.station,
-          file: join(this.deps.dir, zipName),
-          games: slots.length,
-          missing,
-          at: Date.now(),
-          note: notes,
-        };
-      }
-    } catch (e) {
-      result = {
+      const tmp = join(this.deps.dir, `.${zipName}.tmp`);
+      writeFileSync(tmp, buildZip(entries));
+      renameSync(tmp, join(this.deps.dir, zipName));
+      r.zip = zipName;
+      r.zipOf = of;
+      this.save(r);
+      const result: ArchiveResult = {
         setId: r.setId,
         station: r.station,
-        file: null,
-        games: 0,
-        missing,
+        file: join(this.deps.dir, zipName),
+        games: r.games.length,
         at: Date.now(),
-        note: `failed: ${String(e)}`,
+        note: ctx ? '' : 'no context.json (no L + R claim on a game)',
+        again,
       };
+      this.results.push(result);
+      if (this.results.length > 100) this.results.shift();
+      this.deps.audit.record({ type: 'archive', ...result });
+    } catch (e) {
+      this.deps.audit.record({ type: 'archive_error', setId: r.setId, error: String(e) });
     }
-    this.results.push(result);
-    if (this.results.length > 100) this.results.shift();
-    this.deps.audit.record({ type: 'archive', ...result });
-    this.drop(r);
   }
 
   // ---- disk ----
@@ -433,37 +447,57 @@ export class SetArchive {
     writeFileSync(`${path}.tmp`, JSON.stringify(r));
     renameSync(`${path}.tmp`, path);
   }
-
-  private drop(r: SetRecord): void {
-    this.sets.delete(r.setId);
-    rmSync(join(this.deps.dir, '.sets', `${r.setId}.json`), { force: true });
-    rmSync(join(this.deps.dir, '.raw', String(r.setId)), { recursive: true, force: true });
-  }
 }
 
 // ---- pure helpers (exported for tests) ----
 
-/** The shape this relay writes to .sets: every game a GameRecord with its result. */
+/** The shape this relay writes to .sets: the event, and every game a GameRecord with its result and source. */
 function isSetRecord(x: unknown): x is SetRecord {
   if (typeof x !== 'object' || x === null) return false;
   const r = x as Partial<SetRecord>;
   return (
     typeof r.setId === 'number' &&
     typeof r.station === 'number' &&
+    typeof r.event === 'object' &&
+    r.event !== null &&
     Array.isArray(r.games) &&
     r.games.every(
       (g: Partial<GameRecord> | null) =>
-        typeof g === 'object' && g !== null && typeof g.result?.replay_id === 'number',
+        typeof g === 'object' &&
+        g !== null &&
+        typeof g.result?.replay_id === 'number' &&
+        typeof g.from === 'string',
     )
   );
 }
 
-/** A new report over the old list: a game keeps its replay and first-report time while its replay_id stays. */
-export function reported(old: GameRecord[], games: GameResult[], now = Date.now()): GameRecord[] {
+function label(r: SetRecord): string {
+  return `${r.set.roundShort} ${r.set.p1.tag} vs ${r.set.p2.tag}`;
+}
+
+/**
+ * A new report over the old list: a game keeps its beamer and first-report
+ * time while its replay_id stays, and its bound replay while the rest of its
+ * result stays too (a changed result binds again from the stored copy, so
+ * the content check sees the new one); a new or replayed game takes the
+ * reporting beamer.
+ */
+export function reported(
+  old: GameRecord[],
+  games: GameResult[],
+  from: string,
+  beamer: string | null,
+  now = Date.now(),
+): GameRecord[] {
   return games.map((result, i) => {
     const prev = old[i];
-    const same = prev !== undefined && prev.result.replay_id === result.replay_id;
-    return { at: same ? prev.at : now, result, replay: same ? prev.replay : null };
+    if (prev !== undefined && prev.result.replay_id === result.replay_id) {
+      const same = (Object.keys(result) as (keyof GameResult)[]).every(
+        (k) => prev.result[k] === result[k],
+      );
+      return { ...prev, result, replay: same ? prev.replay : null };
+    }
+    return { at: now, result, beamer, from, replay: null };
   });
 }
 
@@ -484,26 +518,32 @@ function entrantPorts(g: GameResult): [number, number] | null {
 }
 
 /**
- * The replay agrees with the report: the stage, and each entrant's character
- * and costume on their port, wherever the report knows them. Stocks are not
- * compared (the replay's end is not parsed).
+ * What in the replay disagrees with the report, or null: the stage, and each
+ * entrant's character, costume and (only when the game sent them: never for
+ * a hand-scored game, or one the ledge-grab limit or the tiebreak game
+ * decided) stocks on their port, wherever the report knows them.
  */
-export function matches(g: GameResult, info: SlpInfo): boolean {
-  if (g.stage !== 0 && g.stage !== info.stage) return false;
+export function contentMismatch(g: GameResult, info: SlpInfo): string | null {
+  if (humanPorts(info).length === 0) return 'no human player';
+  if (g.stage !== 0 && g.stage !== info.stage) return `stage ${info.stage}, reported ${g.stage}`;
   const ports = entrantPorts(g);
-  if (ports) {
-    const known: [number, number, number][] = [
-      [ports[0], g.p1_char, g.p1_costume],
-      [ports[1], g.p2_char, g.p2_costume],
-    ];
-    for (const [port, char, costume] of known) {
-      const p = info.ports.find((q) => q.port === port);
-      if (!p || p.type !== 0) return false;
-      if (char !== 0xff && p.character !== char) return false;
-      if (costume !== 0xff && p.costume !== costume) return false;
+  if (!ports) return null;
+  const sentStocks = g.p1_stocks !== 0xff && g.p2_stocks !== 0xff;
+  const known: [number, number, number, number, number][] = [
+    [1, ports[0], g.p1_char, g.p1_costume, g.p1_stocks],
+    [2, ports[1], g.p2_char, g.p2_costume, g.p2_stocks],
+  ];
+  for (const [entrant, port, char, costume, stocks] of known) {
+    const p = info.ports.find((q) => q.port === port);
+    if (!p || p.type !== 0) return `no player on port ${port + 1} (entrant ${entrant})`;
+    if (char !== 0xff && p.character !== char) return `port ${port + 1} character`;
+    if (costume !== 0xff && p.costume !== costume) return `port ${port + 1} costume`;
+    const left = info.stocks[port];
+    if (sentStocks && left !== null && left !== undefined && left !== stocks) {
+      return `port ${port + 1} ended with ${left} stock(s), reported ${stocks}`;
     }
   }
-  return humanPorts(info).length > 0;
+  return null;
 }
 
 function unique(name: string, used: Set<string>): string {
@@ -519,7 +559,8 @@ function localDate(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function setFields(r: SetRecord, ev: ArchiveEvent): SetFields {
+export function setFields(r: SetRecord): SetFields {
+  const ev = r.event;
   const w1 = r.games.filter((g) => g.result.winner_slot === 1).length;
   const w2 = r.games.length - w1;
   const p1 = r.set.p1.tag;
@@ -575,11 +616,8 @@ const BRACKET_TYPE: Record<string, number> = {
 };
 
 /** null when a game's ports are unknown (no L + R claim): then nobody knows whose port was whose. */
-export function context(
-  r: SetRecord,
-  ev: ArchiveEvent,
-  games: GameRecord[],
-): Record<string, unknown> | null {
+export function context(r: SetRecord, games: GameRecord[]): Record<string, unknown> | null {
+  const ev = r.event;
   if (games.length === 0 || games.some((g) => !entrantPorts(g.result))) return null;
   const tag = (entrant: number) => (entrant === 1 ? r.set.p1.tag : r.set.p2.tag);
   const wins = [0, 0];
@@ -659,7 +697,7 @@ export function context(
   };
 }
 
-/** True if any set record file exists; for tests. */
+/** True if the set's record file exists; for tests. */
 export function hasRecord(dir: string, setId: number): boolean {
   return existsSync(join(dir, '.sets', `${setId}.json`));
 }

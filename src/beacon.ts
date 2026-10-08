@@ -9,6 +9,9 @@
 // announced correctly on the next beacon. Send errors (an interface going
 // down between listing and sending) are counted and shown on the status page,
 // never fatal: the next tick tries again with the current interface list.
+// The error's code is kept too: on macOS, EHOSTUNREACH means Local Network
+// permission is off for LazyTO (status.ts says where to turn it on), and the
+// next tick after it is turned on works.
 
 import { createSocket, type Socket } from 'node:dgram';
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
@@ -59,8 +62,12 @@ export interface BeaconOptions {
 export interface BeaconStatus {
   targets: string[];
   sent: number;
+  /** When the first beacon went out: how long beamers have had to answer. */
+  firstSentAt: number | null;
   lastSentAt: number | null;
   lastError: string | null;
+  /** The last send error's errno code (EHOSTUNREACH, ENETUNREACH...); null after a send works. */
+  lastErrorCode: string | null;
 }
 
 export class RelayBeacon {
@@ -70,7 +77,14 @@ export class RelayBeacon {
   private readonly targets: () => string[];
   private readonly port: number;
   private readonly intervalMs: number;
-  private state: BeaconStatus = { targets: [], sent: 0, lastSentAt: null, lastError: null };
+  private state: BeaconStatus = {
+    targets: [],
+    sent: 0,
+    firstSentAt: null,
+    lastSentAt: null,
+    lastError: null,
+    lastErrorCode: null,
+  };
 
   constructor(opts: BeaconOptions) {
     this.payload = encodeRelayBeacon({
@@ -95,8 +109,9 @@ export class RelayBeacon {
       });
     });
     socket.setBroadcast(true);
-    socket.on('error', (e) => {
+    socket.on('error', (e: NodeJS.ErrnoException) => {
       this.state.lastError = e.message;
+      this.state.lastErrorCode = e.code ?? null;
     });
     this.socket = socket;
     this.tick();
@@ -127,17 +142,22 @@ export class RelayBeacon {
     this.state.targets = targets;
     if (targets.length === 0) {
       this.state.lastError = 'no IPv4 network interface (not on Wi-Fi / no cable?)';
+      this.state.lastErrorCode = null;
       return;
     }
     for (const host of targets) {
-      socket.send(this.payload, this.port, host, (err) => {
+      socket.send(this.payload, this.port, host, (err: NodeJS.ErrnoException | null) => {
         if (err) {
           this.state.lastError = `${host}: ${err.message}`;
+          this.state.lastErrorCode = err.code ?? null;
           return;
         }
+        const now = Date.now();
         this.state.sent++;
-        this.state.lastSentAt = Date.now();
+        this.state.firstSentAt ??= now;
+        this.state.lastSentAt = now;
         this.state.lastError = null;
+        this.state.lastErrorCode = null;
       });
     }
   }

@@ -5,10 +5,11 @@
 // not by carrying its SD card to a PC (first hardware run, 2026-09-30: the
 // module silently refused to load and only the SD log said why).
 //
-// Every datagram is relay_auth + telemetry_hdr + payload. A wrong or missing
-// secret is dropped and counted, exactly like a TCP request (decisions.md R16), so
-// nobody else on the venue Wi-Fi can paint a station's row. Nothing is ever
-// sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
+// Every datagram is relay_auth + telemetry_hdr + payload, from the station's
+// beamer. A wrong or missing secret is dropped and counted, exactly like a TCP
+// request (decisions.md R16), so nobody else on the venue Wi-Fi can paint a
+// station's row; so is a datagram from the newcomer of two beamers on one
+// station number (beamer.ts). Nothing is ever sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
 // lines cut to MAX_LINE_LEN.
 
 import { createSocket, type Socket } from 'node:dgram';
@@ -122,6 +123,8 @@ export interface TelemetryOptions {
   beaconPayload?: Uint8Array;
   /** Where the unicast answer goes; tests override it. */
   beaconReplyPort?: number;
+  /** Whether the beamer at `from` may report for `station`; false drops the datagram (beamer.ts). */
+  admit?: (station: number, from: string) => boolean;
 }
 
 export interface BeaconRequestStatus {
@@ -162,6 +165,7 @@ export class StationTelemetry {
   private readonly rows = new Map<number, StationTelemetryRow & { seq: number; partial: string }>();
   private refusals: TelemetryRefused | null = null;
   private beaconRequests: BeaconRequestStatus | null = null;
+  private duplicates = 0;
 
   constructor(private readonly opts: TelemetryOptions) {
     this.expectedSecret = Buffer.alloc(SECRET_LEN);
@@ -212,6 +216,11 @@ export class StationTelemetry {
     return this.refusals ? { ...this.refusals } : null;
   }
 
+  /** Datagrams dropped because another beamer holds their station number. */
+  duplicateDropped(): number {
+    return this.duplicates;
+  }
+
   /** Beacon requests answered so far (a station that could not hear the broadcast). */
   beaconRequested(): BeaconRequestStatus | null {
     return this.beaconRequests ? { ...this.beaconRequests } : null;
@@ -259,6 +268,10 @@ export class StationTelemetry {
         lastFrom: from,
         lastStation: hdr.station,
       };
+      return;
+    }
+    if (this.opts.admit && !this.opts.admit(hdr.station, from)) {
+      this.duplicates++;
       return;
     }
 

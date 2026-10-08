@@ -198,7 +198,7 @@ test('adminPassword: printable, 8-64, not the secret', () => {
   }
   expectProblems(
     { ...VALID, adminPassword: VALID.secret },
-    'adminPassword must differ from secret (the secret is on every SD card)',
+    'adminPassword must differ from secret (the secret is on every beamer)',
   );
 });
 

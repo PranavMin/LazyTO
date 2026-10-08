@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { App } from './app.js';
-import { DATA_DIR, HTTP_PORT, TCP_PORT } from './config.js';
+import { DATA_DIR, HTTP_PORT, TCP_PORT, defaultArchiveDir } from './config.js';
 
 /**
  * The root of the release bundle (/opt/lazyto), two levels above the built
@@ -29,6 +29,7 @@ function version(): string {
 async function main(): Promise<void> {
   const app = new App({
     dataDir: DATA_DIR,
+    archiveDir: defaultArchiveDir(),
     httpPort: HTTP_PORT,
     tcpPort: TCP_PORT,
     version: version(),

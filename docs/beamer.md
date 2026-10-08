@@ -18,25 +18,25 @@ The set archive works with either transport, as long as each station has a beame
 ## Set archive
 
 Protocol v2 ([protocol-v2.md](protocol-v2.md)) names each game's replay. Until the kiosk reads the
-record gate, it reports `replay_id` 0 for every game, and the archive binds no replay.
+record gate, it reports `replay_id` 0 for every game, and the archive binds no replay. How the
+relay collects and matches replays is in [architecture.md](architecture.md#replays).
 
 1. **The game names its replay.** Each `game_result` in a score report carries the entrants' CSS
    ports (from the L + R claim) and `replay_id`, the match's Slippi `gameStartTime`. The
    replay is `Game_<Wii MAC>_<replay_id as UTC YYYYMMDDTHHMMSS>.slp`. `CMD_GAME_START` is gone.
-2. **Finding the beamers.** A beamer multicasts a short JSON message on every game start and end,
-   naming itself "Station N" (set with its button). The relay takes the station's beamer address
-   from that message (`src/beamer.ts`). The beamer sync (protocol v2) will replace this.
-3. **Pulling replays.** While a station has a set, the relay polls its beamer's `GET /SLIPPI/`
-   every 5 s and downloads the file of each reported game it has no replay for yet. Other files
-   are left alone.
-4. **Matching.** By `replay_id` only. The replay's stage, characters and costumes are checked
-   against the report, and a mismatch is logged (`archive_mismatch`) but still bound
-   (`src/archive.ts`).
-5. **Writing the zip.** At `CMD_END_SET` the relay waits until every scored game with a replay id
-   has its replay, or 3 minutes have passed. Then it writes `<dataDir>/archive/<archiveSetName>.zip`, which contains:
+2. **Collecting.** Each beamer syncs with the relay (`CMD_BEAMER_SYNC`), and the relay downloads
+   every file it has, whatever set it belongs to, into the archive folder (`Documents/LazyTO` by
+   default): `raw/<station_id>/` for replays a game names, `unmatched/<station_id>/` for the rest.
+   The multicast announces and the 5 s index poll are gone.
+3. **Matching.** By `replay_id` on the beamer the game was reported through. The replay's stage,
+   characters, costumes and (when the game sent them) stocks are checked against the report, and
+   a mismatch is flagged (`archive_mismatch`) but still bound (`src/archive.ts`).
+4. **Writing the zip.** Once a set has ended and every game has a complete replay, the relay
+   writes `<archive folder>/<archiveSetName>.zip`, which contains:
    - `context.json`, written only when every game had an L + R claim;
    - one `<archiveGameName>.slp` per game, with the tags in the replay's display-name fields.
      Replay Reporter and Slippi Launcher show those names.
+   A set with a game that has no replay gets no zip until the replay arrives.
 
 Notes:
 
@@ -47,28 +47,28 @@ Notes:
   `My Bar 60 - WSF - Cody vs Zain.zip`.
 - **A game played again after an undo** replaces the first try in the zip: the new report
   carries the new match's id.
-- **The status page** has a "Beamers and set archives" section showing each beamer, the sets in
-  progress, and the zips written.
-- **State survives a relay restart.** It lives in `<dataDir>/archive/.sets` and `.raw`.
+- **The status page** has a "Beamers" section (one row per beamer, and "All replays collected:
+  safe to unplug beamers") and a "Replays" section (sets skipped for Lucky Stats, zips written).
+- **State survives a relay restart.** It lives in the archive folder: `.sets/`, `index.jsonl`,
+  `raw/`, `unmatched/`.
 
 ### Trying it without a beamer (Dolphin)
 
-Dolphin has no record gate, so under protocol v2 its games report `replay_id` 0 and this run
-writes no zip. The steps below are the v1 procedure, kept for when the Dolphin forwarder learns
-replay ids.
+Dolphin has no record gate, so under protocol v2 its games report `replay_id` 0 and no zip is
+written. Collection itself can be tried:
 
-1. Build the kiosk on this branch (`python kiosk/tools/build_module.py`) and run it in the
-   Dolphin development setup (docs/development.md).
-2. Run a fake beamer over Dolphin's replay folder:
+1. Run the relay against the fake start.gg with the network side on
+   (`npx tsx scripts/preview-status.ts --network`) and the development Dolphin against it
+   (docs/development.md).
+2. Run a fake beamer over Dolphin's replay folder, from this machine's LAN address (the one
+   Dolphin's requests come from):
 
    ```
-   npx tsx scripts/fake-beamer.ts --dir "%USERPROFILE%\Documents\Slippi" --station 0 --port 8085
+   npx tsx scripts/fake-beamer.ts --dir "%USERPROFILE%\Documents\Slippi" --address 192.168.1.67
    ```
 
-   Dolphin is station 0. If multicast does not loop back on your machine, add `--to 127.0.0.1`.
-3. Run the relay against the fake start.gg with the network side on and the fake beamer's
-   port: `startHarness({ network: true, beamerHttpPort: 8085 })` (`test/harness.ts`).
-4. Play a set: claim with L + R, play, end it. The zip appears in `<dataDir>/archive`.
+3. Play. Each finished replay is downloaded, answered held and acked on the next sync, and lands
+   in the archive folder's `unmatched/`; the status page shows the beamer's row.
 
 ## Beamer transport
 

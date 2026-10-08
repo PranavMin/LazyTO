@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { App } from '../src/app.js';
+import type { RelayGuard } from '../src/guard.js';
 import { configPath, saveConfig, type Config } from '../src/config.js';
 import type { RunningEvent } from '../src/relay.js';
 import type { StartggClient } from '../src/startgg.js';
@@ -46,8 +47,12 @@ export interface HarnessOptions {
   stream?: false;
   /** The bundle's wii/ folder, for the SD-card zips. */
   wiiDir?: string;
-  /** The stations' beamers' HTTP port, e.g. scripts/fake-beamer.ts's; default BEAMER_HTTP_PORT. */
-  beamerHttpPort?: number;
+  /** The archive folder; default <dataDir>/archive, never the real Documents/LazyTO. */
+  archiveDir?: string;
+  /** A stand-in free-disk figure for the archive's disk. */
+  freeBytes?: () => number;
+  /** The one-relay-per-network guard (guard.ts); none by default without the network side. */
+  guard?: RelayGuard;
 }
 
 export interface Harness {
@@ -58,8 +63,10 @@ export interface Harness {
   view: StatusView;
   statusUrl: string;
   dataDir: string;
-  /** A Wii at this station; stream is what it puts in start_set_req.stream. */
-  wii(station: number, stream?: 0 | 1): WiiClient;
+  /** A Wii at this station, behind a beamer at `beamer` (default 127.0.0.1); stream is what it puts in start_set_req.stream. */
+  wii(station: number, stream?: 0 | 1, beamer?: string): WiiClient;
+  /** The relay's TCP port, where beamers sync. */
+  tcpPort: number;
   /** Every audit record written so far, oldest first. */
   auditEvents(): Record<string, unknown>[];
   close(): Promise<void>;
@@ -101,7 +108,10 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     startggOptions: { retryDelaysMs: [0, 0], limits: opts.limits },
     clockSynced: () => true,
     wiiDir: opts.wiiDir,
-    beamerHttpPort: opts.beamerHttpPort,
+    archiveDir: opts.archiveDir ?? join(dataDir, 'archive'),
+    rawStore: opts.freeBytes ? { freeBytes: opts.freeBytes } : undefined,
+    stallMs: 2000,
+    guard: opts.guard,
   });
   await app.start();
   const m = app.current();
@@ -120,7 +130,9 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     view: m.view,
     statusUrl: `http://127.0.0.1:${app.web.address().port}`,
     dataDir,
-    wii: (station, stream = 0) => new WiiClient(port, station, stream, '127.0.0.1', secret),
+    wii: (station, stream = 0, beamer) =>
+      new WiiClient(port, station, stream, '127.0.0.1', secret, beamer),
+    tcpPort: port,
     auditEvents: () =>
       readFileSync(m.ev.audit.path, 'utf8')
         .split('\n')

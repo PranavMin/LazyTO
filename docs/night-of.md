@@ -32,6 +32,14 @@ its last action, and the result of its last start.gg call. ★ marks the stream 
 **Wii consoles table.** One row per Wii that has sent its log: when it was last heard, whether
 the kiosk module loaded, and its last log lines. "full log" shows everything since boot.
 
+**Beamers.** One row per beamer, from its syncs: its station number, its card (free space,
+replays still to collect and collected replays waiting to be erased), when it was last unplugged
+and its last erase. A beamer with no number says so: press its button.
+
+**Replays.** A game reported without a replay is flagged on its station. A finished set gets a zip
+for Lucky Stats in the archive folder (`Documents/LazyTO` unless you chose another) once every
+game has its replay; the sets still missing one are listed with the reason.
+
 **Lines below the tables:**
 
 | Line | Meaning |
@@ -40,6 +48,13 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | `Discovery beacon to <addresses>, last sent ... ago` | Normal. Where the relay is announcing itself. |
 | `N beacon request(s) answered` | Normal. A Wii couldn't hear the announcement and asked directly. |
 | `LazyTO <version> · this relay: <addresses>` | The installed version, and the page's addresses if `relay.local` doesn't open. |
+
+## End of the night
+
+1. Turn the Wiis off. Standby keeps the beamers powered, so they keep sending their replays.
+2. Wait for **All replays collected: safe to unplug beamers** on the status page.
+3. Unplug every beamer, or switch off the Wiis' power strip. At its next power-on each beamer
+   erases the replays the laptop has, and only those.
 
 ## When something goes wrong
 
@@ -58,7 +73,11 @@ the kiosk module loaded, and its last log lines. "full log" shows everything sin
 | Wii consoles: `(silent)` | That Wii stopped sending its log | It is off, rebooting, or lost the Wi-Fi. |
 | Wii consoles: `✗ crashed` | That Wii's game crashed | Power cycle it. Note the crash line for a bug report. |
 | Wii consoles: module not loaded, with a reason | The kiosk didn't start on that Wii | Unzip the station's zip onto the card again. |
-| `✗ N request(s) refused: wrong relay secret` or `✗ N Wii report(s) dropped for a wrong relay secret` | A card has the wrong `secret=`, or something else on the network is trying the relay. Nothing reached start.gg. | Copy `lazyto_station.txt` from the station's zip onto that card. If it is not one of your Wiis, tick "Make a new Wii secret" on the settings page, save, and remake the cards. |
+| `✗ N request(s) refused: wrong relay secret` or `✗ N Wii report(s) dropped for a wrong relay secret` | A beamer has the wrong `LAZYTO-SECRET`, or something else on the network is trying the relay. Nothing reached start.gg. | Write that beamer's `CONFIG/config.txt` again from the LazyTO app. If it is not one of your beamers, tick "Make a new Wii secret" on the settings page, save, and write every beamer's config again. |
+| `✗ Two beamers are station N` | A beamer was renumbered by a stray click (a click adds 1, holding takes 1 off). The station already playing keeps playing; the other Wii shows `TWO BEAMERS ARE STATION N`. | Set the newer beamer to its own number with its button. |
+| `✗ Another LazyTO relay is on this network` | A second laptop, or a Pi, runs LazyTO on the same Wi-Fi. Beamers follow whichever they heard last. | Close the other one. A relay that hears another does not start its event. |
+| `⚠ No beamer has reached this relay` | Beacons go out but no beamer answers. | Check the beamers are on this Wi-Fi, and that the laptop's firewall lets LazyTO in. |
+| Replays: `no zip for Lucky Stats yet` | A finished set has a game without a replay: not recorded, not collected yet, or an interrupted recording. | Nothing to do if it says "not collected yet": it zips when the replay arrives. The set's other replays stay in the archive folder. |
 | Station: `✗ assignStream failed` | The set started on start.gg but is not on stream | Assign it to the stream on start.gg, then ack. |
 | Station: `✗ reportBracketSet failed: start.gg rejected` | start.gg refused the score, usually because the set was changed by hand | Sort it out on start.gg, then ack. The station clears on its next refresh. |
 | Station: `✗ ... start.gg HTTP 5xx after 3 attempts` | start.gg had an outage. The relay already retried twice. | The player tries again later. Each report overwrites the last, so nothing is lost. |

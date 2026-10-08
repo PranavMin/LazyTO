@@ -21,6 +21,7 @@ the header. The rest of LazyTO stays GPL-2.0-only.
 | Poll flags | `PF_NO_NETWORK` 1, `PF_NO_CFG` 2, `PF_NO_SECRET` 4, `PF_NET_JOINING` 8, `PF_NO_BEAMER` 16 | 1, 2, 4 and 8 retired; `PF_NO_BEAMER` 16, `PF_NO_STATION` 32, `PF_NO_SECRET` 64 (the beamer's), `PF_RELAY_STALE` 128 |
 | `game_result` | 8 bytes | 16 bytes: `p1_port`, `p2_port`, `replay_id` |
 | `report_score_req`, `end_set_req` | 48 bytes | 88 bytes (`EXI_PAYLOAD_MAX`) |
+| `CMD_START_SET` reply | no payload | `start_set_resp` (88 bytes, laid out like `end_set_req`): the claim's games, so a rebooted Wii resumes its set with its games and replay ids (N3) |
 | `CMD_GAME_START` (6), `game_start_req` | the kiosk sent one per match | retired; 6 is never reused |
 | `CMD_BEAMER_SYNC` (8) | none | a beamer's own inventory and ack request, frozen under `BEAMER_SYNC_VERSION` 1 |
 | Relay statuses | up to `ST_BAD_SECRET` 8 | `ST_DUP_STATION` 9 |
@@ -79,6 +80,11 @@ Accept:
   The beacon the relay sends still carries `PROTO_VERSION`, for logs only.
 - **Telemetry** is `relay_auth` + `telemetry_hdr` (version 2) from the beamer's address, as before.
 
+`CMD_START_SET` (built): an `ST_OK` reply carries `start_set_resp`: `set_id`, `game_count` and the
+games the relay holds for the set. A set just started has none. A resume (the station's own set,
+asked for again after a reboot; also after a relay restart, from the audit log) returns the claim's
+games as last reported, ports and `replay_id` included.
+
 Game results (`game_result`, 16 bytes):
 
 - `p1_stocks` and `p2_stocks` both 0xFF: send no per-game score. That now also covers a game the
@@ -91,7 +97,7 @@ Game results (`game_result`, 16 bytes):
 - The content check (stage, characters and costumes on their ports) flags a mismatch and still
   binds: the id decides. Stocks are compared only when the game sent them.
 
-`ST_DUP_STATION` (not built yet):
+`ST_DUP_STATION` (built, `src/beamer.ts`):
 
 - Each beamer has its own address. The relay sees each Wii request and telemetry datagram arrive
   from a beamer's address, and the sync names the `station_id` behind each address.
@@ -101,9 +107,8 @@ Game results (`game_result`, 16 bytes):
   renumbered. The status page names both beamers.
 - A sync is never refused as a duplicate: collection goes on.
 
-`CMD_BEAMER_SYNC` (built: the version rule, the signature in `src/sync.ts`; not built: everything
-else, so `tcp.ts` answers `ST_INTERNAL` "beamer sync not handled yet" and no beamer acks
-anything):
+`CMD_BEAMER_SYNC` (built: `src/collect.ts`, `src/rawstore.ts`, the signature in `src/sync.ts`;
+`test/fake-beamer.ts` checks every reply as the firmware must):
 
 1. Check `relay_auth` like any request. A wrong secret gets `ST_BAD_SECRET` with no payload; the
    beamer acks nothing.
@@ -114,11 +119,15 @@ anything):
    (`card_mb - free_mb - used_mb`), the erase report, `storage`, `rssi`, `last_result`.
 4. Answer every file, `answers[i]` for `files[i]`, `answer_count = file_count`:
    - `SA_HELD` with the SHA-256 of the stored copy, only for a file the laptop has stored (temp
-     file, fsync, rename, re-read, hash) and can still stat;
-   - `SA_WANTED` for a file it will download now (one download at a time per beamer, resumed with
-     `X-Replay-From`, after a free-disk check);
-   - `SA_NOTED` otherwise (`SK_LIVE`, already downloading, the disk is full). A zero-filled answer
-     is `SA_NOTED`.
+     file, fsync, rename, re-read, hash), can still stat at its size (re-hashed when its last check
+     is over 24 h old), and whose hash equals the one the beamer reports (`hashed` = 1). A file the
+     beamer did not hash this boot gets no `SA_HELD`, which it could not ack: it is `SA_WANTED`
+     again, so the beamer serves and hashes it;
+   - `SA_WANTED` for a file it will download now (one download at a time per beamer, from the
+     sync's source address and `http_port`, resumed with `X-Replay-From`, after a free-disk check:
+     256 MB must stay free);
+   - `SA_NOTED` otherwise (`SK_LIVE`, already downloading, a name that is not a plain `.slp`, the
+     disk is full). A zero-filled answer is `SA_NOTED`.
 5. Put the laptop's `archive_id` in the reply. It is random, 16 bytes, kept in `archive.json` in
    the archive folder, and never all zero.
 6. Sign: `hmac` = HMAC-SHA256, keyed with the secret's 16 bytes as `relay_auth` carries them
@@ -136,6 +145,10 @@ anything):
   payload at 56 of `lbRelayExi_PollBuf` (asserted in `lbrelayexi.h`). A reply is at most
   `RELAY_REPLY_MAX` (4080) bytes.
 - **No `CMD_GAME_START`.** The kiosk sends nothing at match start.
+- **Resume (N3).** On `ST_OK` to `CMD_START_SET`, read `start_set_resp` (88 bytes after
+  `relay_resp`) and take its `game_count` games as the set's game list, with their `replay_id`s,
+  instead of starting at 0-0. A set just started has `game_count` 0. Without this a rebooted Wii's
+  next report overwrites the earlier games on start.gg.
 - **`game_result`.** Fill `p1_port` / `p2_port` from the L + R claim (the standings slots of the
   game just played), `NO_PORT` when unknown; `replay_id` from the record gate (below). A game the
   ledge-grab limit decided, and a tiebreak game, send both stocks 0xFF; a tiebreak game reports

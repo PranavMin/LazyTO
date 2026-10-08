@@ -1,127 +1,276 @@
-// beamer.ts -- finding each station's Slippi Beamer and reading its replays
-// (archive.ts uses both). A beamer (github.com/jendotpg/slippi-beamer) is a
-// USB stick on the Wii that records the Slippi replays and serves them over
-// Wi-Fi. Its API (API.md there, schema 1):
-//   - a UDP multicast to 239.255.42.1:34700 on every game start and finish,
-//     JSON with station_name ("Station 3", set with the beamer's button) and
-//     the replay's name;
-//   - GET /SLIPPI/ on port 80: {"files": [{"size", "url"}]}, the newest
-//     replays, never the one still being written;
-//   - GET /SLIPPI/<file>: the replay; 503 + Retry-After while another client
-//     is pulling.
-// The relay learns a station's beamer address from the announce's source
-// address and the station number in its name; there is no beamer config.
+// beamer.ts -- the stations' LazyTO beamers as the relay knows them
+// (docs/redesign.md: Station identity on the beamer, Collection).
+//
+// A beamer is the Wii's only link: every Wii request and telemetry datagram
+// arrives from its beamer's address, and the beamer's own sync
+// (CMD_BEAMER_SYNC, collect.ts) says which beamer, by its station_id (from
+// its MAC), is at that address, with its number, firmware, card and erase
+// report. There is no beamer config and no announce: a beamer is known from
+// its first sync.
+//
+// Duplicate numbers. The number is set with the beamer's button, so a stray
+// click can make two beamers "Station 3". The relay remembers which address
+// last used each station number (a request, a telemetry datagram or a sync
+// naming it). Another beamer using the same number within DUP_WINDOW_MS is the
+// newcomer: its Wii's requests get ST_DUP_STATION and its telemetry is
+// dropped, until one of them is renumbered or the holder falls silent. The
+// beamer already holding the station keeps playing. Two addresses are the
+// same beamer when their syncs named the same station_id (a DHCP renewal). A
+// sync is never refused: collection goes on, and the status page names both.
+//
+// Downloads (fetchReplay): GET /SLIPPI/<name> from the address the beamer
+// synced from, at the http_port it gave, resumed with X-Replay-From (the
+// beamer echoes the header when it honours it), gzip accepted, the
+// connection closed after each file. A transfer that stalls for stallMs is
+// aborted. One attempt: the beamer's next sync asks again.
 
-import { createSocket, type Socket } from 'node:dgram';
+import { openSync, closeSync, writeSync } from 'node:fs';
+import { BeamerSyncFlags, type BeamerSyncReq } from '../generated/wire.js';
 
-export const ANNOUNCE_GROUP = '239.255.42.1';
-export const ANNOUNCE_PORT = 34700;
-const HTTP_TIMEOUT_MS = 15_000;
+/** Two beamers on one number within this long are a duplicate (the holder sends telemetry every 5 s). */
+export const DUP_WINDOW_MS = 15_000;
+/** A duplicate stays on the status page this long after its last refusal. */
+export const DUP_SHOWN_MS = 60_000;
+/** A station number that moved to another beamer is noted on the status page this long. */
+export const HANDOVER_SHOWN_MS = 10 * 60_000;
+/** A sync refused for its secret stays on the status page this long. */
+const WRONG_SECRET_SHOWN_MS = 5 * 60_000;
 
-export interface BeamerInfo {
+/** A 16-byte station_id or archive_id as lower-case hex. */
+export function hexId(b: Uint8Array): string {
+  return Buffer.from(b).toString('hex');
+}
+
+/** A station_id as a beamer's /status shows it: a UUID. */
+export function uuid(hex: string): string {
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+export interface EraseReport {
+  erased: number;
+  erasedEmpty: number;
+  eraseMs: number;
+  eraseLeft: number;
+  failed: boolean;
+  /** When the relay first heard of it (the cold boot itself is uptime_s before). */
+  at: number;
+}
+
+export interface BeamerRow {
+  stationId: string; // hex
   address: string;
-  stationId: string; // the beamer's own uuid
-  stationName: string;
-  lastSeen: number;
+  httpPort: number;
+  /** The number on its screen; null while unset (no SF_STATION_SET). */
+  station: number | null;
+  /** The number before the last change, and when it changed: the status page notes a renumbered beamer. */
+  previousStation: number | null;
+  renumberedAt: number | null;
+  fwBuild: number;
+  uptimeS: number;
+  /** When this boot of the beamer began ("not unplugged since"). */
+  bootAt: number;
+  freeMb: number;
+  cardMb: number;
+  usedMb: number;
+  onCard: number;
+  toCollect: number;
+  toErase: number;
+  empty: number;
+  incomplete: number;
+  acks: number;
+  /** The last cold boot's erase report. */
+  erase: EraseReport | null;
+  acksDropped: boolean;
+  more: boolean;
+  storage: number; // BeamerStorage
+  lastResult: number; // BeamerResult
+  rssi: number; // -dBm; 0 unknown
+  firstSeenAt: number;
+  lastSyncAt: number;
+  syncs: number;
 }
 
-export interface AnnounceEvent {
+export interface Duplicate {
   station: number;
-  event: string; // "game_started" | "game_finished"
-  replay: string | null; // file name
+  /** The beamer that holds the number and keeps playing. */
+  holder: { address: string; stationId: string | null };
+  /** The beamer refused while the holder is active. */
+  newcomer: { address: string; stationId: string | null };
+  firstAt: number;
+  lastAt: number;
+  /** Wii requests and telemetry datagrams refused. */
+  refused: number;
 }
 
-/** "Station 12" -> 12; anything else (a renamed beamer) -> null. */
-export function stationNumber(stationName: string): number | null {
-  const m = /^Station (\d{1,5})$/.exec(stationName.trim());
-  return m ? Number(m[1]) : null;
+export interface WrongSecret {
+  address: string;
+  count: number;
+  lastAt: number;
 }
 
-/** Listens for beamer announces and remembers which address is which station. */
-export class BeamerDirectory {
-  private socket: Socket | null = null;
-  private readonly beamers = new Map<number, BeamerInfo>();
-  private unnamed = 0; // announces whose station_name is not "Station N"
-  private bad = 0; // datagrams that are not schema-1 JSON
+/** A station number taken over by another beamer after its holder fell silent (a beamer replaced mid-event). */
+export interface Handover {
+  station: number;
+  before: { address: string; stationId: string | null };
+  after: { address: string; stationId: string | null };
+  at: number;
+}
 
-  constructor(
-    private readonly opts: {
-      port: number; // ANNOUNCE_PORT in production; tests pass 0
-      onAnnounce?: (e: AnnounceEvent) => void;
-      joinGroup?: boolean; // false in tests: they send unicast
-    },
-  ) {}
+export class BeamerRegistry {
+  private readonly rows = new Map<string, BeamerRow>(); // by station_id
+  private readonly ids = new Map<string, string>(); // address -> station_id, from syncs
+  private readonly owners = new Map<number, { address: string; lastAt: number }>(); // by station number
+  private readonly dups = new Map<string, Duplicate>(); // by `${station}|${newcomer address}`
+  private readonly wrongSecrets = new Map<string, WrongSecret>(); // by address
+  private readonly handovers = new Map<number, Handover>(); // by station number, the latest
+  private lastContactAt: number | null = null;
 
-  async start(): Promise<void> {
-    const socket = createSocket({ type: 'udp4', reuseAddr: true });
-    socket.on('message', (msg, rinfo) => this.onMessage(msg, rinfo.address));
-    socket.on('error', (e) => console.error(`beamer announce socket: ${e.message}`));
-    await new Promise<void>((resolve, reject) => {
-      socket.once('error', reject);
-      socket.bind(this.opts.port, () => {
-        socket.removeListener('error', reject);
-        resolve();
-      });
-    });
-    if (this.opts.joinGroup !== false) socket.addMembership(ANNOUNCE_GROUP);
-    this.socket = socket;
-  }
-
-  port(): number {
-    return this.socket?.address().port ?? 0;
-  }
-
-  async stop(): Promise<void> {
-    const s = this.socket;
-    this.socket = null;
-    if (s) await new Promise<void>((resolve) => s.close(() => resolve()));
-  }
-
-  get(station: number): BeamerInfo | undefined {
-    return this.beamers.get(station);
-  }
-
-  /** For the status page. */
-  status(): { beamers: [number, BeamerInfo][]; unnamed: number; bad: number } {
-    return {
-      beamers: [...this.beamers.entries()].sort((a, b) => a[0] - b[0]),
-      unnamed: this.unnamed,
-      bad: this.bad,
-    };
-  }
-
-  /** Exposed for tests; the socket calls it. */
-  onMessage(msg: Buffer, from: string): void {
-    let j: {
-      schema?: unknown;
-      event?: unknown;
-      station_id?: unknown;
-      station_name?: unknown;
-      replay?: { name?: unknown };
-    };
-    try {
-      j = JSON.parse(msg.toString('utf8'));
-    } catch {
-      this.bad++;
-      return;
-    }
-    if (j.schema !== 1 || typeof j.station_name !== 'string' || typeof j.event !== 'string') {
-      this.bad++;
-      return;
-    }
-    const station = stationNumber(j.station_name);
-    if (station === null) {
-      this.unnamed++;
-      return;
-    }
-    this.beamers.set(station, {
+  /** A verified sync from `from`: the beamer's row, as it now stands. */
+  synced(req: BeamerSyncReq, from: string, now = Date.now()): BeamerRow {
+    const stationId = hexId(req.station_id);
+    this.ids.set(from, stationId);
+    this.lastContactAt = now;
+    const station = req.flags & BeamerSyncFlags.SF_STATION_SET ? req.station : null;
+    const prev = this.rows.get(stationId);
+    const coldBoot = (req.flags & BeamerSyncFlags.SF_COLD_BOOT) !== 0;
+    const bootAt = now - req.uptime_s * 1000;
+    // A new boot is one that began after the last one we know of (two seconds' slack for rounding).
+    const newBoot = !prev || bootAt > prev.bootAt + 2000;
+    const erase: EraseReport | null =
+      coldBoot && (newBoot || !prev?.erase)
+        ? {
+            erased: req.erased,
+            erasedEmpty: req.erased_empty,
+            eraseMs: req.erase_ms,
+            eraseLeft: req.erase_left,
+            failed: (req.flags & BeamerSyncFlags.SF_ERASE_FAILED) !== 0,
+            at: now,
+          }
+        : (prev?.erase ?? null);
+    const renumbered = prev !== undefined && prev.station !== station;
+    const row: BeamerRow = {
+      stationId,
       address: from,
-      stationId: typeof j.station_id === 'string' ? j.station_id : '',
-      stationName: j.station_name,
-      lastSeen: Date.now(),
+      httpPort: req.http_port,
+      station,
+      previousStation: renumbered ? prev.station : (prev?.previousStation ?? null),
+      renumberedAt: renumbered ? now : (prev?.renumberedAt ?? null),
+      fwBuild: req.fw_build,
+      uptimeS: req.uptime_s,
+      bootAt: newBoot || !prev ? bootAt : prev.bootAt,
+      freeMb: req.free_mb,
+      cardMb: req.card_mb,
+      usedMb: req.used_mb,
+      onCard: req.on_card,
+      toCollect: req.to_collect,
+      toErase: req.to_erase,
+      empty: req.empty,
+      incomplete: req.incomplete,
+      acks: req.acks,
+      erase,
+      acksDropped: (req.flags & BeamerSyncFlags.SF_ACKS_DROPPED) !== 0,
+      more: (req.flags & BeamerSyncFlags.SF_MORE) !== 0,
+      storage: req.storage,
+      lastResult: req.last_result,
+      rssi: req.rssi,
+      firstSeenAt: prev?.firstSeenAt ?? now,
+      lastSyncAt: now,
+      syncs: (prev?.syncs ?? 0) + 1,
+    };
+    this.rows.set(stationId, row);
+    // A sync naming a number keeps (or takes) it, and is never refused.
+    if (station !== null) this.use(station, from, now);
+    return row;
+  }
+
+  /** The station_id of the beamer that last synced from this address. */
+  stationIdAt(address: string): string | undefined {
+    return this.ids.get(address);
+  }
+
+  row(stationId: string): BeamerRow | undefined {
+    return this.rows.get(stationId);
+  }
+
+  /** Every beamer that has synced, by station number (unset last), then station_id. */
+  list(): BeamerRow[] {
+    return [...this.rows.values()].sort(
+      (a, b) =>
+        (a.station ?? Infinity) - (b.station ?? Infinity) || a.stationId.localeCompare(b.stationId),
+    );
+  }
+
+  /**
+   * A Wii request or telemetry datagram for `station` from the beamer at
+   * `from`. False for the newcomer of a duplicate: the caller refuses it.
+   */
+  admit(station: number, from: string, now = Date.now()): boolean {
+    this.lastContactAt = now;
+    return this.use(station, from, now);
+  }
+
+  /** Duplicates refused within DUP_SHOWN_MS, lowest station first. */
+  duplicates(now = Date.now()): Duplicate[] {
+    return [...this.dups.values()]
+      .filter((d) => now - d.lastAt < DUP_SHOWN_MS)
+      .sort((a, b) => a.station - b.station);
+  }
+
+  /** A sync refused for a wrong or missing secret (tcp.ts). */
+  wrongSecret(from: string, now = Date.now()): void {
+    const w = this.wrongSecrets.get(from);
+    this.wrongSecrets.set(from, { address: from, count: (w?.count ?? 0) + 1, lastAt: now });
+  }
+
+  /** Beamers whose syncs were refused for their secret recently. */
+  wrongSecretBeamers(now = Date.now()): WrongSecret[] {
+    return [...this.wrongSecrets.values()].filter((w) => now - w.lastAt < WRONG_SECRET_SHOWN_MS);
+  }
+
+  /** Station numbers that moved to another beamer within `withinMs`. */
+  handedOver(now = Date.now(), withinMs = HANDOVER_SHOWN_MS): Handover[] {
+    return [...this.handovers.values()]
+      .filter((h) => now - h.at < withinMs)
+      .sort((a, b) => a.station - b.station);
+  }
+
+  /** When anything last came from a beamer: a sync, a Wii request or telemetry; null if never. */
+  lastContact(): number | null {
+    return this.lastContactAt;
+  }
+
+  /** Whether two addresses are one beamer (the same one, or syncs from both named the same station_id). */
+  private same(a: string, b: string): boolean {
+    if (a === b) return true;
+    const ia = this.ids.get(a);
+    return ia !== undefined && ia === this.ids.get(b);
+  }
+
+  private use(station: number, from: string, now: number): boolean {
+    const owner = this.owners.get(station);
+    if (!owner || this.same(owner.address, from) || now - owner.lastAt > DUP_WINDOW_MS) {
+      if (owner && !this.same(owner.address, from)) {
+        this.handovers.set(station, {
+          station,
+          before: { address: owner.address, stationId: this.ids.get(owner.address) ?? null },
+          after: { address: from, stationId: this.ids.get(from) ?? null },
+          at: now,
+        });
+      }
+      this.owners.set(station, { address: from, lastAt: now });
+      return true;
+    }
+    const key = `${station}|${from}`;
+    const d = this.dups.get(key);
+    this.dups.set(key, {
+      station,
+      holder: { address: owner.address, stationId: this.ids.get(owner.address) ?? null },
+      newcomer: { address: from, stationId: this.ids.get(from) ?? null },
+      firstAt: d?.firstAt ?? now,
+      lastAt: now,
+      refused: (d?.refused ?? 0) + 1,
     });
-    const replay = typeof j.replay?.name === 'string' ? j.replay.name : null;
-    this.opts.onAnnounce?.({ station, event: j.event, replay });
+    return false;
   }
 }
 
@@ -132,43 +281,75 @@ export class BeamerBusy extends Error {
   }
 }
 
-/** HTTP reads from one beamer. */
-export class BeamerClient {
-  constructor(private readonly base: string) {} // "http://10.0.0.7:80"
-
-  static at(address: string, port: number): BeamerClient {
-    return new BeamerClient(`http://${address}:${port}`);
+/** The beamer has less of the file than the resume asked for (416): start again from 0. */
+export class ResumePastEnd extends Error {
+  constructor() {
+    super('the beamer has less of this file than was already downloaded');
+    this.name = 'ResumePastEnd';
   }
+}
 
-  /** Replay file names the beamer serves now, oldest first as listed. */
-  async list(): Promise<{ name: string; size: number }[]> {
-    const res = await this.get('/SLIPPI/');
-    const j = (await res.json()) as {
-      schema?: number;
-      files?: { size?: unknown; url?: unknown }[];
-    };
-    if (j.schema !== 1 || !Array.isArray(j.files)) throw new Error('beamer index: not schema 1');
-    const out: { name: string; size: number }[] = [];
-    for (const f of j.files) {
-      if (typeof f.url !== 'string' || typeof f.size !== 'number') continue;
-      const name = f.url.split('/').pop() ?? '';
-      if (/^[A-Za-z0-9_.-]+\.slp$/.test(name)) out.push({ name, size: f.size });
-    }
-    return out;
-  }
+const CONNECT_TIMEOUT_MS = 5000;
 
-  async fetchReplay(name: string): Promise<Buffer> {
-    const res = await this.get(`/SLIPPI/${encodeURIComponent(name)}`);
-    return Buffer.from(await res.arrayBuffer());
-  }
-
-  private async get(path: string): Promise<Response> {
-    const res = await fetch(this.base + path, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
+/**
+ * Download a replay into `partPath`, resuming at `from` bytes (the part's
+ * size). Appends when the beamer honours the resume (it echoes
+ * X-Replay-From), else rewrites the part from the start. Throws on any
+ * failure; the part keeps what arrived.
+ */
+export async function fetchReplay(
+  url: string,
+  partPath: string,
+  from: number,
+  stallMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  const ctl = new AbortController();
+  const abort = () => ctl.abort();
+  signal?.addEventListener('abort', abort);
+  let timer = setTimeout(abort, CONNECT_TIMEOUT_MS);
+  const stall = () => {
+    clearTimeout(timer);
+    timer = setTimeout(abort, stallMs);
+  };
+  try {
+    // Connection: close. A beamer has two TCP connections in all and, in LazyTO
+    // mode, one HTTP socket; a kept-alive download would hold one that its
+    // Wii's next request to the relay needs.
+    const headers: Record<string, string> = { 'accept-encoding': 'gzip', connection: 'close' };
+    if (from > 0) headers['x-replay-from'] = String(from);
+    const res = await fetch(url, { headers, signal: ctl.signal });
+    stall();
     if (res.status === 503 || res.status === 409) {
+      await res.body?.cancel();
       const after = Number(res.headers.get('retry-after'));
       throw new BeamerBusy(Number.isFinite(after) && after > 0 ? after * 1000 : 5000);
     }
-    if (!res.ok) throw new Error(`beamer ${path}: HTTP ${res.status}`);
-    return res;
+    if (res.status === 416) {
+      await res.body?.cancel();
+      throw new ResumePastEnd();
+    }
+    if (!res.ok || !res.body) {
+      await res.body?.cancel();
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const resumed = from > 0 && res.headers.get('x-replay-from') === String(from);
+    const fd = openSync(partPath, resumed ? 'a' : 'w');
+    try {
+      for await (const chunk of res.body) {
+        writeSync(fd, chunk as Uint8Array);
+        stall();
+      }
+    } finally {
+      closeSync(fd);
+    }
+  } catch (e) {
+    if (ctl.signal.aborted && !(e instanceof BeamerBusy) && !(e instanceof ResumePastEnd)) {
+      throw new Error(signal?.aborted ? 'download stopped' : 'download stalled');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 }

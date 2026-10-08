@@ -16,11 +16,11 @@ start.gg is TLS-only, and neither Melee nor the Nintendont kernel has a TLS stac
 
 A rebooted Wii asks the relay, which offers its set first. No persistence code in the game or kernel.
 
-### One config file per Wii
+### Every SD card is the same
 
-**`sd:/lazyto_station.txt` has `station` and `secret`. Nothing else.**
+**The station number and the secret live on the beamer: the number set with its button, the secret in its `CONFIG/config.txt`. The card has no station file.** (2026-10-07, redesign D3)
 
-Every card is identical apart from the station number. The relay decides which sets go on stream by station (`streamStation`), so a card and the relay can never disagree about the stream. The file was `tournament.cfg` with a `stream=` line until 2026-10-02, and the module was `tournament.bin`: the card's files now carry the `lazyto_` prefix of `lazyto_nincfg.bin`, so a TO sees which files are LazyTO's and what each one is.
+One zip for every Wii, and the station is the dongle at the table. The relay decides which sets go on stream by station (`streamStation`), so a card and the relay can never disagree about the stream. Until 2026-10-07 each card had `lazyto_station.txt` with `station=` and `secret=` (before 2026-10-02, `tournament.cfg` with a `stream=` line).
 
 ### Fixed-size big-endian structs
 
@@ -66,9 +66,9 @@ The relay and the Wii files can never come from different commits, and the loade
 
 ### SD cards from the relay
 
-**The status page makes each station's SD card as a zip: the bundle's Wii files, the card's `lazyto_station.txt` and the loader's settings.** (2026-10-02)
+**The status page makes the SD card as a zip: the bundle's Wii files and the loader's settings, with Slippi replays and Auto Boot on, Network off and the game on SD.** (2026-10-02; one zip for every Wii since 2026-10-07)
 
-A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
+A card then needs only unzipping and the Melee image, and always matches the relay's version. Replays on with the game on SD is what starts USB, and with it the beamer, in the kernel. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 
 ### The protocol is MIT
 
@@ -87,6 +87,30 @@ Beamers have no over-the-air update. With a version check, every protocol bump w
 **Each reported game carries its replay's id, the match's Slippi `gameStartTime`, which names the file on the beamer. `CMD_GAME_START` and the content matcher are gone.** (2026-10-07, protocol v2)
 
 The matcher bound each replay to the earliest game start with the same ports, characters, costumes and stage, and it needed a fire-and-forget request on every match's first frame. With only set games recorded, game 1's replay would have bound to an unrecorded handwarmer's game start. The kiosk learns the id from the record gate, a 64-byte slot it shares with the kernel ([protocol-v2.md](protocol-v2.md)). The content check stays, as a check that flags a mismatch.
+
+### Replays are collected by the beamer's sync and kept on the laptop
+
+**Each beamer syncs with the relay, which downloads every file it has and answers each one held, wanted or noted in a reply signed with the secret. Raw copies stay in the archive folder (`Documents/LazyTO` by default) until the TO deletes them; strays and incomplete recordings go to `unmatched/`.** (2026-10-07, redesign D15, D16)
+
+A beamer erases only what the laptop holds, and the laptop can say "held" only while it has the file. A file nobody collects can never be erased, and a stray may be the only copy of a game. The signature keeps anyone else on the Wi-Fi from making a beamer erase replays nobody kept; a new archive folder has a new id, so the beamers drop their acks and collect again.
+
+### A set with a missing replay gets no zip
+
+**A finished set is zipped for Lucky Stats only when every game has a complete replay. Otherwise the status page lists it, and a replay that arrives later, even at a later event, zips it then.** (2026-10-07, redesign D12)
+
+Lucky Stats probably rejects a set whose replays do not cover its games (`game_count_mismatch`).
+
+### Two beamers on one number: the newcomer is refused
+
+**When a second beamer uses a station number another beamer used in the last 15 s, its Wii gets `ST_DUP_STATION` and its telemetry is dropped. The beamer already holding the station keeps playing; the status page names both.** (2026-10-07, redesign D17)
+
+A stray click renumbers a beamer. Refusing both would stop a set in progress; refusing only the newcomer keeps it going until the TO renumbers one.
+
+### One LazyTO per network
+
+**A relay that hears another relay's beacon does not start its event.** (2026-10-07)
+
+A beamer follows the last beacon it heard, so two relays on one Wi-Fi would split the stations and both report to start.gg.
 
 ## Risks and questions (R1-R17)
 

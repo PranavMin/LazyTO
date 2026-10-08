@@ -16,14 +16,15 @@
 // frozen copy of an old file). Unknown fields are ignored and reported, so a
 // field a later build dropped does no harm either.
 //
-// The set archive (archive.ts, experimental): archiveSetName and
-// archiveGameName are the file-name templates (names.ts lists their
-// {fields}; an unknown field is a settings error). The zips go to
-// <dataDir>/archive, and the stations' beamers serve replays on
-// BEAMER_HTTP_PORT; neither is a setting.
+// The set archive (archive.ts): archiveSetName and archiveGameName are the
+// file-name templates (names.ts lists their {fields}; an unknown field is a
+// settings error). The archive folder (zips, raw replays) is the app's
+// (AppOptions.archiveDir, default defaultArchiveDir()); the beamers' HTTP
+// port comes from their syncs. Neither is a setting here.
 
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { SET_FORMATS, type SetFormat } from './format.js';
 import { GAME_FIELDS, SET_FIELDS, unknownFields } from './names.js';
@@ -32,10 +33,17 @@ import { GAME_FIELDS, SET_FIELDS, unknownFields } from './names.js';
 export const STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha';
 export const TCP_PORT = 29470;
 export const HTTP_PORT = 29473;
-/** Where every Slippi Beamer serves its replays (beamer.ts). */
-export const BEAMER_HTTP_PORT = 80;
 /** Settings, audit logs and Wii logs. LAZYTO_DIR overrides it on a development machine. */
 export const DATA_DIR = process.env.LAZYTO_DIR ?? '/var/lib/lazyto';
+
+/**
+ * The archive folder by default: Documents/LazyTO, visible and easy to find
+ * (docs/redesign.md, D16). Raw replays stay there until the TO deletes the
+ * event, about 3 GB a night for 12 stations.
+ */
+export function defaultArchiveDir(home: string = homedir()): string {
+  return join(home, 'Documents', 'LazyTO');
+}
 
 export function configPath(dataDir: string): string {
   return join(dataDir, 'config.json');
@@ -76,9 +84,9 @@ const FIELDS: {
     check: (v) =>
       typeof v === 'string' && v.trim().length > 0 ? null : 'must be a non-empty string',
   },
-  // Letters, digits, - and _ only: it is written onto every SD card as
-  // secret=<value> and must survive the kernel's key=value parser. 8 to
-  // SECRET_LEN (16) characters.
+  // Letters, digits, - and _ only: it is written into every beamer's
+  // CONFIG/config.txt as LAZYTO-SECRET and must survive the firmware's
+  // key = value parser. 8 to SECRET_LEN (16) characters.
   secret: {
     check: (v) =>
       typeof v === 'string' && SECRET_RE.test(v) ? null : 'must be 8-16 letters, digits, - or _',
@@ -165,7 +173,7 @@ export function parseConfig(raw: unknown): ParsedConfig {
     problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
   }
   if (typeof obj.adminPassword === 'string' && obj.adminPassword === obj.secret) {
-    problems.push('adminPassword must differ from secret (the secret is on every SD card)');
+    problems.push('adminPassword must differ from secret (the secret is on every beamer)');
   }
   if (problems.length > 0) return { ok: false, problems };
   const ignored = Object.keys(obj).filter((k) => !(k in FIELDS));

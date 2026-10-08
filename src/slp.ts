@@ -19,6 +19,12 @@
 export const RAW_OFFSET = 15;
 const CMD_EVENT_PAYLOADS = 0x35;
 const CMD_GAME_START = 0x36;
+const CMD_POST_FRAME = 0x38;
+const CMD_GAME_END = 0x39;
+// Post-frame update: player index at 0x05, is-follower at 0x06, stocks remaining at 0x21.
+const POST_PLAYER = 0x05;
+const POST_FOLLOWER = 0x06;
+const POST_STOCKS = 0x21;
 const DISPLAY_NAME_OFFSET = 0x1a5;
 const DISPLAY_NAME_LEN = 31;
 const DISPLAY_NAME_CHARS = 15; // the in-game limit; full-width characters take 2 bytes each
@@ -37,6 +43,14 @@ export interface SlpInfo {
   lastFrame: number | null; // from the metadata; null when the file has none
   gameStartOffset: number; // byte offset of the Game Start command in the file
   gameStartSize: number; // payload size, without the command byte
+  /**
+   * Finished: the header's raw length is set and covered by the file, and
+   * the events end with a Game End. An interrupted recording (raw length 0,
+   * or cut short) is not, and is no replay for Lucky Stats.
+   */
+  complete: boolean;
+  /** Stocks remaining per port (0-3) at the last post-frame update; null for a port with none. */
+  stocks: (number | null)[];
 }
 
 export class SlpError extends Error {
@@ -82,6 +96,7 @@ export function parseSlp(buf: Buffer): SlpInfo {
     });
   }
   const lf = buf.lastIndexOf(LAST_FRAME_KEY);
+  const events = walkEvents(buf, payloadsSize);
   return {
     version: [buf[gs + 1]!, buf[gs + 2]!, buf[gs + 3]!],
     stage: buf.readUInt16BE(gs + 0x13),
@@ -92,7 +107,40 @@ export function parseSlp(buf: Buffer): SlpInfo {
         : null,
     gameStartOffset: gs,
     gameStartSize,
+    ...events,
   };
+}
+
+/**
+ * Walk the raw element's events by the Event Payloads sizes: whether it ends
+ * with a Game End inside a raw length the file covers, and each port's last
+ * stock count. Stops at an unknown command (a cut-off file).
+ */
+function walkEvents(
+  buf: Buffer,
+  payloadsSize: number,
+): { complete: boolean; stocks: (number | null)[] } {
+  const sizes = new Map<number, number>();
+  for (let i = RAW_OFFSET + 2; i + 2 < RAW_OFFSET + 1 + payloadsSize; i += 3) {
+    sizes.set(buf[i]!, buf.readUInt16BE(i + 1));
+  }
+  const rawLength = buf.readUInt32BE(RAW_OFFSET - 4);
+  const covered = rawLength > 0 && RAW_OFFSET + rawLength <= buf.length;
+  const end = covered ? RAW_OFFSET + rawLength : buf.length;
+  const stocks: (number | null)[] = [null, null, null, null];
+  let gameEnd = false;
+  let pos = RAW_OFFSET + 1 + payloadsSize;
+  while (pos < end) {
+    const size = sizes.get(buf[pos]!);
+    if (size === undefined || pos + 1 + size > end) break;
+    if (buf[pos] === CMD_GAME_END) gameEnd = true;
+    if (buf[pos] === CMD_POST_FRAME && size >= POST_STOCKS) {
+      const port = buf[pos + POST_PLAYER]!;
+      if (port < 4 && buf[pos + POST_FOLLOWER] === 0) stocks[port] = buf[pos + POST_STOCKS]!;
+    }
+    pos += 1 + size;
+  }
+  return { complete: covered && gameEnd, stocks };
 }
 
 /** Human ports (player type 0), in port order. */
