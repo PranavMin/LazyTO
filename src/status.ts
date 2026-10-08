@@ -470,8 +470,12 @@ function renderReplays(v: StatusView, as: ReturnType<StatusView['archive']['stat
   } catch {
     // statfs unavailable: say nothing
   }
+  const err = as.lastError;
+  const archiveError = err
+    ? `<p class="warn">✗ The archive could not save${err.setId !== null ? ` set ${err.setId}` : ''}, ${age(err.at)} ago: ${escapeHtml(err.error)}. start.gg has every result; check the archive folder.</p>`
+    : '';
   return `<h2>Replays</h2>
-${skipped}${inProgress}${recent || '<p class="muted">no set zipped yet</p>'}
+${archiveError}${skipped}${inProgress}${recent || '<p class="muted">no set zipped yet</p>'}
 ${as.unmatched ? `<p class="muted">${as.unmatched} stray or incomplete recording(s) kept in unmatched/.</p>` : ''}
 <p class="muted small">Archive folder: ${escapeHtml(v.store.dir)}${free}. A set is zipped for Lucky Stats once every game has its replay.</p>`;
 }

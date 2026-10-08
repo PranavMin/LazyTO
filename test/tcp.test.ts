@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -621,4 +621,36 @@ test('CMD_BEAMER_SYNC speaks BEAMER_SYNC_VERSION, not PROTO_VERSION, and makes n
   } finally {
     await env.close();
   }
+});
+
+test('an archive that cannot write fails no Wii request: START_SET, REPORT_SCORE and END_SET still answer ST_OK', async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  // The set records' folder is gone and a file stands in its place (a
+  // deleted or moved archive folder, a full disk, a rename Windows refuses):
+  // every write of a set record fails.
+  const sets = join(env.dataDir, 'archive', '.sets');
+  rmSync(sets, { recursive: true, force: true });
+  writeFileSync(sets, 'not a folder');
+  const wii = env.wii(3);
+  assert.equal((await wii.startSet(SET)).resp.status, RelayStatus.ST_OK);
+  assert.equal(env.fake.getSet(SET).state, 2);
+  assert.equal((await wii.reportScore(SET, [game(1), game(1)])).resp.status, RelayStatus.ST_OK);
+  const end = await wii.endSet(SET, [game(1), game(1), game(1)]);
+  assert.equal(end.resp.status, RelayStatus.ST_OK, 'start.gg has the set, and so does the Wii');
+  assert.equal(end.resp.msg, 'final 3-0');
+  assert.equal(env.fake.getSet(SET).state, 3);
+  assert.equal(env.state.get(3), undefined, 'the station is free for its next set');
+  const errors = env.auditEvents().filter((e) => e.type === 'archive_error');
+  assert.ok(errors.length >= 1);
+  assert.equal(errors[0]!.op, 'setStarted');
+  assert.match(
+    await (await fetch(env.statusUrl)).text(),
+    /The archive could not save set 107949994, .* ago: /,
+  );
+  // The folder back: the next record write makes .sets again.
+  rmSync(sets, { force: true });
+  const next = 107949995;
+  assert.equal((await wii.startSet(next)).resp.status, RelayStatus.ST_OK);
+  assert.ok(existsSync(join(sets, `${next}.json`)));
 });

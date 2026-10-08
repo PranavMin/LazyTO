@@ -29,8 +29,11 @@
 // that arrives later, even at a later event, zips it then, or writes the
 // zip again when a game's replay changed. Set records stay on disk in
 // <archive>/.sets/<setId>.json for that, each with the event it belongs to.
-// The archive never blocks or fails a Wii request: its errors go to the
-// status page and the audit log.
+// The archive never blocks or fails a Wii request: tcp.ts calls its hooks
+// after start.gg has the result, so each hook catches its own errors (a full
+// or vanished disk, a deleted .sets folder, a rename Windows refuses while an
+// indexer or OneDrive holds the file), and they go to the status page and the
+// audit log (archive_error).
 
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
@@ -114,6 +117,13 @@ export interface MissingReplay {
   why: string;
 }
 
+/** The archive's last error, for the status page. */
+export interface ArchiveError {
+  at: number;
+  setId: number | null;
+  error: string;
+}
+
 export interface ArchiveDeps {
   /** The archive folder: zips, .sets/, and the raw store's files. */
   dir: string;
@@ -129,6 +139,7 @@ export interface ArchiveDeps {
 export class SetArchive {
   private readonly sets = new Map<number, SetRecord>(); // by set id
   private readonly results: ArchiveResult[] = [];
+  private lastError: ArchiveError | null = null;
 
   constructor(private readonly deps: ArchiveDeps) {
     mkdirSync(join(deps.dir, '.sets'), { recursive: true });
@@ -150,51 +161,59 @@ export class SetArchive {
     }
   }
 
-  // ---- hooks from tcp.ts (after the request succeeded) ----
+  // ---- hooks from tcp.ts (after the request succeeded; they never throw) ----
 
   setStarted(station: number, set: CachedSet): void {
-    if (this.sets.has(set.id)) return; // a resume
-    this.save({
-      setId: set.id,
-      station,
-      set,
-      event: this.deps.event,
-      startedAt: Date.now(),
-      games: [],
-      endedAt: null,
-      zip: null,
-      zipOf: null,
+    this.guarded('setStarted', set.id, () => {
+      if (this.sets.has(set.id)) return; // a resume
+      this.save({
+        setId: set.id,
+        station,
+        set,
+        event: this.deps.event,
+        startedAt: Date.now(),
+        games: [],
+        endedAt: null,
+        zip: null,
+        zipOf: null,
+      });
     });
   }
 
   scored(setId: number, games: GameResult[], from: string): void {
-    const r = this.sets.get(setId);
-    if (!r) return;
-    r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
-    this.bindSet(r);
-    this.save(r);
+    this.guarded('scored', setId, () => {
+      const r = this.sets.get(setId);
+      if (!r) return;
+      r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
+      this.bindSet(r);
+      this.save(r);
+    });
   }
 
   setEnded(setId: number, games: GameResult[], from: string): void {
-    const r = this.sets.get(setId);
-    if (!r) return;
-    r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
-    r.endedAt = Date.now();
-    this.bindSet(r);
-    this.save(r);
-    this.maybeZip(r);
+    this.guarded('setEnded', setId, () => {
+      const r = this.sets.get(setId);
+      if (!r) return;
+      r.games = reported(r.games, games, from, this.deps.beamerAt(from) ?? null);
+      r.endedAt = Date.now();
+      this.bindSet(r);
+      this.save(r);
+      this.maybeZip(r);
+    });
   }
 
   /** The set was freed or reset: its record goes, and its replays become strays. */
   setAbandoned(setId: number): void {
-    const r = this.sets.get(setId);
-    if (!r) return;
-    for (const g of r.games) {
-      const stored = g.replay && this.deps.store.get(g.replay.id);
-      if (stored) this.deps.store.move(stored, 'unmatched');
-    }
-    this.sets.delete(setId);
-    rmSync(join(this.deps.dir, '.sets', `${setId}.json`), { force: true });
+    this.guarded('setAbandoned', setId, () => {
+      const r = this.sets.get(setId);
+      if (!r) return;
+      this.sets.delete(setId);
+      for (const g of r.games) {
+        const stored = g.replay && this.deps.store.get(g.replay.id);
+        if (stored) this.deps.store.move(stored, 'unmatched');
+      }
+      rmSync(join(this.deps.dir, '.sets', `${setId}.json`), { force: true });
+    });
   }
 
   // ---- hooks from collect.ts ----
@@ -225,10 +244,13 @@ export class SetArchive {
           this.beamerOf(g) === copy.stationId,
       );
       if (!names) continue;
-      if (this.bindSet(r)) {
-        this.save(r);
-        this.maybeZip(r);
-      }
+      // The copy is stored whatever happens here: an error is the archive's.
+      this.guarded('stored', r.setId, () => {
+        if (this.bindSet(r)) {
+          this.save(r);
+          this.maybeZip(r);
+        }
+      });
     }
   }
 
@@ -248,6 +270,8 @@ export class SetArchive {
     flagged: { setId: number; station: number; game: number; why: string }[];
     recent: ArchiveResult[];
     unmatched: number;
+    /** The last thing the archive could not do (audited as archive_error), or null. */
+    lastError: ArchiveError | null;
   } {
     const all = [...this.sets.values()];
     const playing = all.filter((r) => r.endedAt === null);
@@ -286,6 +310,7 @@ export class SetArchive {
       ),
       recent: this.results.slice(-20).reverse(),
       unmatched: this.deps.store.all().filter((c) => c.path.startsWith('unmatched/')).length,
+      lastError: this.lastError && { ...this.lastError },
     };
   }
 
@@ -435,15 +460,35 @@ export class SetArchive {
       if (this.results.length > 100) this.results.shift();
       this.deps.audit.record({ type: 'archive', ...result });
     } catch (e) {
-      this.deps.audit.record({ type: 'archive_error', setId: r.setId, error: String(e) });
+      this.failed('zip', r.setId, e);
     }
+  }
+
+  // ---- errors ----
+
+  /** Run one hook; an error is audited and kept for the status page, never thrown. */
+  private guarded(hook: string, setId: number, fn: () => void): void {
+    try {
+      fn();
+    } catch (e) {
+      this.failed(hook, setId, e);
+    }
+  }
+
+  private failed(what: string, setId: number | null, e: unknown): void {
+    const error = e instanceof Error ? e.message : String(e);
+    this.lastError = { at: Date.now(), setId, error: `${what}: ${error}` };
+    this.deps.audit.record({ type: 'archive_error', setId, op: what, error });
   }
 
   // ---- disk ----
 
+  /** The set's record in .sets/, made again if it went away (a deleted or moved archive folder). */
   private save(r: SetRecord): void {
     this.sets.set(r.setId, r);
-    const path = join(this.deps.dir, '.sets', `${r.setId}.json`);
+    const dir = join(this.deps.dir, '.sets');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${r.setId}.json`);
     writeFileSync(`${path}.tmp`, JSON.stringify(r));
     renameSync(`${path}.tmp`, path);
   }
