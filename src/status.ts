@@ -27,14 +27,18 @@
 // At the top, what keeps stations or replays from reaching the relay:
 // another LazyTO relay on the network (guard.ts), two beamers on one station
 // number (the newcomer is refused), a beamer with another secret, macOS's
-// Local Network switch (the beacon fails with EHOSTUNREACH), and beacons
-// answered by no beamer for NO_CONTACT_MS.
+// Local Network switch (the beacon fails with EHOSTUNREACH), the desktop
+// app's notes about the laptop (platform.ts: Windows Firewall, with its fix
+// button), and beacons answered by no beamer for NO_CONTACT_MS. In the
+// footer, a newer LazyTO release, whose link is withheld while a station is
+// mid-set.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SetCache } from './cache.js';
 import { wins, type StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
 import type { BeaconStatus } from './beacon.js';
+import type { Platform } from './platform.js';
 import type { RefusedStatus } from './tcp.js';
 import {
   crashText,
@@ -96,6 +100,8 @@ export interface StatusView {
   /** The relay's own addresses and version, for the footer. */
   addresses: string[];
   version: string;
+  /** The desktop app's view of the laptop (platform.ts); null when the relay runs on its own. */
+  platform: Pick<Platform, 'notes' | 'latest'> | null;
 }
 
 /** A Wii not heard from for this long is shown as silent (it sends a status every 5 s). */
@@ -318,6 +324,7 @@ ${beaconLine}
 ${refusedLine}
 ${staleLine}${errorLine}${warningLines}
 <p class="muted">LazyTO ${escapeHtml(v.version)} · this relay: ${v.addresses.map((a) => `http://${escapeHtml(a)}:29473`).join(', ') || '—'}</p>
+${renderUpdate(v, onStations)}
 </div>`,
     { refreshSeconds: 5 },
   );
@@ -493,7 +500,7 @@ export function noContact(v: StatusView, now = Date.now()): boolean {
   );
 }
 
-/** What keeps stations or replays from reaching the relay, most basic first; "" when nothing does. */
+/** What keeps stations or replays from reaching the relay (and the laptop's own notes), most basic first; "" when nothing does. */
 function renderReach(
   v: StatusView,
   now = Date.now(),
@@ -510,10 +517,17 @@ function renderReach(
   if (os === 'darwin' && bs.lastErrorCode === 'EHOSTUNREACH') {
     lines.push(`<p class="warn">✗ ${escapeHtml(beaconProblem(bs, os))}</p>`);
   }
+  for (const n of v.platform?.notes() ?? []) {
+    // The button after the paragraph, not in it: a <form> can't sit inside a <p>.
+    const button = n.action
+      ? `<div class="acts"><form method="post" action="/platform?action=${encodeURIComponent(n.action.name)}"><button>${escapeHtml(n.action.label)}</button></form></div>`
+      : '';
+    lines.push(`<p class="warn">⚠ ${escapeHtml(n.text)}</p>${button}`);
+  }
   if (noContact(v, now)) {
     const mins = Math.floor((now - bs.firstSentAt!) / 60_000);
     lines.push(
-      `<p class="warn">⚠ No beamer has reached this relay: its beacon has gone out for ${mins} min and nothing has answered. Are the beamers on this Wi-Fi, and is LazyTO allowed through this computer's firewall?</p>`,
+      `<p class="warn">⚠ No beamer has reached this ${v.platform ? 'laptop' : 'relay'}: its beacon has gone out for ${mins} min and nothing has answered. Are the beamers on this Wi-Fi, and is LazyTO allowed through this computer's firewall?</p>`,
     );
   }
   const name = (b: { address: string; stationId: string | null }) =>
@@ -580,4 +594,14 @@ function renderFreeConfirm(v: StatusView, station: number): string {
       `<div class="acts"><form method="post" action="/free?station=${station}&amp;set=${claim.setId}"><button class="danger">Free station ${station}</button></form>` +
       `<a class="btnlink" href="/">cancel</a></div>`,
   );
+}
+
+/** "LazyTO vX is out", with its link only while no station is mid-set: never update during a set. */
+function renderUpdate(v: StatusView, midSet: number): string {
+  const r = v.platform?.latest() ?? null;
+  if (!r) return '';
+  const name = `LazyTO v${escapeHtml(r.version)} is out`;
+  return midSet > 0
+    ? `<p class="muted">${name}. Its link is here when no station is in a set; update at home, not during an event.</p>`
+    : `<p>${name}: <a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">release page</a>. Update at home, not during an event.</p>`;
 }

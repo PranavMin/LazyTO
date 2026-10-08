@@ -26,12 +26,18 @@
 //   --wii=<dir> (any of the above)
 //       a bundle's wii/ folder (unpacked lazyto.tgz), so the SD cards page
 //       serves real zips; without it, the page says there are no Wii files
+//   --laptop (any of the above)
+//       as the desktop app runs it (src/platform.ts): a Windows Firewall note
+//       with its "Allow" button (which only says it was pressed), "LazyTO
+//       v99.0.0 is out", no update channel on the settings page, and the
+//       archive folder default Documents/LazyTO
 import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TelemetryKind, ModuleState, SyncKind } from '../generated/wire.js';
 import { App } from '../src/app.js';
 import { configPath, saveConfig } from '../src/config.js';
+import type { Platform } from '../src/platform.js';
 import {
   defaultFixture,
   entrant,
@@ -56,6 +62,29 @@ if (!['running', 'setup', 'failed'].includes(pageKind)) {
   console.error(`preview-status: --page is running, setup or failed, not ${pageKind}`);
   process.exit(2);
 }
+
+/** --laptop: what the desktop app (desktop/platform.ts) would report on a blocked Windows laptop. */
+const laptop: { platform?: Platform; archiveDir?: string } = process.argv.includes('--laptop')
+  ? {
+      platform: {
+        notes: () => [
+          {
+            text: 'Windows Firewall blocks LazyTO on "Venue router" (Public): the beamers can\'t reach this laptop.',
+            action: { name: 'firewall', label: 'Allow LazyTO through the firewall' },
+          },
+        ],
+        latest: () => ({
+          version: '99.0.0',
+          url: 'https://github.com/PranavMin/LazyTO/releases/tag/v99.0.0',
+        }),
+        act: async (name) => ({
+          ok: true,
+          msg: `preview: "${name}" pressed; nothing was changed.`,
+        }),
+      },
+      archiveDir: join(homedir(), 'Documents', 'LazyTO'),
+    }
+  : {};
 
 let sets: FakeSet[] = defaultFixture();
 for (let i = 0; i < 6; i++) {
@@ -114,6 +143,7 @@ if (pageKind !== 'running') {
     retryDelaysMs: [120_000],
     clockSynced: () => true,
     wiiDir,
+    ...laptop,
   });
   await app.start();
   const url = `http://127.0.0.1:${app.web.address().port}`;
@@ -133,6 +163,7 @@ if (pageKind !== 'running') {
     tcpPort: network ? 29470 : 0,
     secret,
     wiiDir,
+    ...laptop,
   });
 
   if (!entrantsFile) await startDemoSets(h);

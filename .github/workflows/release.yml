@@ -12,6 +12,14 @@ name: release
 #   release (not a pre-release): Pis on the default release channel, and the
 #   install line in the README, follow the newest full release.
 # - Run by hand, it builds the bundle as an artifact and publishes nothing.
+#
+# The desktop app (desktop/, docs/laptop-setup.md) is built from the same
+# commit in the desktop-* jobs: the relay core and the same Wii files in an
+# Electron shell, packaged like Beamer Manager (an NSIS installer, a universal
+# dmg, an AppImage), unsigned. Each job packages, then smoke-tests the app
+# (desktop/scripts/smoke.mjs: launch, GET / on 29473). Pushes to main keep
+# them as workflow artifacts; a v* tag adds them to the draft release, with
+# SHA256SUMS.
 
 on:
   push:
@@ -23,6 +31,15 @@ on:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
+env:
+  # The beamer firmware the app flashes (desktop/scripts/fetch-firmware.mjs):
+  # a PranavMin/slippi-beamer release's merged beamer.bin, pinned by SHA-256
+  # like the Nintendont commit. Empty until the fork's first LazyTO release;
+  # the app then says it carries no firmware.
+  BEAMER_FIRMWARE_URL: ""
+  BEAMER_FIRMWARE_SHA256: ""
+  BEAMER_FIRMWARE_VERSION: ""
 
 jobs:
   test:
@@ -118,6 +135,125 @@ jobs:
             out/install.sh
           if-no-files-found: error
 
+  desktop-windows:
+    needs: [test, module, loader]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version comes from the nearest v* tag
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: lazyto-kiosk-bin
+          path: desktop/resources/wii
+      - uses: actions/download-artifact@v4
+        with:
+          name: loader
+          path: desktop/resources/wii/apps
+      - run: node desktop/scripts/fetch-firmware.mjs
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run version-from-git
+        working-directory: desktop
+      - run: npm run package -- --win
+        working-directory: desktop
+      - run: npm run smoke -- release/win-unpacked/LazyTO.exe
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lazyto-windows
+          path: desktop/release/LazyTO-Setup-*.exe
+          if-no-files-found: error
+
+  desktop-mac:
+    needs: [test, module, loader]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # The afterPack hook's Mach-O UUID rewrite (desktop/scripts/mach-o-uuid.py).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install macholib
+      - uses: actions/download-artifact@v4
+        with:
+          name: lazyto-kiosk-bin
+          path: desktop/resources/wii
+      - uses: actions/download-artifact@v4
+        with:
+          name: loader
+          path: desktop/resources/wii/apps
+      - run: node desktop/scripts/fetch-firmware.mjs
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run version-from-git
+        working-directory: desktop
+      - run: npm run package -- --mac
+        working-directory: desktop
+      # A signature broken after the ad-hoc signing is fatal on Apple silicon ("damaged").
+      - run: codesign --verify --deep --strict --verbose=2 release/mac-universal/LazyTO.app
+        working-directory: desktop
+      - run: npm run smoke -- release/mac-universal/LazyTO.app/Contents/MacOS/LazyTO
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lazyto-mac
+          path: desktop/release/LazyTO-*-universal.dmg
+          if-no-files-found: error
+
+  desktop-linux:
+    needs: [test, module, loader]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: lazyto-kiosk-bin
+          path: desktop/resources/wii
+      - uses: actions/download-artifact@v4
+        with:
+          name: loader
+          path: desktop/resources/wii/apps
+      - run: node desktop/scripts/fetch-firmware.mjs
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run version-from-git
+        working-directory: desktop
+      - run: npm run package -- --linux
+        working-directory: desktop
+      # No display on the runner: a virtual one. Chromium's sandbox needs
+      # user namespaces the runner's AppArmor withholds (smoke.mjs adds
+      # --no-sandbox under CI on Linux, as Beamer Manager's smoke test does).
+      - run: xvfb-run --auto-servernum npm run smoke -- release/linux-unpacked/lazyto
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lazyto-linux
+          path: desktop/release/LazyTO-*.AppImage
+          if-no-files-found: error
+
   publish-main:
     if: github.ref == 'refs/heads/main'
     needs: bundle
@@ -146,7 +282,7 @@ jobs:
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: bundle
+    needs: [bundle, desktop-windows, desktop-mac, desktop-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -155,11 +291,17 @@ jobs:
         with:
           name: lazyto
           path: out
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lazyto-{windows,mac,linux}
+          merge-multiple: true
+          path: desktop
       - name: Draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          (cd desktop && sha256sum * > SHA256SUMS && cat SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" --draft --title "LazyTO $GITHUB_REF_NAME" \
-            --notes "Draft: write the notes, then publish it as a full release, not a pre-release. Pis on the release channel follow the newest full release." \
-            out/lazyto.tgz out/lazyto.tgz.sha256 out/VERSION out/install.sh
+            --notes "Draft: write the notes, then publish it as a full release, not a pre-release. Pis on the release channel follow the newest full release, and the LazyTO app offers it (docs/laptop-setup.md)." \
+            out/lazyto.tgz out/lazyto.tgz.sha256 out/VERSION out/install.sh desktop/*

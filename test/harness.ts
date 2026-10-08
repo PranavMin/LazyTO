@@ -16,6 +16,7 @@ import type { RunningEvent } from '../src/relay.js';
 import type { StartggClient } from '../src/startgg.js';
 import type { StatusView } from '../src/status.js';
 import type { SetFormat } from '../src/format.js';
+import type { Platform } from '../src/platform.js';
 import {
   makeFake,
   FakeStartgg,
@@ -53,6 +54,8 @@ export interface HarnessOptions {
   freeBytes?: () => number;
   /** The one-relay-per-network guard (guard.ts); none by default without the network side. */
   guard?: RelayGuard;
+  /** The desktop app's view of the laptop (src/platform.ts); default none, as src/main.ts runs. */
+  platform?: Platform;
 }
 
 export interface Harness {
@@ -86,6 +89,7 @@ export function harnessConfig(opts: HarnessOptions = {}): Config {
     setFormat: opts.setFormat ?? 'startgg',
     archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
     archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+    archiveDir: '',
   };
 }
 
@@ -112,6 +116,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     rawStore: opts.freeBytes ? { freeBytes: opts.freeBytes } : undefined,
     stallMs: 2000,
     guard: opts.guard,
+    platform: opts.platform,
   });
   await app.start();
   const m = app.current();

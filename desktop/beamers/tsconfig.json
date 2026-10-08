@@ -1,0 +1,19 @@
+{
+  // The beamers window's page (index.html loads dist/desktop/beamers/page.js):
+  // a sandboxed renderer with the DOM and Web Serial, no Node. Same rootDir
+  // and outDir as ../tsconfig.json, so ../flash-layout.ts, which both import,
+  // lands once at dist/desktop/flash-layout.js.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["w3c-web-serial"],
+    "rootDir": "../..",
+    "outDir": "../dist"
+  },
+  "include": ["page.ts"]
+}

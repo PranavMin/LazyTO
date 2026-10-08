@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  defaultDataDir,
   loadConfig,
   newSecret,
   parseConfig,
@@ -24,6 +25,7 @@ const VALID: Config = {
   setFormat: 'top8q',
   archiveSetName: '{tournament} {round_short}',
   archiveGameName: 'G{game} {stage}',
+  archiveDir: '',
 };
 
 // A settings file as the relay before config v2 wrote it (the shape a Pi set
@@ -124,6 +126,7 @@ test('optional fields take their defaults', () => {
     setFormat: 'startgg',
     archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
     archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+    archiveDir: '',
   });
 });
 
@@ -244,4 +247,26 @@ test('archive name templates: unknown fields are named, empty ones refused', () 
     'archiveGameName has unknown field(s) {p3}',
   );
   expectProblems({ ...VALID, archiveSetName: '  ' }, 'archiveSetName must be a non-empty string');
+});
+
+test('archiveDir: "" for the default folder, or a full path on this machine', () => {
+  const here = join(tmpdir(), 'LazyTO archive');
+  assert.equal(valid({ ...VALID, archiveDir: here }).archiveDir, here);
+  assert.equal(valid({ ...VALID, archiveDir: '' }).archiveDir, '');
+  expectProblems({ ...VALID, archiveDir: 'LazyTO' }, 'archiveDir must be "" (the default folder)');
+  expectProblems({ ...VALID, archiveDir: 3 }, 'archiveDir must be');
+});
+
+test("the data folder: the Pi's on Linux, the desktop app's elsewhere, LAZYTO_DIR first", () => {
+  assert.equal(defaultDataDir('linux', {}, '/home/pi'), '/var/lib/lazyto');
+  assert.equal(
+    defaultDataDir('win32', { APPDATA: 'C:\\Users\\to\\AppData\\Roaming' }, 'C:\\Users\\to'),
+    'C:\\Users\\to\\AppData\\Roaming\\LazyTO',
+  );
+  assert.equal(
+    defaultDataDir('darwin', {}, '/Users/to'),
+    '/Users/to/Library/Application Support/LazyTO',
+  );
+  assert.equal(defaultDataDir('darwin', { LAZYTO_DIR: '/tmp/x' }, '/Users/to'), '/tmp/x');
+  assert.equal(defaultDataDir('linux', { LAZYTO_DIR: '/tmp/y' }, '/home/pi'), '/tmp/y');
 });

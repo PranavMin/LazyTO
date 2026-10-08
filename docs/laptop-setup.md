@@ -3,8 +3,10 @@
 This guide installs the LazyTO app on a Windows or macOS laptop and gets it past the warnings
 both systems show the first time.
 
-> **Status:** the LazyTO app is planned ([redesign.md](redesign.md)) and not released yet. Until it
-> is, the relay runs on a Raspberry Pi: see [pi-setup.md](pi-setup.md).
+> **Status:** the LazyTO app is built (`desktop/`, [redesign.md](redesign.md)) but not released
+> yet, and nothing in it has run at an event. Until it is released, the relay runs on a Raspberry
+> Pi: see [pi-setup.md](pi-setup.md). The prompts below are as Windows and macOS document them;
+> check them against the packaged app on both systems before the first release.
 
 LazyTO is free and has no paid code signature, like Replay Reporter for Slippi. So Windows and
 macOS each ask you to confirm that you trust it. The steps below take a few minutes, once per
@@ -23,7 +25,7 @@ laptop. Do them **at home, before the event**, not at the venue.
 
 ### 1. Download
 
-Download `LazyTO Setup <version>.exe` from the
+Download `LazyTO-Setup-<version>.exe` from the
 [latest release](https://github.com/PranavMin/LazyTO/releases/latest).
 
 If your browser warns that the file isn't commonly downloaded, keep it. In Edge: the **…** menu on
@@ -57,7 +59,8 @@ Never click Cancel. Cancel makes a rule that blocks LazyTO, and Windows never as
 **If you clicked Cancel, or ticked only one box:**
 
 - LazyTO's status page says Windows Firewall blocks LazyTO, with an **Allow LazyTO through the
-  firewall** button. It asks for an administrator once.
+  firewall** button. It asks for an administrator once, then allows LazyTO on every kind of
+  network, for devices on the same network only.
 - Or by hand: Windows Security, Firewall & network protection, **Allow an app through firewall**,
   **Change settings**. Tick both **Private** and **Public** for every LazyTO line, then **OK**.
 
@@ -67,7 +70,8 @@ Never click Cancel. Cancel makes a rule that blocks LazyTO, and Windows never as
 
 Download `LazyTO-<version>-universal.dmg` from the
 [latest release](https://github.com/PranavMin/LazyTO/releases/latest). Open it and drag **LazyTO**
-into **Applications**. Always run LazyTO from Applications, not from the dmg.
+into **Applications**. Always run LazyTO from Applications, not from the dmg; if you open it from
+the dmg, it moves itself into Applications first.
 
 ### 2. Open it: "LazyTO Not Opened"
 
@@ -97,6 +101,32 @@ version, so open a new version once at home.
 Turn it on in System Settings, **Privacy & Security**, **Local Network**, **LazyTO**. LazyTO
 picks it up within a few seconds; no restart is needed.
 
+## First start: set LazyTO up
+
+LazyTO opens its setup page with the setup code already filled in. Paste the start.gg token, pick
+the tournament and its event, and choose the admin password, as on the Pi. The LazyTO window
+answers its own password prompts; a phone on the same network can open the status page too, at
+the address at the bottom of the page, and asks for the password for the buttons.
+
+- Settings, the audit logs and the Wii logs are kept in LazyTO's own folder
+  (`%APPDATA%\LazyTO` on Windows, `~/Library/Application Support/LazyTO` on macOS).
+- Set archives (one zip per finished set, for Lucky Stats) go to `Documents/LazyTO`. Pick another
+  folder on the settings page, under **Set archives**; one that OneDrive or iCloud does not sync is
+  best, since an event's replays take a few GB.
+- **File, Open the log folder** shows LazyTO's log, which has what a Pi's journal had.
+
+## Beamers: flash and Wi-Fi
+
+**File, Beamers: flash, Wi-Fi…** opens the Beamers window.
+
+- **Flash:** unplug the beamer, hold its button while you plug it into the laptop, then click
+  **Flash**. LazyTO writes the firmware that came with it. The beamer keeps its station number and
+  its replays.
+- **Wi-Fi and secret:** plug the beamer in normally and wait for its drive. Type the router's
+  network and password, click **Pick the beamer's drive and write**, and pick the drive. LazyTO
+  writes them, `LAZYTO = true` and the relay's secret into the beamer's `CONFIG/config.txt`. Eject
+  the drive, then plug the beamer into its Wii.
+
 ## Updates
 
 When a new version is out, LazyTO's status page says **LazyTO vX is out**, with a link to the
@@ -116,6 +146,10 @@ Open the new version once at home to get these prompts out of the way.
 - Keep the laptop on AC power with the lid open. Closing the lid or pressing the power button puts
   it to sleep, and the stations stop reporting until it wakes.
 - Connect it to the router the beamers use, by cable if you can.
-- Keep LazyTO's window open. Closing it during an event asks first.
+- Keep LazyTO's window open. Closing it during an event asks first. While an event runs, LazyTO
+  keeps the screen from turning off.
+- If the status page says **No beamer has reached this laptop**, the beacon has gone out for 2
+  minutes and nothing answered: check that the laptop is on the beamers' router, then the firewall
+  (Windows) or Local Network (macOS) step above.
 
 The full checklist is in [night-of.md](night-of.md).
