@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LazyTO: beamers</title>
+<link rel="stylesheet" href="beamers.css">
+<script type="module" src="../dist/desktop/beamers/page.js"></script>
+</head>
+<body>
+<h1>Beamers</h1>
+
+<h2>1. Flash the LazyTO firmware</h2>
+<div class="card">
+  <p id="fw" class="muted">Reading the firmware…</p>
+  <ol>
+    <li>Unplug the beamer.</li>
+    <li>Hold its button while you plug it into this laptop, then let go.</li>
+    <li>Click <b>Flash</b>.</li>
+  </ol>
+  <p class="muted small">The beamer keeps its station number and the replays it holds. Flashing takes about a minute; keep it plugged in until it says done.</p>
+  <div class="acts"><button id="flash" class="primary" disabled>Flash</button></div>
+  <progress id="progress" max="1" value="0" hidden></progress>
+  <p id="flash-result" role="status"></p>
+</div>
+
+<h2>2. Its Wi-Fi and LazyTO's secret</h2>
+<form id="provision" class="card">
+  <p class="muted small">Plug the beamer in normally (no button) and wait for its drive to appear. LazyTO writes the network, <code>LAZYTO = true</code> and this relay's secret into its <code>CONFIG/config.txt</code>. The rest of the file stays as it is.</p>
+  <label for="ssid">Wi-Fi network (the beamers' router)</label>
+  <input type="text" id="ssid" autocomplete="off" required>
+  <label for="password">Wi-Fi password (empty for an open network)</label>
+  <input type="password" id="password" autocomplete="off">
+  <div class="acts"><button id="write" class="primary">Pick the beamer's drive and write</button></div>
+  <p id="provision-result" role="status"></p>
+</form>
+
+<details>
+  <summary>Log</summary>
+  <pre id="log"></pre>
+</details>
+</body>
+</html>

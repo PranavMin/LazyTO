@@ -6,3 +6,8 @@ dist/
 kiosk/build/
 kiosk/src/melee/lb/lbmodule_version.inc
 /private/
+desktop/release/
+desktop/resources/wii/*
+!desktop/resources/wii/README.md
+desktop/resources/firmware/*
+!desktop/resources/firmware/README.md

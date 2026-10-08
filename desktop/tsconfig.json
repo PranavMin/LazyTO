@@ -1,0 +1,19 @@
+{
+  // The Electron main process (main.ts and its helpers) and the relay core it
+  // runs in-process (../src, ../generated, pulled in by main.ts's imports).
+  // rootDir is the repo root, as in tsconfig.build.json, so the output mirrors
+  // the tree: dist/desktop/main.js imports dist/src/app.js. The beamers
+  // window's page has its own config (beamers/tsconfig.json: DOM, no Node).
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": "..",
+    "outDir": "dist"
+  },
+  "include": ["*.ts", "*.cts"]
+}
