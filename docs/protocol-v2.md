@@ -97,7 +97,7 @@ Game results (`game_result`, 16 bytes):
 - The content check (stage, characters and costumes on their ports) flags a mismatch and still
   binds: the id decides. Stocks are compared only when the game sent them.
 
-`ST_DUP_STATION` (not built yet):
+`ST_DUP_STATION` (built, `src/beamer.ts`):
 
 - Each beamer has its own address. The relay sees each Wii request and telemetry datagram arrive
   from a beamer's address, and the sync names the `station_id` behind each address.
@@ -107,9 +107,8 @@ Game results (`game_result`, 16 bytes):
   renumbered. The status page names both beamers.
 - A sync is never refused as a duplicate: collection goes on.
 
-`CMD_BEAMER_SYNC` (built: the version rule, the signature in `src/sync.ts`; not built: everything
-else, so `tcp.ts` answers `ST_INTERNAL` "beamer sync not handled yet" and no beamer acks
-anything):
+`CMD_BEAMER_SYNC` (built: `src/collect.ts`, `src/rawstore.ts`, the signature in `src/sync.ts`;
+`test/fake-beamer.ts` checks every reply as the firmware must):
 
 1. Check `relay_auth` like any request. A wrong secret gets `ST_BAD_SECRET` with no payload; the
    beamer acks nothing.
@@ -120,11 +119,15 @@ anything):
    (`card_mb - free_mb - used_mb`), the erase report, `storage`, `rssi`, `last_result`.
 4. Answer every file, `answers[i]` for `files[i]`, `answer_count = file_count`:
    - `SA_HELD` with the SHA-256 of the stored copy, only for a file the laptop has stored (temp
-     file, fsync, rename, re-read, hash) and can still stat;
-   - `SA_WANTED` for a file it will download now (one download at a time per beamer, resumed with
-     `X-Replay-From`, after a free-disk check);
-   - `SA_NOTED` otherwise (`SK_LIVE`, already downloading, the disk is full). A zero-filled answer
-     is `SA_NOTED`.
+     file, fsync, rename, re-read, hash), can still stat at its size (re-hashed when its last check
+     is over 24 h old), and whose hash equals the one the beamer reports (`hashed` = 1). A file the
+     beamer did not hash this boot gets no `SA_HELD`, which it could not ack: it is `SA_WANTED`
+     again, so the beamer serves and hashes it;
+   - `SA_WANTED` for a file it will download now (one download at a time per beamer, from the
+     sync's source address and `http_port`, resumed with `X-Replay-From`, after a free-disk check:
+     256 MB must stay free);
+   - `SA_NOTED` otherwise (`SK_LIVE`, already downloading, a name that is not a plain `.slp`, the
+     disk is full). A zero-filled answer is `SA_NOTED`.
 5. Put the laptop's `archive_id` in the reply. It is random, 16 bytes, kept in `archive.json` in
    the archive folder, and never all zero.
 6. Sign: `hmac` = HMAC-SHA256, keyed with the secret's 16 bytes as `relay_auth` carries them
