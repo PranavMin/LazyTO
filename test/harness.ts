@@ -56,6 +56,11 @@ export interface HarnessOptions {
   guard?: RelayGuard;
   /** The desktop app's view of the laptop (src/platform.ts); default none, as src/main.ts runs. */
   platform?: Platform;
+  /** The settings' tournament and event name; default the fake's test tournament and its singles event. */
+  tournament?: string;
+  eventName?: string;
+  /** The set archive's clock; default the real one. */
+  archiveClock?: () => number;
 }
 
 export interface Harness {
@@ -79,16 +84,14 @@ export interface Harness {
 export function harnessConfig(opts: HarnessOptions = {}): Config {
   return {
     token: FIXTURE_TOKEN,
-    tournament: FIXTURE_TOURNAMENT,
-    eventName: FIXTURE_EVENT_NAME,
+    tournament: opts.tournament ?? FIXTURE_TOURNAMENT,
+    eventName: opts.eventName ?? FIXTURE_EVENT_NAME,
     secret: opts.secret ?? TEST_SECRET,
     adminPassword: TEST_PASSWORD,
     weeklyNamePrefix: '',
     streamName: opts.stream === false ? '' : FIXTURE_STREAM_NAME,
     streamStation: STREAM_STATION,
     setFormat: opts.setFormat ?? 'startgg',
-    archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
-    archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
     archiveDir: '',
   };
 }
@@ -117,6 +120,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     stallMs: 2000,
     guard: opts.guard,
     platform: opts.platform,
+    archiveClock: opts.archiveClock,
   });
   await app.start();
   const m = app.current();

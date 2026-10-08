@@ -399,10 +399,6 @@ async function save(
     streamStation: prefill.streamStation,
     setFormat,
     archiveDir: prefill.archiveDir,
-    // Not on the form (the set archive is experimental): kept as the file has them.
-    ...(saved
-      ? { archiveSetName: saved.archiveSetName, archiveGameName: saved.archiveGameName }
-      : {}),
   });
   if (!parsed.ok) return again(parsed.problems.join('; '));
   const config: Config = parsed.config;

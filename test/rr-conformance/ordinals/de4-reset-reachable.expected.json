@@ -1,0 +1,42 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-ordinals.ts: RR getPhaseGroup (startgg.ts:451-784) unmodified, fetch stubbed",
+  "input": "de4-reset-reachable.input.json",
+  "bracketType": 2,
+  "ordinals": {
+    "1001": {
+      "ordinal": -5,
+      "round": 1,
+      "fullRoundText": "Winners Semi-Final"
+    },
+    "1002": {
+      "ordinal": -6,
+      "round": 1,
+      "fullRoundText": "Winners Semi-Final"
+    },
+    "1003": {
+      "ordinal": -3,
+      "round": 2,
+      "fullRoundText": "Winners Final"
+    },
+    "1004": {
+      "ordinal": -4,
+      "round": -1,
+      "fullRoundText": "Losers Semi-Final"
+    },
+    "1005": {
+      "ordinal": -2,
+      "round": -2,
+      "fullRoundText": "Losers Final"
+    },
+    "1006": {
+      "ordinal": -1,
+      "round": 3,
+      "fullRoundText": "Grand Final"
+    },
+    "1007": {
+      "ordinal": 0,
+      "round": 4,
+      "fullRoundText": "Grand Final Reset"
+    }
+  }
+}

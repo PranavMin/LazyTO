@@ -63,7 +63,7 @@ test('the test tournament resolves to its singles event and the LazyTOStream str
       foundBy: 'full slug',
       tournamentName: 'LazyTO Test Tournament',
       tournamentSlug: 'tournament/lazyto-test',
-      tournamentLocation: '',
+      tournamentLocation: null,
       eventId: FIXTURE_EVENT_ID,
       eventName: 'Melee Singles! (7:30 Start)',
       eventSlug: 'tournament/lazyto-test/event/melee-singles!-(7:30-start)',
@@ -72,6 +72,62 @@ test('the test tournament resolves to its singles event and the LazyTOStream str
       streamId: FIXTURE_STREAM_ID,
       streamName: 'LazyTOStream',
     });
+  });
+});
+
+test("the context.json facts come from start.gg's REST tournament, Replay Reporter's call", async () => {
+  const tournaments = defaultTournaments();
+  const t = tournaments.find((x) => x.slug === FIXTURE_TOURNAMENT)!;
+  t.locationDisplayName = 'Springfield, IL';
+  // Only Melee singles or doubles events count: not another game, not crews.
+  t.events = [
+    t.events[0]!,
+    { id: 1613090, name: 'Ultimate Singles', type: 1, videogame: { id: 1386 } },
+    {
+      id: 1613091,
+      name: 'Melee Crews',
+      type: 5,
+      videogame: { id: 1 },
+      teamRosterSize: { minPlayers: 3, maxPlayers: 5 },
+    },
+  ];
+  await withFake(tournaments, async (client, fake) => {
+    const r = await resolveEvent(client, {
+      tournament: FIXTURE_TOURNAMENT,
+      eventName: FIXTURE_EVENT_NAME,
+      streamName: '',
+      weeklyNamePrefix: '',
+    });
+    assert.equal(r.tournamentLocation, 'Springfield, IL');
+    assert.equal(r.eventHasSiblings, false, 'one Melee singles or doubles event');
+    assert.deepEqual(
+      fake.restCalls.map((c) => c.path),
+      ['/tournament/lazyto-test?expand[]=event'],
+    );
+  });
+});
+
+test('a REST tournament start.gg does not serve fails the start like any lookup; a 5xx is retried twice', async () => {
+  await withFake(defaultTournaments(), async (client, fake) => {
+    fake.failNext('restTournament', '5xx', 2);
+    const r = await resolveEvent(client, {
+      tournament: FIXTURE_TOURNAMENT,
+      eventName: FIXTURE_EVENT_NAME,
+      streamName: '',
+      weeklyNamePrefix: '',
+    });
+    assert.equal(r.eventId, FIXTURE_EVENT_ID);
+    assert.equal(fake.restCalls.length, 3);
+    fake.failNext('restTournament', 'gqlError', 1);
+    await assert.rejects(
+      resolveEvent(client, {
+        tournament: FIXTURE_TOURNAMENT,
+        eventName: FIXTURE_EVENT_NAME,
+        streamName: '',
+        weeklyNamePrefix: '',
+      }),
+      /start.gg REST \/tournament\/lazyto-test\?expand\[\]=event: HTTP 400/,
+    );
   });
 });
 

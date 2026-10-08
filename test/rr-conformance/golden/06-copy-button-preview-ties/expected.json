@@ -1,0 +1,176 @@
+{
+  "fixture": "06-copy-button-preview-ties",
+  "description": "Copy button without reporting (onCopy() with no arguments): completedAtMs is 0, so the re-time anchors to Date.now() (frozen to 'clock'). Preview set id (string), so startgg.set.id is null and internalId is the string. Round robin (bracketType 3, ordinal null, waveId/winnersTargetPhaseId set, phaseGroup.hasSiblings true). Games 1 and 3 are 0%-0% timeouts with no winner, so the context shows 0-1 and bestOf 1.",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T18:05:20Z",
+  "zipName": "Round Robin Pools R1 - Pebble (Falco) vs Saffron (ICs, Ness).zip",
+  "zipNameHex": "526f756e6420526f62696e20506f6f6c73205231202d20506562626c65202846616c636f292076732053616666726f6e20284943732c204e657373292e7a6970",
+  "subdir": "Round Robin Pools R1 - Pebble (Falco) vs Saffron (ICs, Ness)",
+  "contextSha256": "82783f98886e10d79b075958eeec11a75f03c3bfb1da020d479bff4191a2e85f",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T205816.slp",
+      "replaySha256": "6e331b0322026dde97eb04a0a742650e24455a15fe06b1283632dfbab3897fcc",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Pebble (Falco), Saffron (ICs) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T16:29:35.751Z",
+      "outputSha256": "c1180b41e21700f27613ac32809187ffb1299dee750192eb8f07505a2ac777ff",
+      "outputSize": 1420
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T213903.slp",
+      "replaySha256": "48d8195d275197165384e12bcdba3525397e3913a4157abf3dc9b20e7d8e60b3",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Pebble (Falco), Saffron (ICs) - Dream Land.slp",
+      "startAt": "2026-10-03T17:10:22.751Z",
+      "outputSha256": "644fef2646b8b0c2a3a0d53c08bdb2a6fa12cbcaf8743b9c0d7d182406e87457",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T223058.slp",
+      "replaySha256": "256aa941bd56786605e2e1c8eb15812f966f87d0cc14b36f396df748b3c98cfc",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Pebble (Falco), Saffron (Ness) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T18:02:17.751Z",
+      "outputSha256": "05619ae4f621f4550691d8430c5290906f52ae5024ae0c9345b5ae2dbcff8634",
+      "outputSize": 1268
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "3 - Pebble (Falco), Saffron (Ness) - Pokémon Stadium.slp",
+      "2 - Pebble (Falco), Saffron (ICs) - Dream Land.slp",
+      "1 - Pebble (Falco), Saffron (ICs) - Fountain of Dreams.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 4,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "6bc15cb8",
+        "uncompressedSize": 1487,
+        "dosTime": 37034,
+        "dosDate": 23875,
+        "sha256": "82783f98886e10d79b075958eeec11a75f03c3bfb1da020d479bff4191a2e85f"
+      },
+      {
+        "name": "3 - Pebble (Falco), Saffron (Ness) - Pokémon Stadium.slp",
+        "nameHex": "33202d20506562626c65202846616c636f292c2053616666726f6e20284e65737329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "8c9d398a",
+        "uncompressedSize": 1268,
+        "dosTime": 37034,
+        "dosDate": 23875,
+        "sha256": "05619ae4f621f4550691d8430c5290906f52ae5024ae0c9345b5ae2dbcff8634"
+      },
+      {
+        "name": "2 - Pebble (Falco), Saffron (ICs) - Dream Land.slp",
+        "nameHex": "32202d20506562626c65202846616c636f292c2053616666726f6e202849437329202d20447265616d204c616e642e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "9b27c0d2",
+        "uncompressedSize": 1420,
+        "dosTime": 37034,
+        "dosDate": 23875,
+        "sha256": "644fef2646b8b0c2a3a0d53c08bdb2a6fa12cbcaf8743b9c0d7d182406e87457"
+      },
+      {
+        "name": "1 - Pebble (Falco), Saffron (ICs) - Fountain of Dreams.slp",
+        "nameHex": "31202d20506562626c65202846616c636f292c2053616666726f6e202849437329202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "efdc3679",
+        "uncompressedSize": 1420,
+        "dosTime": 37034,
+        "dosDate": 23875,
+        "sha256": "c1180b41e21700f27613ac32809187ffb1299dee750192eb8f07505a2ac777ff"
+      }
+    ]
+  }
+}

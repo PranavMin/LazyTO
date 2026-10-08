@@ -23,8 +23,6 @@ const VALID: Config = {
   streamName: 'LazyTOStream',
   streamStation: 1,
   setFormat: 'top8q',
-  archiveSetName: '{tournament} {round_short}',
-  archiveGameName: 'G{game} {stage}',
   archiveDir: '',
 };
 
@@ -124,10 +122,19 @@ test('optional fields take their defaults', () => {
     streamName: '',
     streamStation: 1,
     setFormat: 'startgg',
-    archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
-    archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
     archiveDir: '',
   });
+});
+
+test("the archive's old file-name templates load, ignored: the zips are named as Replay Reporter names them", () => {
+  const r = parseConfig({
+    ...VALID,
+    archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
+    archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+  });
+  assert.ok(r.ok);
+  assert.deepEqual(r.ignored.sort(), ['archiveGameName', 'archiveSetName']);
+  assert.deepEqual(r.config, VALID);
 });
 
 test('unknown fields are ignored and reported, never fatal', () => {
@@ -235,18 +242,6 @@ test('weeklyPrefixFrom strips the trailing number', () => {
   assert.equal(weeklyPrefixFrom('Smash Weekly 42'), 'Smash Weekly ');
   assert.equal(weeklyPrefixFrom('GENESIS: BLACK'), '');
   assert.equal(weeklyPrefixFrom('2026'), '');
-});
-
-test('archive name templates: unknown fields are named, empty ones refused', () => {
-  expectProblems(
-    { ...VALID, archiveSetName: '{tournament} {stage}' },
-    'archiveSetName has unknown field(s) {stage}',
-  );
-  expectProblems(
-    { ...VALID, archiveGameName: 'G{game} {p3}' },
-    'archiveGameName has unknown field(s) {p3}',
-  );
-  expectProblems({ ...VALID, archiveSetName: '  ' }, 'archiveSetName must be a non-empty string');
 });
 
 test('archiveDir: "" for the default folder, or a full path on this machine', () => {

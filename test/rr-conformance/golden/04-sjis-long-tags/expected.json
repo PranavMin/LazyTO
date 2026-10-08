@@ -1,0 +1,176 @@
+{
+  "fixture": "04-sjis-long-tags",
+  "description": "Bo3 won 2-1 by entrant1 (port 2) with a 19-character Japanese tag (Shift-JIS, trail-byte remap overflow into port 3) against a 19-character ASCII tag with punctuation (full-width remap, 15-character cut). Game 3 is a 352-frame game RR marks \"less than 1 minute\" (selected by hand).",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T22:08:58Z",
+  "zipName": "Melee Singles WF - ソラとヒカリのスーパーマリオブラザーズ (Fox, Ness) vs Dr. Mario-Main_42!! (Falco, ICs).zip",
+  "zipNameHex": "4d656c65652053696e676c6573205746202d20e382bde383a9e381a8e38392e382abe383aae381aee382b9e383bce38391e383bce3839ee383aae382aae38396e383a9e382b6e383bce382ba2028466f782c204e657373292076732044722e204d6172696f2d4d61696e5f34322121202846616c636f2c20494373292e7a6970",
+  "subdir": "Melee Singles WF - ソラとヒカリのスーパーマリオブラザーズ (Fox, Ness) vs Dr. Mario-Main_42!! (Falco, ICs)",
+  "contextSha256": "b30bb4ec825e3a338507eba410115807ec8d9ebe8e062bb6033072ed4f386488",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "replaySha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T20:24:15.059Z",
+      "outputSha256": "337d8178dc08b15e359256f74e5f5336cbc638b078bffb0f794bad3b6b6741d0",
+      "outputSize": 1268
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "replaySha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Dr. Mario-Main_42!! (ICs), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T22:01:27.059Z",
+      "outputSha256": "2d4dd62f57ed4f944c7303c8e4ef5cb13c228a2a2fa55ec1e7a5ffb71a8e7740",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "replaySha256": "6814ed983897ace66d8bbd2c84bf1c8316ebcd2da330b23dcf0b234536da5fa6",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Ness) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T22:08:47.059Z",
+      "outputSha256": "736dec64d72fd390df1d41260ded0dd2f4d8b904af0ddad54aa4dec4f35d13d9",
+      "outputSize": 1268
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "3 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Ness) - Pokémon Stadium.slp",
+      "2 - Dr. Mario-Main_42!! (ICs), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Pokémon Stadium.slp",
+      "1 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Fountain of Dreams.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 4,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "f1645c93",
+        "uncompressedSize": 1813,
+        "dosTime": 45341,
+        "dosDate": 23875,
+        "sha256": "b30bb4ec825e3a338507eba410115807ec8d9ebe8e062bb6033072ed4f386488"
+      },
+      {
+        "name": "3 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Ness) - Pokémon Stadium.slp",
+        "nameHex": "33202d2044722e204d6172696f2d4d61696e5f34322121202846616c636f292c20e382bde383a9e381a8e38392e382abe383aae381aee382b9e383bce38391e383bce3839ee383aae382aae38396e383a9e382b6e383bce382ba20284e65737329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "aa818550",
+        "uncompressedSize": 1268,
+        "dosTime": 45341,
+        "dosDate": 23875,
+        "sha256": "736dec64d72fd390df1d41260ded0dd2f4d8b904af0ddad54aa4dec4f35d13d9"
+      },
+      {
+        "name": "2 - Dr. Mario-Main_42!! (ICs), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Pokémon Stadium.slp",
+        "nameHex": "32202d2044722e204d6172696f2d4d61696e5f343221212028494373292c20e382bde383a9e381a8e38392e382abe383aae381aee382b9e383bce38391e383bce3839ee383aae382aae38396e383a9e382b6e383bce382ba2028466f7829202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "da87ed23",
+        "uncompressedSize": 1420,
+        "dosTime": 45341,
+        "dosDate": 23875,
+        "sha256": "2d4dd62f57ed4f944c7303c8e4ef5cb13c228a2a2fa55ec1e7a5ffb71a8e7740"
+      },
+      {
+        "name": "1 - Dr. Mario-Main_42!! (Falco), ソラとヒカリのスーパーマリオブラザーズ (Fox) - Fountain of Dreams.slp",
+        "nameHex": "31202d2044722e204d6172696f2d4d61696e5f34322121202846616c636f292c20e382bde383a9e381a8e38392e382abe383aae381aee382b9e383bce38391e383bce3839ee383aae382aae38396e383a9e382b6e383bce382ba2028466f7829202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "3d9768d0",
+        "uncompressedSize": 1268,
+        "dosTime": 45341,
+        "dosDate": 23875,
+        "sha256": "337d8178dc08b15e359256f74e5f5336cbc638b078bffb0f794bad3b6b6741d0"
+      }
+    ]
+  }
+}

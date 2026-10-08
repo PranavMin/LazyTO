@@ -1,7 +1,8 @@
 // The set archive (archive.ts): replays collected by the beamers' syncs
 // (collect.ts, rawstore.ts, against test/fake-beamer.ts), bound to games by
 // replay id on the beamer the game was reported through, and zipped once
-// every game of a finished set has its replay.
+// every game of a finished set has its replay. The zip's format against
+// Replay Reporter's own output is rr-conformance.test.ts.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
@@ -10,13 +11,9 @@ import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { parseSlp, withDisplayNames, displayNameBytes } from '../src/slp.js';
 import { buildZip, crc32 } from '../src/zip.js';
-import {
-  fillName,
-  safeFileName,
-  tournamentNumber,
-  unknownFields,
-  SET_FIELDS,
-} from '../src/names.js';
+import { rrFill, rrRoundShort, rrSanitize } from '../src/names.js';
+import type { RestPhaseGroup } from '../src/phasegroup.js';
+import type { ReportedSet, StartedSet } from '../src/startgg.js';
 import { BeamerRegistry, hexId } from '../src/beamer.js';
 import { Collector } from '../src/collect.js';
 import { RawStore } from '../src/rawstore.js';
@@ -83,7 +80,9 @@ test('slp: ports, stage and length from a Wii-shaped replay; display names stamp
   const info = parseSlp(slp);
   assert.deepEqual(info.version, [3, 13, 0]);
   assert.equal(info.stage, BF);
-  assert.equal(info.lastFrame, 5000);
+  assert.equal(info.lastFrame, 5000, 'the last Frame Bookend');
+  assert.equal(info.startAt, '2026-10-07T20:15:02');
+  assert.equal(info.complete, true);
   assert.deepEqual(
     info.ports.map((p) => p.type),
     [0, 3, 0, 3],
@@ -111,9 +110,12 @@ test('slp: a finished replay is complete with its last stocks; an interrupted on
   assert.equal(parseSlp(whole.subarray(0, whole.length - 40)).complete, false, 'cut short');
 });
 
-test('slp: punctuation goes full-width like Replay Reporter, non-ASCII becomes ?, 15 characters at most', () => {
+test('slp: Shift-JIS display names, punctuation full-width like Replay Reporter, 15 characters at most', () => {
   assert.deepEqual([...displayNameBytes('M2K!').subarray(0, 6)], [0x4d, 0x32, 0x4b, 0x81, 0x49, 0]);
-  assert.deepEqual([...displayNameBytes('Zaín').subarray(0, 5)], [0x5a, 0x61, 0x3f, 0x6e, 0]);
+  // í has no Shift-JIS code: "?", which goes full-width like any "?".
+  assert.deepEqual([...displayNameBytes('Zaín').subarray(0, 6)], [0x5a, 0x61, 0x81, 0x48, 0x6e, 0]);
+  // ソ is 83 5C: its second byte is "\" in ASCII, and stays as it is.
+  assert.deepEqual([...displayNameBytes('ソ!').subarray(0, 5)], [0x83, 0x5c, 0x81, 0x49, 0]);
   assert.equal(
     displayNameBytes('ABCDEFGHIJKLMNOPQRST').toString('latin1').split('\0')[0],
     'ABCDEFGHIJKLMNO',
@@ -138,28 +140,24 @@ test('zip: entries come back intact with UTF-8 names', () => {
   assert.ok(files.get('Game 1 - Zaín.slp')!.equals(b));
 });
 
-test('names: templates, the tournament number and file-name safety', () => {
-  assert.equal(tournamentNumber('My Bar Weekly #60'), '60');
-  assert.equal(tournamentNumber('Big Event 2026: Day 2'), '2');
-  assert.equal(tournamentNumber('No Number'), '');
+test("names: Replay Reporter's round letters, its first-occurrence fill (literal here) and sanitize-filename", () => {
+  assert.equal(rrRoundShort('Winners Semi-Final'), 'WSF');
+  assert.equal(rrRoundShort('Losers Top 8'), 'LT8');
   assert.equal(
-    fillName('My Bar {number} - {round_short} - {p1} vs {p2}', {
-      number: '60',
-      round_short: 'WSF',
-      p1: 'Cody',
-      p2: 'Zain',
-    }),
-    'My Bar 60 - WSF - Cody vs Zain',
+    rrFill('{a} {b} {a}', [
+      ['{a}', 'A$&'],
+      ['{b}', 'B'],
+    ]),
+    'A$& B {a}',
   );
-  assert.equal(safeFileName(' a/b\\c:d*e?"f<g>h|i. '), 'abcdefghi');
-  assert.deepEqual(unknownFields('{p1} {nope} {round}', SET_FIELDS), ['nope']);
+  assert.equal(rrSanitize(' a/b\\c:d*e?"f<g>h|i. '), ' abcdefghi');
 });
 
 // ---- the archive against a fake beamer, without TCP ----
 
 const EVENT: ArchiveEvent = {
   tournamentName: 'My Bar Weekly #60',
-  tournamentLocation: '1 Main St',
+  tournamentLocation: 'Springfield, IL',
   eventId: 1613010,
   eventName: 'Melee Singles',
   eventSlug: 'tournament/my-bar-weekly-60/event/melee-singles',
@@ -186,6 +184,32 @@ function cachedSet(id: number): CachedSet {
       bracketType: 'DOUBLE_ELIMINATION',
       wave: null,
       phase: { id: 1700, name: 'Bracket', groupCount: 2, phaseOrder: 2 },
+    },
+  };
+}
+
+/** START_SET's markSetInProgress: each entrant's one participant, Alpha with a prefix and pronouns. */
+const STARTED: StartedSet = {
+  entrants: [
+    {
+      id: 9001,
+      participants: [{ id: 19001, gamerTag: 'Alpha', prefix: 'LZY', pronouns: 'she/her' }],
+    },
+    { id: 9002, participants: [{ id: 19002, gamerTag: 'Bravo', prefix: '', pronouns: '' }] },
+  ],
+};
+
+/** END_SET's reportBracketSet: completed at 2026-10-07T20:40:00Z, no stream. */
+const COMPLETED_AT = Date.UTC(2026, 9, 7, 20, 40, 0) / 1000;
+const REPORTED: ReportedSet = { completedAt: COMPLETED_AT, stream: null };
+
+/** start.gg's REST phase group of the test sets: a DE pool whose sets take their callOrder. */
+function restGroup(): RestPhaseGroup {
+  return {
+    entities: {
+      groups: { groupTypeId: 2, displayIdentifier: 'A1', waveId: 4001, winnersTargetPhaseId: null },
+      seeds: [{ id: 1 }],
+      sets: Array.from({ length: 20 }, (_, i) => ({ id: 500 + i, round: 2, callOrder: i + 1 })),
     },
   };
 }
@@ -220,17 +244,23 @@ interface Env {
   collect(): Promise<void>;
   /** The archive over the same folder, as after a relay restart (optionally at another event). */
   restart(event?: ArchiveEvent): void;
+  /** Phase group lookups made, by group id. */
+  lookups: number[];
 }
+
+/** The archive's clock in these tests: the moment the set ended. */
+const NOW = Date.UTC(2026, 9, 7, 20, 41, 7);
 
 async function setup(
   t: { after(fn: () => unknown): void },
-  opts: { dir?: string } = {},
+  opts: { dir?: string; phaseGroup?: (id: number) => Promise<RestPhaseGroup> } = {},
 ): Promise<Env> {
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'tr-archive-'));
   const beamer = new FakeBeamer(3, 3);
   await beamer.listen();
   const audit: Record<string, unknown>[] = [];
   const record = (e: Record<string, unknown>) => void audit.push(e);
+  const lookups: number[] = [];
   const make = (event: ArchiveEvent) => {
     const store = new RawStore(dir);
     const beamers = new BeamerRegistry();
@@ -238,10 +268,13 @@ async function setup(
       dir,
       store,
       beamerAt: (a) => beamers.stationIdAt(a),
-      setTemplate: '{tournament} - {round_short} - {p1} vs {p2}',
-      gameTemplate: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
       event,
       audit: { record },
+      phaseGroup: (id) => {
+        lookups.push(id);
+        return opts.phaseGroup ? opts.phaseGroup(id) : Promise.resolve(restGroup());
+      },
+      clock: () => NOW,
     });
     const collector = new Collector({
       store,
@@ -257,6 +290,7 @@ async function setup(
     dir,
     beamer,
     audit,
+    lookups,
     sid: hexId(beamer.stationId),
     ...make(EVENT),
     async sync() {
@@ -298,6 +332,11 @@ function replay(
   });
 }
 
+/** Game n's entry: port order, Bravo (port 1) before Alpha (port 3). */
+function entry(n: number, stage = 'Battlefield'): string {
+  return `${n} - Bravo (Fox), Alpha (Marth) - ${stage}.slp`;
+}
+
 // A replay id is the match's gameStartTime in Unix seconds; the Wii names the
 // file after it (protocol.yaml game_result.replay_id).
 const T0 = Date.UTC(2026, 9, 7, 20, 15, 2) / 1000;
@@ -322,7 +361,9 @@ function played(
   });
 }
 
-const ZIP = 'My Bar Weekly #60 - WSF - Alpha vs Bravo.zip';
+// Replay Reporter's name: the event (one phase), the round's letters, the
+// entrants in bracket order with their characters.
+const ZIP = 'Melee Singles WSF - Alpha (Marth) vs Bravo (Fox).zip';
 
 test('replay ids: the file-name stamp is the id read as UTC', () => {
   assert.equal(replayStamp(T0), '20261007T201502');
@@ -334,12 +375,12 @@ test('replay ids: the file-name stamp is the id read as UTC', () => {
 test('a set of two games: collected, bound by id, zipped; the friendly is kept unmatched; all acked, then erased', async (t) => {
   const e = await setup(t);
   e.beamer.add(replayName(T0 - 600), replay(BF)); // a stray (an undone game) before the set
-  e.archive.setStarted(3, cachedSet(500));
+  e.archive.setStarted(3, cachedSet(500), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
   e.archive.scored(500, [played(1, T0)], FROM);
   await e.collect();
   e.beamer.add(replayName(T0 + 300), replay(FD, 4200));
-  e.archive.setEnded(500, [played(1, T0), played(1, T0 + 300, FD)], FROM);
+  e.archive.setEnded(500, [played(1, T0), played(1, T0 + 300, FD)], FROM, REPORTED);
   await e.collect();
 
   const binds = e.audit.filter((a) => a.type === 'archive_bind').map((a) => [a.replay, a.game]);
@@ -353,38 +394,58 @@ test('a set of two games: collected, bound by id, zipped; the friendly is kept u
 
   assert.ok(existsSync(join(e.dir, ZIP)), `zips: ${readdirSync(e.dir).join(', ')}`);
   const files = unzip(readFileSync(join(e.dir, ZIP)));
-  assert.deepEqual(
-    [...files.keys()],
-    [
-      'context.json',
-      'Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp',
-      'Game 2 - Alpha (Marth) vs Bravo (Fox) - FD.slp',
-    ],
-  );
-  const g1 = files.get('Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp')!;
+  assert.deepEqual([...files.keys()], ['context.json', entry(1), entry(2, 'Final Destination')]);
+  const g1 = files.get(entry(1))!;
   assert.equal(displayNameAt(g1, 2), 'Alpha');
   assert.equal(displayNameAt(g1, 0), 'Bravo');
+  assert.deepEqual(e.lookups, [77], "the set's phase group, once, at START_SET");
 
   const ctx = JSON.parse(files.get('context.json')!.toString('utf8'));
-  assert.equal(ctx.bestOf, 3);
-  assert.equal(ctx.startgg.set.id, 500);
-  assert.equal(ctx.startgg.set.fullRoundText, 'Winners Semi-Final');
-  assert.equal(ctx.startgg.event.slug, EVENT.eventSlug);
-  assert.equal(ctx.startgg.phaseGroup.name, 'A1');
-  assert.equal(ctx.startgg.phaseGroup.bracketType, 2);
-  assert.equal(ctx.startgg.phaseGroup.hasSiblings, true);
-  // Slots in port order: Bravo (port 1) then Alpha (port 3); scores before each game.
-  assert.deepEqual(
-    ctx.scores[0].slots.map((s: { displayNames: string[]; ports: number[]; score: number }) => [
-      s.displayNames[0],
-      s.ports[0],
-      s.score,
-    ]),
-    [
-      ['Bravo', 1, 0],
-      ['Alpha', 3, 0],
-    ],
+  assert.deepEqual(Object.keys(ctx), [
+    'bestOf',
+    'durationMs',
+    'scores',
+    'finalScore',
+    'players',
+    'startMs',
+    'startgg',
+  ]);
+  assert.equal(ctx.bestOf, 3, "the set's best-of");
+  // Game 2 (4200 frames) ends at completedAt; game 1 starts 300 s before it.
+  const game2Start = COMPLETED_AT * 1000 - Math.round((4200 + 124) / 0.05994);
+  assert.equal(ctx.startMs, game2Start - 300_000);
+  assert.equal(
+    parseSlp(files.get(entry(2, 'Final Destination'))!).startAt,
+    new Date(game2Start).toISOString(),
   );
+  assert.deepEqual(ctx.startgg, {
+    tournament: { name: 'My Bar Weekly #60', location: 'Springfield, IL' },
+    event: { id: 1613010, name: 'Melee Singles', slug: EVENT.eventSlug, hasSiblings: false },
+    phase: { id: 1700, name: 'Bracket', hasSiblings: false },
+    phaseGroup: {
+      id: 77,
+      name: 'A1',
+      bracketType: 2,
+      hasSiblings: true,
+      waveId: 4001,
+      winnersTargetPhaseId: null,
+    },
+    set: {
+      id: 500,
+      internalId: 500,
+      fullRoundText: 'Winners Semi-Final',
+      ordinal: 1,
+      round: 2,
+      stream: null,
+    },
+  });
+  // Slots in port order: Bravo (port 1) then Alpha (port 3); scores before each game.
+  assert.deepEqual(ctx.scores[0], {
+    slots: [
+      { displayNames: ['Bravo'], ports: [1], prefixes: [''], pronouns: [''], score: 0 },
+      { displayNames: ['Alpha'], ports: [3], prefixes: ['LZY'], pronouns: ['she/her'], score: 0 },
+    ],
+  });
   assert.deepEqual(
     ctx.scores[1].slots.map((s: { score: number }) => s.score),
     [0, 1],
@@ -393,8 +454,14 @@ test('a set of two games: collected, bound by id, zipped; the friendly is kept u
     ctx.finalScore.slots.map((s: { score: number }) => s.score),
     [0, 2],
   );
-  assert.deepEqual(ctx.players.entrant1, [{ name: 'Alpha', characters: ['Marth'] }]);
-  assert.equal(ctx.durationMs, Math.ceil((3600 + 124) / 0.06) + Math.ceil((4200 + 124) / 0.06));
+  assert.deepEqual(ctx.players, {
+    entrant1: [{ name: 'Alpha', characters: ['Marth'] }],
+    entrant2: [{ name: 'Bravo', characters: ['Fox'] }],
+  });
+  assert.equal(
+    ctx.durationMs,
+    Math.ceil((3600 + 124) / 0.05994) + Math.ceil((4200 + 124) / 0.05994),
+  );
   assert.equal(e.archive.status().recent[0]!.games, 2);
   assert.equal(e.archive.status().unmatched, 1);
 
@@ -412,7 +479,7 @@ test('a set of two games: collected, bound by id, zipped; the friendly is kept u
 
 test('an undone game played again: the zip takes the replay the new report names', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(501));
+  e.archive.setStarted(3, cachedSet(501), STARTED);
   e.beamer.add(replayName(T0), replay(BF, 1000));
   e.archive.scored(501, [played(2, T0)], FROM);
   await e.collect();
@@ -420,36 +487,32 @@ test('an undone game played again: the zip takes the replay the new report names
   e.archive.scored(501, [played(2, T0 + 200)], FROM);
   await e.collect();
   e.beamer.add(replayName(T0 + 400), replay(BF, 3000));
-  e.archive.setEnded(501, [played(2, T0 + 200), played(2, T0 + 400)], FROM);
+  e.archive.setEnded(501, [played(2, T0 + 200), played(2, T0 + 400)], FROM, REPORTED);
   await e.collect();
   const files = unzip(readFileSync(join(e.dir, ZIP)));
-  const g1 = files.get('Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp')!;
-  assert.equal(parseSlp(g1).lastFrame, 2000);
+  assert.equal(parseSlp(files.get(entry(1))!).lastFrame, 2000);
 });
 
 test('a game undone and scored again with the same replay keeps it, without a second download', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(508));
+  e.archive.setStarted(3, cachedSet(508), STARTED);
   e.beamer.add(replayName(T0), replay(BF, 1000));
   e.archive.scored(508, [played(1, T0)], FROM);
   await e.collect();
   const fetched = e.beamer.gets.length;
   e.archive.scored(508, [], FROM); // undo
   e.archive.scored(508, [played(2, T0)], FROM); // scored again, the other way
-  e.archive.setEnded(508, [played(2, T0)], FROM);
+  e.archive.setEnded(508, [played(2, T0)], FROM, REPORTED);
   await e.collect();
   assert.equal(e.beamer.gets.length, fetched, 'bound from the stored copy');
   assert.equal(e.audit.filter((a) => a.type === 'archive_bind').length, 2);
   const files = unzip(readFileSync(join(e.dir, ZIP)));
-  assert.equal(
-    parseSlp(files.get('Game 1 - Alpha (Marth) vs Bravo (Fox) - BF.slp')!).lastFrame,
-    1000,
-  );
+  assert.equal(parseSlp(files.get(entry(1))!).lastFrame, 1000);
 });
 
 test('a game reported without a replay (replay_id 0): no zip for Lucky Stats, listed with why', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(506));
+  e.archive.setStarted(3, cachedSet(506), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
   e.archive.scored(506, [played(1, T0), played(1, 0)], FROM);
   assert.deepEqual(
@@ -457,7 +520,7 @@ test('a game reported without a replay (replay_id 0): no zip for Lucky Stats, li
     [[3, 2, 'not recorded']],
     'flagged while the players are still at the setup',
   );
-  e.archive.setEnded(506, [played(1, T0), played(1, 0)], FROM);
+  e.archive.setEnded(506, [played(1, T0), played(1, 0)], FROM, REPORTED);
   await e.collect();
   assert.equal(existsSync(join(e.dir, ZIP)), false);
   const s = e.archive.status().skipped;
@@ -473,9 +536,9 @@ test('a game reported without a replay (replay_id 0): no zip for Lucky Stats, li
 
 test('a replay that arrives late zips the set then, even at the next event after a restart', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(502));
+  e.archive.setStarted(3, cachedSet(502), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
-  e.archive.setEnded(502, [played(1, T0), played(1, T0 + 300)], FROM);
+  e.archive.setEnded(502, [played(1, T0), played(1, T0 + 300)], FROM, REPORTED);
   await e.collect();
   assert.deepEqual(e.archive.status().skipped[0]!.missing, [{ game: 2, why: 'not collected yet' }]);
   assert.equal(existsSync(join(e.dir, ZIP)), false);
@@ -493,25 +556,112 @@ test('a replay that arrives late zips the set then, even at the next event after
   assert.equal(files.size, 3);
 });
 
-test('no L + R claim: the replays are still zipped, unlabelled, without context.json', async (t) => {
+test('no L + R claim: the replays are still zipped, named as Replay Reporter names unassigned players, without context.json', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(503));
+  e.archive.setStarted(3, cachedSet(503), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
   e.archive.setEnded(
     503,
     [game(1, 0xff, 0xff, BF, [0xff, 0xff], [0xff, 0xff], { replay_id: T0 })],
     FROM,
+    REPORTED,
   );
   await e.collect();
+  // Nobody is known on either port: Replay Reporter then names each player
+  // by character (or nametag), and matches nobody to the entrants.
+  const zip = 'Melee Singles WSF -  vs.zip';
+  const files = unzip(readFileSync(join(e.dir, zip)));
+  assert.deepEqual([...files.keys()], ['1 - Fox, Marth - Battlefield.slp']);
+  assert.equal(displayNameAt(files.get('1 - Fox, Marth - Battlefield.slp')!, 0), '');
+  assert.match(e.archive.status().recent[0]!.note, /no context.json \(game 1 has a player/);
+});
+
+test('a phase group lookup that fails is not made again: the zip has no context.json and says why', async (t) => {
+  const e = await setup(t, {
+    phaseGroup: () => Promise.reject(new Error('start.gg REST: HTTP 404')),
+  });
+  e.archive.setStarted(3, cachedSet(511), STARTED);
+  await e.archive.idle();
+  e.beamer.add(replayName(T0), replay(BF));
+  e.archive.setEnded(511, [played(1, T0)], FROM, REPORTED);
+  await e.collect();
   const files = unzip(readFileSync(join(e.dir, ZIP)));
-  assert.deepEqual([...files.keys()], ['Game 1 - Alpha () vs Bravo () - BF.slp']);
-  assert.equal(displayNameAt(files.get('Game 1 - Alpha () vs Bravo () - BF.slp')!, 0), '');
-  assert.match(e.archive.status().recent[0]!.note, /no context.json/);
+  assert.deepEqual([...files.keys()], [entry(1)]);
+  assert.equal(
+    e.archive.status().recent[0]!.note,
+    'no context.json (start.gg phase group: start.gg REST: HTTP 404)',
+  );
+  assert.deepEqual(e.lookups, [77]);
+  assert.deepEqual(
+    e.audit.filter((a) => a.call === 'phase_group').map((a) => [a.ok, a.error]),
+    [[false, 'start.gg REST: HTTP 404']],
+  );
+});
+
+test('the zip waits for the phase group; without completedAt the re-time anchors at END_SET', async (t) => {
+  let answer: (g: RestPhaseGroup) => void = () => {};
+  const e = await setup(t, {
+    phaseGroup: () => new Promise<RestPhaseGroup>((resolve) => (answer = resolve)),
+  });
+  e.archive.setStarted(3, cachedSet(512), STARTED);
+  e.beamer.add(replayName(T0), replay(BF, 3600));
+  e.archive.setEnded(512, [played(1, T0)], FROM, { completedAt: null, stream: null });
+  await e.collect();
+  assert.equal(existsSync(join(e.dir, ZIP)), false, 'start.gg has not answered yet');
+  answer(restGroup());
+  await e.archive.idle();
+  const ctx = JSON.parse(
+    unzip(readFileSync(join(e.dir, ZIP)))
+      .get('context.json')!
+      .toString(),
+  );
+  assert.equal(ctx.startMs, NOW - Math.round((3600 + 124) / 0.05994));
+  assert.equal(ctx.startgg.set.ordinal, 13);
+});
+
+test('a record that cannot be written: the phase group is still looked up, its answer fails nothing, and the set zips once the folder is back', async (t) => {
+  let answer: (g: RestPhaseGroup) => void = () => {};
+  const e = await setup(t, {
+    phaseGroup: () => new Promise<RestPhaseGroup>((resolve) => (answer = resolve)),
+  });
+  // A file where .sets was (a deleted or moved archive folder, a full disk):
+  // every write of a set record fails.
+  const sets = join(e.dir, '.sets');
+  rmSync(sets, { recursive: true, force: true });
+  writeFileSync(sets, 'not a folder');
+  e.archive.setStarted(3, cachedSet(513), STARTED);
+  assert.deepEqual(e.lookups, [77], 'looked up although the record could not be written');
+  // start.gg answers after the Wii's reply: the failed write is the archive's
+  // error, not a rejected lookup.
+  answer(restGroup());
+  await e.archive.idle();
+  assert.deepEqual(
+    e.audit.filter((a) => a.type === 'archive_error').map((a) => [a.op, a.setId]),
+    [
+      ['setStarted', 513],
+      ['phaseGroup', 513],
+    ],
+  );
+  assert.match(e.archive.status().lastError!.error, /^phaseGroup: /);
+  assert.equal(e.archive.status().inProgress.length, 1, 'the set goes on from memory');
+  // The folder back: the next write makes .sets again, and the zip has the phase group.
+  rmSync(sets, { force: true });
+  e.beamer.add(replayName(T0), replay(BF));
+  e.archive.setEnded(513, [played(1, T0)], FROM, REPORTED);
+  await e.collect();
+  assert.ok(hasRecord(e.dir, 513));
+  const ctx = JSON.parse(
+    unzip(readFileSync(join(e.dir, ZIP)))
+      .get('context.json')!
+      .toString(),
+  );
+  assert.equal(ctx.startgg.phaseGroup.waveId, 4001);
+  assert.equal(ctx.startgg.set.ordinal, 14);
 });
 
 test('the content check flags a mismatch and still binds; stocks are compared only when the game sent them', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(507));
+  e.archive.setStarted(3, cachedSet(507), STARTED);
   // Alpha (port 3) ends with 2 stocks, Bravo (port 1) with 0.
   const stocks = [0, null, 2, null];
   e.beamer.add(replayName(T0), replay(BF, 3600, { stocks }));
@@ -559,10 +709,10 @@ test('the content check flags a mismatch and still binds; stocks are compared on
 
 test('an incomplete recording is kept in unmatched/, and its set gets no zip', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(509));
+  e.archive.setStarted(3, cachedSet(509), STARTED);
   // The beamer was unplugged mid-game: the file stops part way (raw length 0, no Game End).
   e.beamer.add(replayName(T0), replay(BF, 3600, { complete: false }), SyncKind.SK_INCOMPLETE);
-  e.archive.setEnded(509, [played(1, T0)], FROM);
+  e.archive.setEnded(509, [played(1, T0)], FROM, REPORTED);
   await e.collect();
   assert.ok(existsSync(join(e.dir, 'unmatched', e.sid, replayName(T0))));
   assert.deepEqual(e.archive.status().skipped[0]!.missing, [
@@ -574,11 +724,11 @@ test('an incomplete recording is kept in unmatched/, and its set gets no zip', a
 
 test('a replay that comes before its report goes to unmatched/, and moves to raw/ when the report names it', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(510));
+  e.archive.setStarted(3, cachedSet(510), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
   await e.collect(); // the beamer found the file before the kiosk's report arrived
   assert.ok(existsSync(join(e.dir, 'unmatched', e.sid, replayName(T0))));
-  e.archive.setEnded(510, [played(1, T0)], FROM);
+  e.archive.setEnded(510, [played(1, T0)], FROM, REPORTED);
   assert.ok(existsSync(join(e.dir, 'raw', e.sid, replayName(T0))));
   assert.ok(existsSync(join(e.dir, ZIP)));
   // The beamer still has its ack: the stored copy moved, its hash did not.
@@ -613,7 +763,7 @@ test('a set record an older relay wrote is reported at start, never used', async
 
 test('an abandoned set: its record goes and its replays become strays', async (t) => {
   const e = await setup(t);
-  e.archive.setStarted(3, cachedSet(505));
+  e.archive.setStarted(3, cachedSet(505), STARTED);
   e.beamer.add(replayName(T0), replay(BF));
   e.archive.scored(505, [played(1, T0)], FROM);
   await e.collect();
@@ -654,11 +804,20 @@ test('end to end: START_SET, reports with replay ids and END_SET, the beamer syn
   await sync(); // the served files come back hashed: held, acked
   await sync(); // and the beamer's next sync counts nothing left to collect
   const dir = join(h.dataDir, 'archive');
-  const zip = join(dir, 'LazyTO Test Tournament - WQF - Alpha vs Bravo.zip');
+  const zip = join(dir, 'Melee Singles! (730 Start) WQF - Alpha (Marth) vs Bravo (Fox).zip');
   assert.ok(existsSync(zip), `zips: ${readdirSync(dir).join(', ')}`);
   const files = unzip(readFileSync(zip));
   assert.equal(files.size, 4);
-  assert.equal(JSON.parse(files.get('context.json')!.toString()).startgg.set.id, SET);
+  const ctx = JSON.parse(files.get('context.json')!.toString());
+  assert.equal(ctx.startgg.set.id, SET);
+  assert.equal(ctx.bestOf, 5);
+  assert.deepEqual(
+    h.fake.restCalls.map((c) => c.path),
+    [
+      '/tournament/lazyto-test?expand[]=event',
+      '/phase_group/3290148?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true',
+    ],
+  );
   assert.equal(beamer.acks.size, 3);
   const html = await (await fetch(h.statusUrl)).text();
   assert.match(html, /All replays collected: safe to unplug beamers/);

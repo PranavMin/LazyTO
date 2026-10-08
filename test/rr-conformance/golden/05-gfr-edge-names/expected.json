@@ -1,0 +1,176 @@
+{
+  "fixture": "05-gfr-edge-names",
+  "description": "Grand Final Reset (round = GF round + 1, ordinal 0) won 2-1 by entrant2 (port 2), on stream. Tags exercise String.replace '$' patterns ('$$' -> '$', '$&' -> the placeholder), sanitize-filename ('/', '?' removed) and Shift-JIS-unencodable characters (iconv-lite writes '?', which is then remapped to full-width).",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-04T03:12:41Z",
+  "zipName": "Top 8 GFR - Ca$hMoney (Falco, ICs) vs Ünïcødé {playersChars} 🦊 (ICs, Fox, Ness).zip",
+  "zipNameHex": "546f70203820474652202d20436124684d6f6e6579202846616c636f2c204943732920767320c39c6ec3af63c3b864c3a9207b706c617965727343686172737d20f09fa68a20284943732c20466f782c204e657373292e7a6970",
+  "subdir": "Top 8 GFR - Ca$h/Money? (Falco, ICs) vs Ünïcødé {playersChars} 🦊 (ICs, Fox, Ness)",
+  "contextSha256": "4d409f01a8ce2bb267e85d618b56ff2e3e8ac4c251373367004fd77368117a7b",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "replaySha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (ICs) - Pokémon Stadium.slp",
+      "startAt": "2026-10-04T02:12:01.059Z",
+      "outputSha256": "2d49632e533f0788a3a4cbfb85333422e9e9037c8c464397e28a955fef8f2a41",
+      "outputSize": 1420
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "replaySha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Ca$hMoney (ICs), Ünïcødé {playersChars} 🦊 (Fox) - Pokémon Stadium.slp",
+      "startAt": "2026-10-04T03:05:11.059Z",
+      "outputSha256": "f96e9f52ed508d66d0f3a4d0a75f0969827d8116e55e433b712b33a753e19a96",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "replaySha256": "6814ed983897ace66d8bbd2c84bf1c8316ebcd2da330b23dcf0b234536da5fa6",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (Ness) - Pokémon Stadium.slp",
+      "startAt": "2026-10-04T03:12:31.059Z",
+      "outputSha256": "41f3b4a50f4c63cb5a6302374dffe0371667da52af072baf51a4fe53cfa50c17",
+      "outputSize": 1268
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "2 - Ca$hMoney (ICs), Ünïcødé {playersChars} 🦊 (Fox) - Pokémon Stadium.slp",
+      "3 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (Ness) - Pokémon Stadium.slp",
+      "1 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (ICs) - Pokémon Stadium.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 4,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "989d454f",
+        "uncompressedSize": 1647,
+        "dosTime": 6548,
+        "dosDate": 23876,
+        "sha256": "4d409f01a8ce2bb267e85d618b56ff2e3e8ac4c251373367004fd77368117a7b"
+      },
+      {
+        "name": "2 - Ca$hMoney (ICs), Ünïcødé {playersChars} 🦊 (Fox) - Pokémon Stadium.slp",
+        "nameHex": "32202d20436124684d6f6e65792028494373292c20c39c6ec3af63c3b864c3a9207b706c617965727343686172737d20f09fa68a2028466f7829202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "8bb790ed",
+        "uncompressedSize": 1420,
+        "dosTime": 6548,
+        "dosDate": 23876,
+        "sha256": "f96e9f52ed508d66d0f3a4d0a75f0969827d8116e55e433b712b33a753e19a96"
+      },
+      {
+        "name": "3 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (Ness) - Pokémon Stadium.slp",
+        "nameHex": "33202d20436124684d6f6e6579202846616c636f292c20c39c6ec3af63c3b864c3a9207b706c617965727343686172737d20f09fa68a20284e65737329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "e1b2146b",
+        "uncompressedSize": 1268,
+        "dosTime": 6548,
+        "dosDate": 23876,
+        "sha256": "41f3b4a50f4c63cb5a6302374dffe0371667da52af072baf51a4fe53cfa50c17"
+      },
+      {
+        "name": "1 - Ca$hMoney (Falco), Ünïcødé {playersChars} 🦊 (ICs) - Pokémon Stadium.slp",
+        "nameHex": "31202d20436124684d6f6e6579202846616c636f292c20c39c6ec3af63c3b864c3a9207b706c617965727343686172737d20f09fa68a202849437329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "a6bde483",
+        "uncompressedSize": 1420,
+        "dosTime": 6548,
+        "dosDate": 23876,
+        "sha256": "2d49632e533f0788a3a4cbfb85333422e9e9037c8c464397e28a955fef8f2a41"
+      }
+    ]
+  }
+}

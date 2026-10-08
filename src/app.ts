@@ -82,6 +82,8 @@ export interface AppOptions {
   /** Tests stand in a full disk and shorten the download stall timeout. */
   rawStore?: RawStoreOptions;
   stallMs?: number;
+  /** The set archive's clock (its zips' entry times); tests pin it. */
+  archiveClock?: () => number;
   /**
    * The one-relay-per-network guard; by default one on BEACON_PORT with the
    * network side on, none without it. Tests pass one on an ephemeral port.
@@ -337,12 +339,7 @@ export class App {
         tcpPort: this.opts.tcpPort,
         host: this.opts.host,
         network: this.opts.network,
-        archive: {
-          dir: this.archiveDir(config),
-          setName: config.archiveSetName,
-          gameName: config.archiveGameName,
-          event: resolved,
-        },
+        archive: { dir: this.archiveDir(config), event: resolved, clock: this.opts.archiveClock },
         rawStore: this.opts.rawStore,
         stallMs: this.opts.stallMs,
       });

@@ -33,19 +33,19 @@ from the record gate, which needs the v2 loader (`host_build` 7). In Dolphin eve
    characters, costumes and (when the game sent them) stocks are checked against the report, and
    a mismatch is flagged (`archive_mismatch`) but still bound (`src/archive.ts`).
 4. **Writing the zip.** Once a set has ended and every game has a complete replay, the relay
-   writes `<archive folder>/<archiveSetName>.zip`, which contains:
+   writes the zip Replay Reporter for Slippi would have written for the set
+   ([architecture.md](architecture.md#replays), `src/setzip.ts`), for example
+   `<archive folder>/Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco).zip`, which contains:
    - `context.json`, written only when every game had an L + R claim;
-   - one `<archiveGameName>.slp` per game, with the tags in the replay's display-name fields.
-     Replay Reporter and Slippi Launcher show those names.
+   - one `<n> - <players and characters> - <stage>.slp` per game, re-timed to the report, with
+     the tags in the replay's display-name fields. Replay Reporter and Slippi Launcher show those
+     names.
    A set with a game that has no replay gets no zip until the replay arrives.
 
 Notes:
 
-- **Name templates** are the settings file's optional `archiveSetName` and `archiveGameName`
-  (defaults in `src/config.ts`, fields in `src/names.ts`). They are not on the setup page; edit
-  `config.json` and the setup page keeps them. An unknown field is a settings error.
-  Example: `My Bar {number} - {round_short} - {p1} vs {p2}` gives
-  `My Bar 60 - WSF - Cody vs Zain.zip`.
+- **Names** are Replay Reporter's (`src/names.ts`), not settings. The earlier settings
+  `archiveSetName` and `archiveGameName` are ignored if a settings file still has them.
 - **A game played again after an undo** replaces the first try in the zip: the new report
   carries the new match's id.
 - **The status page** has a "Beamers" section (one row per beamer, and "All replays collected:

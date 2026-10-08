@@ -16,19 +16,19 @@
 // frozen copy of an old file). Unknown fields are ignored and reported, so a
 // field a later build dropped does no harm either.
 //
-// The set archive (archive.ts): archiveSetName and archiveGameName are the
-// file-name templates (names.ts lists their {fields}; an unknown field is a
-// settings error). archiveDir is the archive folder (zips, raw replays,
-// unmatched/), "" for the app's own (AppOptions.archiveDir, Documents/LazyTO
-// by default: defaultArchiveDir()), so the TO can move it. The beamers' HTTP
-// port comes from their syncs and is not a setting.
+// The set archive (archive.ts): archiveDir is the archive folder (zips, raw
+// replays, unmatched/), "" for the app's own (AppOptions.archiveDir,
+// Documents/LazyTO by default: defaultArchiveDir()), so the TO can move it.
+// Its zips are named as Replay Reporter for Slippi names them (names.ts), so
+// the file-name templates archiveSetName and archiveGameName of earlier builds
+// are gone: a file that still has them loads, with them ignored. The beamers'
+// HTTP port comes from their syncs and is not a setting.
 
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, posix, win32 } from 'node:path';
 import { SET_FORMATS, type SetFormat } from './format.js';
-import { GAME_FIELDS, SET_FIELDS, unknownFields } from './names.js';
 
 /** Fixed facts of every install; not settings. */
 export const STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha';
@@ -84,8 +84,6 @@ export interface Config {
   streamName: string; // the stream's name in the tournament's stream settings; "" = no stream
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q" (format.ts)
-  archiveSetName: string; // e.g. "{tournament} - {round_short} - {p1} vs {p2}"
-  archiveGameName: string; // e.g. "Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}"
   archiveDir: string; // "" = the app's archive folder; else an absolute folder on this machine
 }
 
@@ -146,14 +144,6 @@ const FIELDS: {
         : `must be one of ${SET_FORMATS.map((f) => `"${f}"`).join(', ')}`,
     default: 'startgg',
   },
-  archiveSetName: {
-    check: (v) => templateProblem(v, SET_FIELDS),
-    default: '{tournament} - {round_short} - {p1} vs {p2}',
-  },
-  archiveGameName: {
-    check: (v) => templateProblem(v, [...SET_FIELDS, ...GAME_FIELDS]),
-    default: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
-  },
   archiveDir: {
     check: (v) =>
       typeof v === 'string' && (v === '' || isAbsolute(v))
@@ -162,15 +152,6 @@ const FIELDS: {
     default: '',
   },
 };
-
-/** A file-name template (names.ts): non-empty, and only the {fields} it may use. */
-function templateProblem(v: unknown, allowed: readonly string[]): string | null {
-  if (typeof v !== 'string' || v.trim().length === 0) return 'must be a non-empty string';
-  const bad = unknownFields(v, allowed);
-  return bad.length > 0
-    ? `has unknown field(s) ${bad.map((b) => `{${b}}`).join(', ')}; known: ${allowed.map((a) => `{${a}}`).join(' ')}`
-    : null;
-}
 
 export type ParsedConfig =
   { ok: true; config: Config; ignored: string[] } | { ok: false; problems: string[] };

@@ -1,0 +1,183 @@
+{
+  "name": "07-bo5-3-1-fixed-ports",
+  "description": "Bo5 won 3-1 by entrant2 (Tamsin, port 2 throughout) in a single-elimination final (bracketType 1, ordinal = callOrder). Both players switch characters (Tamsin Fox/ICs, Wren Falco -> ICs in game 4). No swaps, so the running score is right.",
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "events": [
+      {
+        "id": 1000071,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "phases": [
+          {
+            "id": 2000071,
+            "name": "Bracket",
+            "phaseGroups": [
+              {
+                "id": 3000071,
+                "bracketType": 1,
+                "seeds": [],
+                "name": "1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": null,
+                "winnersTargetPhaseId": null
+              }
+            ],
+            "state": 2
+          }
+        ]
+      }
+    ],
+    "stations": [],
+    "streams": []
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000071,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": false
+    },
+    "phase": {
+      "id": 2000071,
+      "name": "Bracket",
+      "hasSiblings": false
+    },
+    "phaseGroup": {
+      "id": 3000071,
+      "name": "1",
+      "bracketType": 1,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000071,
+    "sggId": 90000071,
+    "state": 2,
+    "round": 3,
+    "fullRoundText": "Final",
+    "winnerId": null,
+    "entrant1Id": 5000071,
+    "entrant1Participants": [
+      {
+        "id": 6000071,
+        "displayName": "Wren",
+        "prefix": "LZY",
+        "pronouns": ""
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000072,
+    "entrant2Participants": [
+      {
+        "id": 6000072,
+        "displayName": "Tamsin",
+        "prefix": "",
+        "pronouns": "she/her"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": null,
+    "station": null,
+    "ordinal": 7,
+    "wasReported": false,
+    "updatedAtMs": 1791068400000,
+    "completedAtMs": 0
+  },
+  "report": {
+    "updatedSetFields": {
+      "id": 90000071,
+      "sggId": 90000071,
+      "completedAtMs": 1791070802000,
+      "stream": null
+    }
+  },
+  "clock": "2026-10-03T23:40:05Z",
+  "games": [
+    {
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T213903.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    }
+  ],
+  "mode": "start.gg",
+  "copySettings": {
+    "output": 2,
+    "writeContext": true,
+    "writeDisplayNames": true,
+    "writeFileNames": true,
+    "writeStartTimes": true
+  },
+  "folderNameFormat": "{phaseOrEvent} {roundShort} - {playersChars}",
+  "fileNameFormat": " - {playersChars} - {stage}",
+  "undoSubdir": "",
+  "host": {
+    "name": "",
+    "address": ""
+  }
+}

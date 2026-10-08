@@ -16,6 +16,13 @@
 //     probe.ts --find-short on 2026-09-25): the test tournament.
 // Then the event and stream are picked from that tournament by name.
 //
+// The set archive's context.json also needs two facts only start.gg's REST
+// tournament has, read as Replay Reporter for Slippi reads them (its
+// src/main/startgg.ts getTournament): locationDisplayName, and whether the
+// tournament has more than one Melee singles or doubles event (videogame 1,
+// no team roster size or exactly 2). One REST call here, after the GraphQL
+// lookup; it failing fails the start like any other lookup.
+//
 // One exception to "no fallbacks", for a numbered weekly series (user,
 // 2026-09-25, taken from the venue's bracket-display resolver; a config field since
 // 2026-09-30): if weeklyNamePrefix is set and no admin tournament carries the
@@ -31,7 +38,12 @@
 // zero or several is a startup failure that lists what was there, so the fix
 // is obvious from the journal. No guessing, no "closest match".
 
-import type { AdminTournament, StartggClient, TournamentDetail } from './startgg.js';
+import type {
+  AdminTournament,
+  RestTournament,
+  StartggClient,
+  TournamentDetail,
+} from './startgg.js';
 
 /** Melee's videogame id and start.gg's singles event type. */
 const MELEE_VIDEOGAME_ID = 1;
@@ -55,11 +67,13 @@ export interface Resolved {
   foundBy: 'full slug' | 'short URL' | 'nearest weekly';
   tournamentName: string;
   tournamentSlug: string;
-  tournamentLocation: string; // venue address, "" if none
+  /** REST locationDisplayName, as start.gg gives it (null when it has none). */
+  tournamentLocation: string | null;
   eventId: number;
   eventName: string;
   eventSlug: string;
-  eventHasSiblings: boolean; // the tournament has other events
+  /** More than one Melee singles or doubles event in the tournament (REST, Replay Reporter's count). */
+  eventHasSiblings: boolean;
   eventPhaseCount: number;
   /** null when no stream is configured. */
   streamId: number | null;
@@ -166,6 +180,16 @@ export function pickEvent(
   );
 }
 
+/** The events Replay Reporter lists for a tournament: Melee (videogame 1), singles or doubles. */
+export function rrEventCount(t: RestTournament): number {
+  return t.entities.event.filter(
+    (e) =>
+      e.videogameId === MELEE_VIDEOGAME_ID &&
+      (e.teamRosterSize === null ||
+        (e.teamRosterSize?.minPlayers === 2 && e.teamRosterSize?.maxPlayers === 2)),
+  ).length;
+}
+
 /** Exactly one stream named streamName. */
 export function pickStream(
   t: TournamentDetail,
@@ -192,15 +216,16 @@ export async function resolveEvent(
   const t = await client.getTournament(found.slug);
   const event = pickEvent(t, input.eventName);
   const stream = input.streamName === '' ? null : pickStream(t, input.streamName);
+  const rest = await client.getTournamentRest(t.slug.replace(/^tournament\//, ''));
   return {
     foundBy: found.foundBy,
     tournamentName: t.name,
     tournamentSlug: t.slug,
-    tournamentLocation: t.venueAddress ?? '',
+    tournamentLocation: rest.entities.tournament.locationDisplayName,
     eventId: Number(event.id),
     eventName: event.name,
     eventSlug: event.slug,
-    eventHasSiblings: t.events.length > 1,
+    eventHasSiblings: rrEventCount(rest) > 1,
     eventPhaseCount: event.phases?.length ?? 1,
     streamId: stream ? Number(stream.id) : null,
     streamName: stream ? stream.streamName : null,

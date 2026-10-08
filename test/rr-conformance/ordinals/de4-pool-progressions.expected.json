@@ -1,0 +1,27 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-ordinals.ts: RR getPhaseGroup (startgg.ts:451-784) unmodified, fetch stubbed",
+  "input": "de4-pool-progressions.input.json",
+  "bracketType": 2,
+  "ordinals": {
+    "2001": {
+      "ordinal": -2,
+      "round": 1,
+      "fullRoundText": "Winners Round 1"
+    },
+    "2002": {
+      "ordinal": -3,
+      "round": 1,
+      "fullRoundText": "Winners Round 1"
+    },
+    "2003": {
+      "ordinal": 0,
+      "round": 2,
+      "fullRoundText": "Winners Final"
+    },
+    "2004": {
+      "ordinal": -1,
+      "round": -1,
+      "fullRoundText": "Losers Round 1"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "entities": {
+    "phase": {
+      "id": 2000092,
+      "name": "Top 8",
+      "state": 2
+    },
+    "groups": [
+      {
+        "id": 3000091,
+        "groupTypeId": 2,
+        "displayIdentifier": "1",
+        "state": 2,
+        "waveId": null,
+        "winnersTargetPhaseId": null
+      }
+    ]
+  }
+}

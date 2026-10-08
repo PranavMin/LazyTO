@@ -1,0 +1,175 @@
+{
+  "name": "03-bo3-port-swap",
+  "description": "Bo3 won 2-1 by entrant1 (Marlow), who plays game 1 on port 2 and games 2-3 on port 1. RR keys the running score by port-ordered slot, not by player, so scores[1..] and finalScore credit the wrong player (finalScore says Marlow 1, Juniper 2) and bestOf comes out 3 only by luck. Tournament has two Melee events (event.hasSiblings true), one phase.",
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "events": [
+      {
+        "id": 1000031,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "phases": [
+          {
+            "id": 2000031,
+            "name": "Bracket",
+            "phaseGroups": [
+              {
+                "id": 3000031,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": null,
+                "winnersTargetPhaseId": null
+              }
+            ],
+            "state": 2
+          }
+        ]
+      },
+      {
+        "id": 1000032,
+        "name": "Melee Doubles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-doubles",
+        "state": 2,
+        "phases": []
+      }
+    ],
+    "stations": [],
+    "streams": []
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000031,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": true
+    },
+    "phase": {
+      "id": 2000031,
+      "name": "Bracket",
+      "hasSiblings": false
+    },
+    "phaseGroup": {
+      "id": 3000031,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000031,
+    "sggId": 90000031,
+    "state": 2,
+    "round": 1,
+    "fullRoundText": "Winners Round 1",
+    "winnerId": null,
+    "entrant1Id": 5000031,
+    "entrant1Participants": [
+      {
+        "id": 6000031,
+        "displayName": "Marlow",
+        "prefix": "TSM",
+        "pronouns": "he/him"
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000032,
+    "entrant2Participants": [
+      {
+        "id": 6000032,
+        "displayName": "Juniper",
+        "prefix": "",
+        "pronouns": "she/they"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": null,
+    "station": null,
+    "ordinal": -14,
+    "wasReported": false,
+    "updatedAtMs": 1791058200000,
+    "completedAtMs": 0
+  },
+  "report": {
+    "updatedSetFields": {
+      "id": 90000031,
+      "sggId": 90000031,
+      "completedAtMs": 1791059467000,
+      "stream": null
+    }
+  },
+  "clock": "2026-10-03T20:31:09Z",
+  "games": [
+    {
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    }
+  ],
+  "mode": "start.gg",
+  "copySettings": {
+    "output": 2,
+    "writeContext": true,
+    "writeDisplayNames": true,
+    "writeFileNames": true,
+    "writeStartTimes": true
+  },
+  "folderNameFormat": "{phaseOrEvent} {roundShort} - {playersChars}",
+  "fileNameFormat": " - {playersChars} - {stage}",
+  "undoSubdir": "",
+  "host": {
+    "name": "",
+    "address": ""
+  }
+}

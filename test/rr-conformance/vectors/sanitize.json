@@ -1,0 +1,191 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-vectors.ts: sanitize-filename 1.6.3 (truncate-utf8-bytes 1.0.2, utf8-byte-length 1.0.4), replacement \"\"",
+  "cases": [
+    {
+      "input": "Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco)",
+      "output": "Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco)",
+      "inputUtf8Bytes": 55,
+      "outputUtf8Bytes": 55
+    },
+    {
+      "input": "a/b\\c:d*e?f\"g<h>i|j",
+      "output": "abcdefghij",
+      "inputUtf8Bytes": 19,
+      "outputUtf8Bytes": 10
+    },
+    {
+      "input": "tab\there\nnewline\r",
+      "output": "tabherenewline",
+      "inputUtf8Bytes": 17,
+      "outputUtf8Bytes": 14
+    },
+    {
+      "input": "c1  end",
+      "output": "c1  end",
+      "inputUtf8Bytes": 13,
+      "outputUtf8Bytes": 7
+    },
+    {
+      "input": "del  stays",
+      "output": "del  stays",
+      "inputUtf8Bytes": 11,
+      "outputUtf8Bytes": 11
+    },
+    {
+      "input": ".",
+      "output": "",
+      "inputUtf8Bytes": 1,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "..",
+      "output": "",
+      "inputUtf8Bytes": 2,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "...",
+      "output": "",
+      "inputUtf8Bytes": 3,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "name.",
+      "output": "name",
+      "inputUtf8Bytes": 5,
+      "outputUtf8Bytes": 4
+    },
+    {
+      "input": "name. . .",
+      "output": "name",
+      "inputUtf8Bytes": 9,
+      "outputUtf8Bytes": 4
+    },
+    {
+      "input": "name   ",
+      "output": "name",
+      "inputUtf8Bytes": 7,
+      "outputUtf8Bytes": 4
+    },
+    {
+      "input": "   leading spaces kept",
+      "output": "   leading spaces kept",
+      "inputUtf8Bytes": 22,
+      "outputUtf8Bytes": 22
+    },
+    {
+      "input": "a  b   c",
+      "output": "a  b   c",
+      "inputUtf8Bytes": 8,
+      "outputUtf8Bytes": 8
+    },
+    {
+      "input": "CON",
+      "output": "",
+      "inputUtf8Bytes": 3,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "con",
+      "output": "",
+      "inputUtf8Bytes": 3,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "con.zip",
+      "output": "",
+      "inputUtf8Bytes": 7,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "COM1.slp",
+      "output": "",
+      "inputUtf8Bytes": 8,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "lpt9",
+      "output": "",
+      "inputUtf8Bytes": 4,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "aux.tar.gz",
+      "output": "",
+      "inputUtf8Bytes": 10,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "CONSOLE",
+      "output": "CONSOLE",
+      "inputUtf8Bytes": 7,
+      "outputUtf8Bytes": 7
+    },
+    {
+      "input": "nul ",
+      "output": "nul",
+      "inputUtf8Bytes": 4,
+      "outputUtf8Bytes": 3
+    },
+    {
+      "input": "",
+      "output": "",
+      "inputUtf8Bytes": 0,
+      "outputUtf8Bytes": 0
+    },
+    {
+      "input": "Ünïcødé {playersChars} 🦊",
+      "output": "Ünïcødé {playersChars} 🦊",
+      "inputUtf8Bytes": 31,
+      "outputUtf8Bytes": 31
+    },
+    {
+      "input": "Top 8 GFR - Ca$h/Money? (Falco, ICs)",
+      "output": "Top 8 GFR - Ca$hMoney (Falco, ICs)",
+      "inputUtf8Bytes": 36,
+      "outputUtf8Bytes": 34
+    },
+    {
+      "input": "ソラとヒカリのスーパーマリオブラザーズ",
+      "output": "ソラとヒカリのスーパーマリオブラザーズ",
+      "inputUtf8Bytes": 57,
+      "outputUtf8Bytes": 57
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "inputUtf8Bytes": 256,
+      "outputUtf8Bytes": 254
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé",
+      "inputUtf8Bytes": 255,
+      "outputUtf8Bytes": 255
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx🦊",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "inputUtf8Bytes": 256,
+      "outputUtf8Bytes": 252
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx🦊",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx🦊",
+      "inputUtf8Bytes": 255,
+      "outputUtf8Bytes": 255
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx. . . .y",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx. . .",
+      "inputUtf8Bytes": 258,
+      "outputUtf8Bytes": 255
+    },
+    {
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "inputUtf8Bytes": 300,
+      "outputUtf8Bytes": 255
+    }
+  ]
+}

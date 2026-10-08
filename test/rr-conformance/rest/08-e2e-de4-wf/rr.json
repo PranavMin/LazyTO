@@ -1,0 +1,80 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-e2e.ts: RR getTournament/getEvent/getPhase/getPhaseGroup/getSelectedSetChain (startgg.ts, unmodified), fetch stubbed",
+  "from": "01-bo3-2-0",
+  "requests": [
+    "GET https://api.start.gg/tournament/lazyto-conformance-weekly-1?expand[]=event",
+    "POST https://api.start.gg/gql/alpha TournamentStreamsAndStationsQuery",
+    "POST https://api.start.gg/gql/alpha TournamentParticipantsQuery",
+    "GET https://api.start.gg/event/1000081?expand[]=phase",
+    "GET https://api.start.gg/phase/2000081?expand[]=groups",
+    "GET https://api.start.gg/phase_group/3000081?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true"
+  ],
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "eventCount": 1
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000081,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": false
+    },
+    "phase": {
+      "id": 2000081,
+      "name": "Bracket",
+      "hasSiblings": false
+    },
+    "phaseGroup": {
+      "id": 3000081,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000081,
+    "sggId": 90000081,
+    "state": 2,
+    "round": 2,
+    "fullRoundText": "Winners Final",
+    "winnerId": null,
+    "entrant1Id": 5000001,
+    "entrant1Participants": [
+      {
+        "id": 6000001,
+        "displayName": "Kestrel",
+        "prefix": "LZY",
+        "pronouns": "she/her"
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000002,
+    "entrant2Participants": [
+      {
+        "id": 6000002,
+        "displayName": "Ember",
+        "prefix": "",
+        "pronouns": ""
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": null,
+    "station": null,
+    "ordinal": -3,
+    "wasReported": false,
+    "updatedAtMs": 1791053400000,
+    "completedAtMs": 0
+  },
+  "ordinals": {
+    "90000081": -3,
+    "90000082": -5,
+    "90000083": -6,
+    "90000084": -4
+  }
+}

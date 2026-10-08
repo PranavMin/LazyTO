@@ -1,0 +1,133 @@
+{
+  "fixture": "01-bo3-2-0",
+  "description": "Bo3 won 2-0 by entrant1, reported then copied. Entrant1 (Kestrel) is on port 2 in both games, so bracket order (players.entrant1) and port order (scores[].slots[0] = port 1) differ. Character switch for the winner (Fox -> ICs).",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T19:42:13Z",
+  "zipName": "Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco).zip",
+  "zipNameHex": "4d656c65652053696e676c657320575346202d204b65737472656c2028466f782c204943732920767320456d626572202846616c636f292e7a6970",
+  "subdir": "Melee Singles WSF - Kestrel (Fox, ICs) vs Ember (Falco)",
+  "contextSha256": "56c242b2c3a470f4bb78acf4a4c8ddce4a295ba4fee1f54bf92bbb90bc536b61",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "replaySha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Ember (Falco), Kestrel (Fox) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T18:53:05.631Z",
+      "outputSha256": "0ce35444c13cf07f164b8619fb152244d410ddddcb34c08e8d37b42a8f9932dd",
+      "outputSize": 1268
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "replaySha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Ember (Falco), Kestrel (ICs) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T19:37:07.631Z",
+      "outputSha256": "490489f04d874007a63601f23ce0b53e25de379dab71b9a803c803a355b8503e",
+      "outputSize": 1420
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "2 - Ember (Falco), Kestrel (ICs) - Pokémon Stadium.slp",
+      "1 - Ember (Falco), Kestrel (Fox) - Fountain of Dreams.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 3,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "97b4ecc6",
+        "uncompressedSize": 1285,
+        "dosTime": 40262,
+        "dosDate": 23875,
+        "sha256": "56c242b2c3a470f4bb78acf4a4c8ddce4a295ba4fee1f54bf92bbb90bc536b61"
+      },
+      {
+        "name": "2 - Ember (Falco), Kestrel (ICs) - Pokémon Stadium.slp",
+        "nameHex": "32202d20456d626572202846616c636f292c204b65737472656c202849437329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "c0f65c6f",
+        "uncompressedSize": 1420,
+        "dosTime": 40262,
+        "dosDate": 23875,
+        "sha256": "490489f04d874007a63601f23ce0b53e25de379dab71b9a803c803a355b8503e"
+      },
+      {
+        "name": "1 - Ember (Falco), Kestrel (Fox) - Fountain of Dreams.slp",
+        "nameHex": "31202d20456d626572202846616c636f292c204b65737472656c2028466f7829202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "5d879c61",
+        "uncompressedSize": 1268,
+        "dosTime": 40262,
+        "dosDate": 23875,
+        "sha256": "0ce35444c13cf07f164b8619fb152244d410ddddcb34c08e8d37b42a8f9932dd"
+      }
+    ]
+  }
+}
