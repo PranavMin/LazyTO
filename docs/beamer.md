@@ -17,9 +17,10 @@ The set archive works with either transport, as long as each station has a beame
 
 ## Set archive
 
-Protocol v2 ([protocol-v2.md](protocol-v2.md)) names each game's replay. Until the kiosk reads the
-record gate, it reports `replay_id` 0 for every game, and the archive binds no replay. How the
-relay collects and matches replays is in [architecture.md](architecture.md#replays).
+Protocol v2 ([protocol-v2.md](protocol-v2.md)) names each game's replay. The kiosk reads the id
+from the record gate, which needs the v2 loader (`host_build` 7). In Dolphin every game reports
+`replay_id` 0, and the archive binds no replay. How the relay collects and matches replays is in
+[architecture.md](architecture.md#replays).
 
 1. **The game names its replay.** Each `game_result` in a score report carries the entrants' CSS
    ports (from the L + R claim) and `replay_id`, the match's Slippi `gameStartTime`. The
@@ -75,22 +76,25 @@ written. Collection itself can be tried:
 - **Where the beamer lives.** The beamer is the Wii's USB drive, and the game boots from SD with
   Slippi replays on. Its firmware serves a 16-sector mailbox from RAM, just past the end of its
   replay partition. No filesystem covers those sectors on either side.
-- **What the Wii does.** The kernel writes each request into the mailbox. That is the same bytes
-  it would send over TCP, `relay_auth` included. It then polls for the beamer's answer. The
-  beamer forwards the bytes to the relay over Wi-Fi and finds the relay by its beacon, as a Wii
-  does. The relay does not change at all. (Mailbox v1. In v2 the beamer holds the station number
-  and the secret and writes `relay_auth` itself: [protocol-v2.md](protocol-v2.md).)
-- **Setup.** Put `transport=beamer` in `lazyto_station.txt`, turn the loader's Network option off,
-  and turn Slippi replays on with the game on SD.
-- **Kiosk messages.** The kiosk shows `PF_NO_BEAMER` when no LazyTO beamer answers.
+- **What the Wii does.** The kernel writes each request into the mailbox, stamped with the
+  station number from the beamer's hello and without `relay_auth`, then polls for the beamer's
+  answer. The beamer puts its own `relay_auth` (its `LAZYTO-SECRET`) in front, forwards the bytes
+  to the relay over Wi-Fi and finds the relay by its beacon. Mailbox v2:
+  [protocol-v2.md](protocol-v2.md).
+- **Setup.** Every SD card is the same (`src/cards.ts`): Slippi replays on, Network off, the game
+  on SD. The beamer holds the station number (its button) and the secret (`CONFIG/config.txt`).
+- **Kiosk messages.** The kiosk says what is wrong with the beamer in its own words: no beamer and
+  why, no number, no secret, its Wi-Fi, no relay, its card ([protocol-v2.md](protocol-v2.md),
+  Kiosk).
 
 Layout and rules: protocol.yaml `beamer_hello`, `beamer_req_hdr`, `beamer_resp_hdr`,
 `beamer_tele_hdr` and the `BEAMER_*` constants.
 
-Kernel side (Nintendont branch `beamer`):
+Kernel side (Nintendont branch `redesign`, the pinned commit):
 
 - **USB lock.** Two threads now use USB, the Slippi file writer and the relay thread, so USB
-  transfers run under a one-token message-queue lock.
+  transfers run under a one-token message-queue lock. The relay thread waits for it at most what
+  is left of the request's 3 s budget.
 - **Mailbox address.** The kernel finds the mailbox from the drive's MBR: the end of the first
   FAT32 partition.
 - **Request numbering.** Each request carries a number (`seq`). The beamer stays powered while the
@@ -99,13 +103,14 @@ Kernel side (Nintendont branch `beamer`):
 
 ## First hardware test (when the beamers arrive)
 
-1. **Beamer firmware alone.** Flash the `LazyTO` firmware and set `LAZYTO = true` in the beamer's
-   `CONFIG/config.txt`. Plug it into a Linux machine. Run `tools/lazyto_host.py` from the
+1. **Beamer firmware alone.** Flash the fork's v2 firmware (branch `lazyto-redesign`, build 2),
+   set `LAZYTO = true` and `LAZYTO-SECRET` in the beamer's `CONFIG/config.txt`, and give it a
+   number with its button. Plug it into a Linux machine. Run `tools/lazyto_host.py` from the
    firmware repo against a dev relay: HELLO, then a LIST_SETS round trip.
-2. **On a Wii.** Use a CI-built LazyTO loader from Nintendont branch `beamer`, a card with
-   `transport=beamer`, Network off, and replays on. Check:
+2. **On a Wii.** Use a CI-built LazyTO loader from the pinned Nintendont commit (branch
+   `redesign`) and a card from this relay's SD-card zip. Check:
    - the set list loads;
    - a full set plays through;
-   - the zip appears on the Pi.
+   - the zip appears in the relay's archive folder.
 3. **Before trusting it at an event, play 20 games.** Report each score while the beamer is
    still serving the previous replay, and check no replay is lost.

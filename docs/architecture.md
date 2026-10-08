@@ -172,13 +172,13 @@ The game never blocks. It polls once per frame. All buffers are static. The comm
 
 ### LazyTO Nintendont
 
-LazyTO Nintendont is Slippi Nintendont plus four additions in the kernel. Its loader is otherwise the venue's normal Slippi Nintendont.
+LazyTO Nintendont is Slippi Nintendont plus these additions in the kernel (protocol v2: [protocol-v2.md](protocol-v2.md), Kernel). Its loader is otherwise the venue's normal Slippi Nintendont. The kernel opens no IOS socket and reads no settings file of its own: the beamer is the Wii's only link, and the station number and the secret live on the beamer. Slippi's own network code (console mirroring) is untouched; the loader's Network option means mirroring only.
 
-1. **Config.** At boot it reads `sd:/lazyto_station.txt` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no station file".
+1. **The beamer.** USB is the replay drive only with Slippi replays on and the game on SD; the relay thread then reads the beamer's hello (the mailbox sector right after its replay partition) about once a second, and every poll's `exi_poll_hdr` carries what it says: no beamer and why (`no_beamer_reason`, "starting" for about 45 s after boot or a USB change), no station number, no secret, a stale beacon, the beamer's Wi-Fi and card. A hello below mailbox v2 or firmware build 2 is old firmware.
 2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/lazyto_kiosk.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
-3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from `lazyto_station.txt`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
-4. **Discovery.** While idle, the relay thread listens on UDP 29471 for the relay's beacon and takes the source address plus the advertised TCP port. If it hears nothing it sends a beacon request to UDP 29472 and gets a unicast beacon back.
-5. **Telemetry.** Once it knows the relay, the kernel sends UDP datagrams to port 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
+3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from the beamer's hello, and hands off to a dedicated kernel thread. That thread writes the request to the beamer's request sector (no `relay_auth`: the beamer puts its own in front) and polls the response sector, within a 3 s budget that includes the wait for the USB lock. Every failure is `RELAY_ERROR` with a code in `exi_poll_hdr.last_fail` (the beamer's `BR_*` or the kernel's `LF_*`), and the kiosk picks the words. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
+4. **Telemetry.** Once the beamer has a number, a secret and a relay, the kernel writes datagrams to the beamer's telemetry sector, which the beamer sends to UDP 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
+5. **Record gate.** At each Slippi Game Start (inside the EXI DMA handler, no lock, no wait) the kernel reads the module's `want` word and keeps the choice. The replay writer opens a file only for a match the module asked for (every match when no module is loaded), drains a skipped match at once, and publishes which Game Start it opened a file for and that file's id. It syncs each recording once after its first data block, and a match that never sent Game End no longer costs the next one. `RELAY_HOST_BUILD` 7 has the gate.
 
 The kernel interprets nothing beyond the header length. One buffer, one thread, four states, no retries.
 
@@ -404,7 +404,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 - Per station: set, score, last action and its age, the status the player saw, and the station's telemetry (module state, recent log lines, last crash).
 - Every failed start.gg call with its message, until the TO clicks "ack". Ack only hides the flag.
-- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it, because the protocol never sends a Wii earlier games.
+- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it: only the station's own resume gets the set's games back.
 - **Waiting sets** with their best-of and a button to switch Bo3/Bo5 or go back to `setFormat`'s answer. Only for sets no station holds, since a Wii learns best-of when it starts a set. Overrides are `bestof` events in the audit log and replay at startup.
 - **Beamers**: one row per beamer from its syncs: number (or none), address, firmware, Wi-Fi signal, free space and space lost to interrupted recordings, replays on the card (to collect, to erase, empty, incomplete), up since ("not unplugged since"), the last erase, downloads and the last Wii round trip. Warnings for a full or faulty card, old firmware, a beamer never unplugged after an event, a full laptop disk. Above them, "All replays collected: safe to unplug beamers" once no beamer has anything left to collect.
 - **Replays**: games reported without a replay flagged on their station, finished sets skipped for Lucky Stats with the reason per game, the zips written, the strays kept, the archive folder and its free space.
@@ -415,10 +415,11 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 | Failure | Where seen | Behaviour |
 |---------|------------|-----------|
-| No `lazyto_station.txt` | Wii | "NO STATION FILE ON THE CARD". Station unusable until fixed. |
+| No beamer, or not a LazyTO one | Wii | `NO BEAMER ON THIS WII`, `NOT A LAZYTO BEAMER` or `UPDATE THE BEAMER`; `WAITING FOR THE BEAMER` while it starts. |
+| Beamer without a number | Wii | `THIS BEAMER HAS NO NUMBER`, a wait that clears at the first button click. |
 | Wrong or missing secret | Wii + status page | RELAY SECRET MISMATCH. Counted on the status page. |
 | No beacon heard | Wii | BEAMER HEARS NO RELAY after 10 s. A searches again. |
-| Relay unreachable | Wii | Times out after 3 s. A retries. TO checks the Pi and network. |
+| Relay unreachable | Wii | The beamer's connect fails (`BR_CONNECT`) or no answer comes within 3 s: `NO LINK TO THE RELAY`. A retries. TO checks the relay's firewall and the network. |
 | Set taken | Wii | "started on station N". Player picks again. |
 | `assignStream` fails after `markSetInProgress` | Wii + status page | Set is in progress but not on stream. TO assigns it by hand and acks. |
 | start.gg 5xx | Relay | Retry twice, then `ST_STARTGG_ERROR`; row flagged. Retrying later is safe. |
@@ -435,7 +436,7 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 ### Wii (each station)
 
-- The stock Melee 1.02 disc image on USB or SD, as at any Slippi local.
+- The stock Melee 1.02 disc image on the SD card: with the game on USB, the beamer is not used.
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
 - On the SD card root, all from the one SD-card zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder). Every card is the same:
   - `apps/LazyTO/`: the loader.
@@ -463,7 +464,7 @@ Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
 ### Network
 
-The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once by opening the status page from a phone on the venue Wi-Fi.
+The relay's computer, the beamers and the TO's phone must share one network. Addresses do not matter, because beamers find the relay by its beacon. The Wiis use no network: each reaches the relay through its beamer. A guest Wi-Fi with client isolation blocks beamer-to-relay traffic: check once by opening the status page from a phone on the venue Wi-Fi.
 
 The secret travels in plain text. It keeps passers-by out, not someone capturing the Wi-Fi traffic.
 

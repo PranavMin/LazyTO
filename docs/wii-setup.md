@@ -79,8 +79,10 @@ Boot the game from the SD card. With the game on USB, the beamer is not used.
 With the relay running, power on one Wii and start LazyTO.
 
 1. Melee starts and opens the **Tournament** screen. It shows `LOOKING FOR THE RELAY`, then
-   `LOADING SETS`, then the set list, within a few seconds. While the Wii is still joining the
-   Wi-Fi it shows `JOINING THE WI-FI`, which can take 15 seconds.
+   `LOADING SETS`, then the set list, within a few seconds. While the beamer is still starting
+   (up to about 45 seconds after the Wii boots or the beamer is plugged in) it shows
+   `WAITING FOR THE BEAMER`, and while the beamer joins the Wi-Fi `BEAMER JOINING THE WI-FI`. A
+   beamer without a number shows `THIS BEAMER HAS NO NUMBER`: press its button.
 2. The set list shows sets whose players are both known. The Wii also appears in the **Wii
    consoles** table on the relay's status page.
 3. The set list's top right shows the module and loader versions.
@@ -91,17 +93,22 @@ How players use the kiosk is on the printable controls poster, [kiosk-poster.htm
 
 Look at the relay's status page first, at http://relay.local:29473. Each Wii sends its own log
 to the relay, so the **Wii consoles** table shows whether the module loaded, any crash, and the
-last log lines. A Wii appears there once it has found the relay and has the right secret.
+last log lines. A Wii appears there once its beamer has a number, the right secret and the
+relay.
 
 | The Wii shows | Meaning | Do |
 |---|---|---|
-| `JOINING THE WI-FI`, then `THIS WII COULD NOT JOIN THE WI-FI` after 60 s | The Wii can't connect | Power cycle. Check the Wii's connection test and the router's 2.4 GHz mode. |
-| `TURN ON REPLAYS IN THE LOADER` | The loader's Slippi Replays setting is off, or the game is not on the SD card | Turn replays on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the zip onto the card again. |
-| `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
+| `BEAMER JOINING THE WI-FI`, then `BEAMER STILL JOINING WI-FI` after 60 s, or `THE BEAMER CANNOT JOIN WI-FI` | The beamer can't join the Wi-Fi | Check the Wi-Fi name and password in the beamer's `CONFIG/config.txt` (write it again from the LazyTO app) and the router's 2.4 GHz band. |
+| `THIS BEAMER HAS NO NUMBER` | A new or wiped beamer has no station number | Press its button: a click adds 1, holding it takes 1 off. The beamer keeps the number. |
+| `REPLAYS ARE OFF IN THE LOADER` | The loader's Slippi Replays setting is off, or the game is not on the SD card, so the Wii never looks for the beamer | Turn replays on in the loader's menu (hold B as it starts), or copy `lazyto_nincfg.bin` from the zip onto the card again. |
+| `NO BEAMER ON THIS WII`, `NOT A LAZYTO BEAMER` or `UPDATE THE BEAMER` | No drive in the USB port; a plain USB stick, or a beamer without `LAZYTO = true`; or beamer firmware older than this loader | Plug the station's beamer in, as the only USB drive. Set it up, or flash it, with the LazyTO app. |
+| `THE BEAMER HAS NO SECRET` | Its `CONFIG/config.txt` has no `LAZYTO-SECRET` | Write the beamer's `CONFIG/config.txt` again from the LazyTO app. |
+| `BEAMER HEARS NO RELAY` | The beamer heard no beacon from the relay | Is LazyTO running? Are the beamers and the relay on the same network? A guest network may isolate them. |
 | `RELAY SECRET MISMATCH` | The beamer's secret differs from the relay's, for example after a new Wii secret | Write the beamer's `CONFIG/config.txt` again from the LazyTO app. |
-| `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
+| `NO LINK TO THE RELAY` (`CHECK THE LAPTOP FIREWALL`) | The beamer heard the relay but can't connect to it | A firewall on the relay's computer is blocking TCP 29470: on Windows, use the status page's "Allow LazyTO through the firewall". |
+| `TWO BEAMERS ARE STATION n` | Another beamer already plays as this number; this one came second | Renumber one of them with its button. The status page names both. |
+| `REPLAYS NOT SAVING - TELL THE TO` on the character select | The beamer's SD card is full or failing; play goes on, but the games have no replay | Between sets, unplug the beamer and plug it in again: it erases the replays the relay has collected. If it stays, check the beamer's card. |
 | `LGL OFF - SCORE BY HAND` after a time-out | That card's Gameplay setting is Off or Wobbling, so the game went to Sudden Death instead of deciding by percent | Score that game by hand. Then copy `lazyto_nincfg.bin` from the zip onto the card, or set Gameplay to Both in the loader's menu (hold B as it starts). |
-| Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
 | Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the loader from the zip. A loader you build yourself fails here. |
 | Boots to the character select instead of the Tournament screen | An old `lazyto_kiosk.bin`, or a card made before 2026-10-02 (its files were `tournament.bin` and `tournament.cfg`) | Unzip the zip onto the card again. |
 
