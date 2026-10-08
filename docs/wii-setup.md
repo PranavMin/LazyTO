@@ -25,7 +25,7 @@ That is the whole card:
 | `apps/LazyTO/` | the LazyTO loader (`boot.dol`, `meta.xml`, `icon.png`) |
 | `lazyto_kiosk.bin` | the kiosk module, the same file on every card |
 | `lazyto_station.txt` | this Wii's station number and the relay's Wii secret, below |
-| `lazyto_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, the game at `games/GALE01/game.iso` |
+| `lazyto_nincfg.bin` | the loader's settings: Network and Auto Boot on, UCF on, Gameplay Both (LGL and anti-wobbling), the game at `games/GALE01/game.iso` |
 | `games/GALE01/game.iso` | your Melee 1.02 image |
 
 The loader appears in the Homebrew Channel as **LazyTO**. Your usual Slippi Nintendont can stay
@@ -70,10 +70,13 @@ something, hold B while the loader starts to reach its menu:
 | Network | **On**. Without it the kiosk says `NETWORK IS OFF IN THE LOADER`. |
 | Auto Boot | On, to start Melee straight away. |
 | Melee Music, Melee Audio | your choice. Unless set to On and Stereo, the kiosk turns music off and uses mono. |
+| Gameplay | **Both**: LGL, the ledge-grab limit, and anti-wobbling. On a time-out the game takes the player ahead on stocks, then on lower percent, unless that player is over the limit (more than 45 ledge grabs at 8:00) and the other is not; then the other player wins. An exact tie, or a double KO on the last stocks, goes to a 1-stock, 0%, 3:00 tiebreak game. The kiosk reports what the game decided, including the tiebreak. With Off or Wobbling there is no limit: a time-out tied on stocks but not on percent goes to vanilla Sudden Death and the kiosk says `LGL OFF - SCORE BY HAND`. |
 | Everything else | as your venue normally runs Slippi Nintendont |
 
 Slippi Nintendont's options, such as UCF, stage striking and stage lists, work as usual. LazyTO
-adds nothing to them.
+turns on Gameplay: Both and adds no code of its own to them. Cards made before 2026-10-07 have
+Gameplay off: copy `lazyto_nincfg.bin` from a new station zip onto the card, or set Gameplay in
+the loader's menu.
 
 Changes are saved only when you start the game from the menu. From the settings, press B to
 return to the game list, then A on the game. Home ("Go Back") returns to the SD/USB screen and
@@ -109,6 +112,7 @@ last log lines. A Wii appears there once it has found the relay and has the righ
 | `NO RELAY FOUND` | The Wii heard nothing from the relay | Is the relay running? Are the Wii and the Pi on the same network? A guest network may isolate them. |
 | `RELAY SECRET MISMATCH` | The card's secret differs from the relay's, for example after a new Wii secret | Download the station's zip again and copy its `lazyto_station.txt` onto the card. |
 | `NO LINK TO THE RELAY` with an address shown | The Wii found the relay but can't connect to it | A loader older than Nintendont `c4e972a` (2026-10-01) fails every connect to a relay that doesn't answer within the same millisecond (the Wii log says `connect() ... returned -26`); use the current loader. Otherwise a firewall between them is blocking TCP 29470. |
+| `LGL OFF - SCORE BY HAND` after a time-out | That card's Gameplay setting is Off or Wobbling, so the game went to Sudden Death instead of deciding by percent | Score that game by hand. Then copy `lazyto_nincfg.bin` from the station's zip onto the card, or set Gameplay to Both in the loader's menu (hold B as it starts). |
 | `no station file` on every action | The card isn't being read | Boot the game from the SD card. Check `station=` and `secret=` are both present. |
 | Wii Settings connection test: error 51330 | The Wii can't join the Wi-Fi | Set the router's 2.4 GHz mode to b/g/n. |
 | Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the loader from the station's zip. A loader you build yourself fails here. |

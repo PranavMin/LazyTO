@@ -136,7 +136,21 @@ The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 
 
 #### Auto-score
 
-When a game ends by KO or time-out with exactly two human players, the module reads the match standings: winner (more stocks, then less damage), each player's character, stocks left and costume, and the stage. It appends the game and sends REPORT_SCORE on the first CSS frame back. An exact tie or a no-contest is left to the players. Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner only.
+When a game ends by KO or time-out with exactly two players in it, both human, the module reads the match result after vanilla's VS exit: the winner the game itself decided (MatchEnd `winners[]` when `n_winners` is 1), each player's character, stocks left and costume, and the stage. It appends the game and sends REPORT_SCORE on the first CSS frame back.
+
+The cards run Slippi's Gameplay: Both, which is LGL (UnclePunch's ledge-grab limit) plus the anti-wobbling code. On a time-out LGL takes the player ahead on stocks, then on lower percent. If that player is over the ledge-grab limit (more than 45 ledge grabs at 8:00; the limit scales with the time limit) and the other is not, the other player wins, whatever the stocks or percent. That includes an exact stock and percent tie with one player over. The banner then reads `GAME n TO <tag> - LGL`, and the game carries no stocks, so start.gg gets no per-game score for it (the loser may have more stocks left than the winner); characters, stage and costumes still go.
+
+A tie goes to LGL's tiebreak game: 1 stock each at 0% for 3:00 (its own time-out uses a limit of 17 grabs), played in vanilla's Sudden Death scene. A tie is an exact stock and percent tie at a time-out with neither or both players over the limit, or a double KO on the last stocks. The tied game is not appended. The module also wraps the Sudden Death scene's exit (`ptr 0x803DA968`, vanilla `gm_Scene_Vs_OnExit`) and scores the tiebreak game like any other, so the set gets one game for the two. A tiebreak that ties again goes to the results screen, not another tiebreak, and is left to the players (`TIE - SCORE IT MANUALLY`).
+
+Also left to the players:
+
+- a no-contest (`NO CONTEST - NOT SCORED`);
+- no winner, when both players are over the limit and one is ahead (`BOTH OVER LGL - SCORE BY HAND`);
+- a time-out tied on stocks but not on percent, which only a card with Gameplay Off or Wobbling produces (`LGL OFF - SCORE BY HAND`); vanilla Sudden Death follows and is not scored;
+- a Team battle (`TEAMS ON - SCORE BY HAND`): the game decides it by team standings, which LGL does not touch;
+- a game with a CPU or more than two players (`AUTO-SCORE NEEDS 2 PLAYERS`).
+
+Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner only.
 
 #### EXI device contract
 

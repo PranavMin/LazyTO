@@ -12,6 +12,7 @@
 ptr    0x803DA940 mnTourney_MenuSceneExit   # GS_MENU on_exit (vanilla NULL)
 ptr    0x803DA94C lbTourney_MatchFrame      # GS_VS on_frame (vanilla gm_Scene_Vs_OnFrame)
 ptr    0x803DA954 lbTourney_MatchExit       # GS_VS on_exit  (vanilla gm_Scene_Vs_OnExit)
+ptr    0x803DA968 lbTourney_TiebreakExit    # GS_SUDDEN_DEATH on_exit (vanilla gm_Scene_Vs_OnExit): LGL's tiebreak game
 ptr    0x803DA9B0 lbTourney_CSSFrame        # GS_CSS on_frame (vanilla mnCharSel_Scene_OnFrame)
 ptr    0x803DA9B8 lbTourney_CSSExit         # GS_CSS on_exit  (vanilla mnCharSel_Scene_OnExit)
 ptr    0x803DA9C8 lbTourney_SSSEnter        # GS_SSS on_enter (vanilla mnStageSel_Scene_OnEnter): Z+X handwarmer -> Battlefield

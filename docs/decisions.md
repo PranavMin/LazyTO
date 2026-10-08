@@ -70,7 +70,7 @@ The relay and the Wii files can never come from different commits, and the loade
 
 A card then needs only unzipping and the Melee image, and always matches the relay's version and Wii secret. The loader keeps its settings in a file of its own, `lazyto_nincfg.bin`, so a venue's Slippi Nintendont on the same card (`slippi_nincfg.bin`) never reads or overwrites them, whatever version either writes.
 
-## Risks and questions (R1-R16)
+## Risks and questions (R1-R17)
 
 ### R1: assignStream
 
@@ -135,3 +135,11 @@ The Pi is usually on Wi-Fi with no guaranteed address. Alternatives were a DHCP 
 **A shared secret, the same on every card, sent by the host before every request and telemetry datagram.**
 
 Refusals are logged and counted on the status page. It stops passers-by, not someone capturing Wi-Fi traffic. The upgrade path is an HMAC over each request with a relay-issued nonce. Reading the status page needs nothing; its actions, the settings and the SD-card zips need the admin password. A new secret is one tick on the settings page, after which every card needs its zip again.
+
+### R17: who won a time-out
+
+**The game decides each game, and the kiosk reports that decision. Cards run Slippi's Gameplay: Both (LGL and anti-wobbling).** (2026-10-07)
+
+The ruleset has the ledge-grab limit: on a time-out, more stocks wins, then lower percent, and a player with more than 45 ledge grabs at 8:00 loses. Slippi's Gameplay: LGL (UnclePunch's code) applies the limit inside the game, before vanilla builds the result. If the player ahead on stocks, then percent, is over the limit and the other is not, the other wins. If both are over and one is ahead, nobody wins, and the game is scored by hand. "Both" is the same LGL code followed by the anti-wobbling code, which touches no result. Until now the cards turned it off and the kiosk recomputed stocks then percent itself, so an LGL loss was reported as a win, and a double KO could be scored by percent while the game played Sudden Death. Reading the game's own `winners[]` keeps the results screen, the replay's placements and start.gg in agreement, without re-implementing a codeset. It is fixed in the cards rather than a setting, so there is one path: a card with Gameplay off still runs, and says `LGL OFF - SCORE BY HAND` when it matters.
+
+A game LGL decides is sent without stocks, so start.gg shows no per-game score for it rather than the loser with more stock icons than the winner. A tie (an exact stock and percent tie, or a double KO on the last stocks) is played off in LGL's tiebreak game (1 stock, 0%, 3:00). The kiosk scores that game in place of the tied one, through a second scene hook on the Sudden Death exit. This replaces the plan to turn every tie into a no-contest (the redesign's D13): the tiebreak is the ruleset's own, and the results screen then names the same winner.
