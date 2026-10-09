@@ -6,3 +6,7 @@
 	path = Nintendont
 	url = https://github.com/PranavMin/Nintendont.git
 	branch = LazyTO
+[submodule "slippi-beamer"]
+	path = slippi-beamer
+	url = https://github.com/PranavMin/slippi-beamer.git
+	branch = LazyTO

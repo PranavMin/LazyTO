@@ -1,13 +1,14 @@
 ---
 name: protocol-change
-description: Change the Wii-relay protocol (protocol.yaml) across all three consumers - relay, kiosk module, Nintendont kernel - in the right order. Use for any new message, field, enum value or struct size change.
+description: Change the Wii-relay protocol (protocol.yaml) across all four consumers - relay, kiosk module, Nintendont kernel, beamer firmware - in the right order. Use for any new message, field, enum value or struct size change.
 ---
 
 # Change the protocol
 
-`protocol.yaml` defines every message between the Wii and the relay. Three things consume it:
-the relay (`generated/wire.ts`), the kiosk (`kiosk/include/relay_proto.h`) and the Nintendont
-kernel (`Nintendont/kernel/relay_proto.h`). A Wii whose module and loader come from different
+`protocol.yaml` defines every message between the Wii and the relay. Four things consume it:
+the relay (`generated/wire.ts`), the kiosk (`kiosk/include/relay_proto.h`), the Nintendont
+kernel (`Nintendont/kernel/relay_proto.h`) and the beamer firmware
+(`slippi-beamer/components/beamer_lazyto/include/relay_proto.h`). A Wii whose module and loader come from different
 protocol versions shows `NO SETS LOADED YET`.
 
 ## Steps
@@ -17,7 +18,7 @@ protocol versions shows `NO SETS LOADED YET`.
    ```bash
    python tools/gen_protocol.py
    ```
-   This writes `generated/wire.ts` and both header copies. Never edit any of them by hand.
+   This writes `generated/wire.ts` and all three header copies. Never edit any of them by hand.
 3. Update relay code in `src/`. Import from `generated/wire.ts`; never copy it.
 4. Update kiosk code. Check size limits:
    - EXI request payload cap is `EXI_PAYLOAD_MAX` (88 bytes in v2); `lbrelayexi.h` and kernel
@@ -25,8 +26,9 @@ protocol versions shows `NO SETS LOADED YET`.
    - Keep `exi_poll_hdr` layout stable; the module asserts its offsets.
    - Never edit a FROZEN struct (protocol.yaml header): beamers parse them and have no
      over-the-air update. `test/protocol-frozen.test.ts` pins their bytes.
-   - The beamer firmware (`components/beamer_lazyto/include/`) carries a copy of the header; a
-     mailbox change is a `BEAMER_MB_VERSION` bump and a firmware update.
+   - The beamer firmware's copy (`slippi-beamer/`) is regenerated with the others; commit it in
+     that submodule (`git -C slippi-beamer switch LazyTO` first). A mailbox change is a
+     `BEAMER_MB_VERSION` bump and a firmware update.
 5. Update the kernel in the submodule. A submodule checkout is detached, so first:
    ```bash
    git -C Nintendont switch LazyTO

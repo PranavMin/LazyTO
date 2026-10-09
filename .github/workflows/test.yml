@@ -15,8 +15,9 @@ jobs:
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4
-      # npm test checks the protocol header copy in Nintendont/kernel/; melee is not needed.
-      - run: git submodule update --init --depth 1 Nintendont
+      # npm test checks the protocol header copies in Nintendont/kernel/ and
+      # slippi-beamer/components/beamer_lazyto/include/; melee is not needed.
+      - run: git submodule update --init --depth 1 Nintendont slippi-beamer
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}

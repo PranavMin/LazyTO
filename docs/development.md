@@ -86,13 +86,15 @@ npm start        # compiles to desktop/dist/ and opens the app
 `protocol.yaml` defines every message between the Wii and the relay. Never edit the generated
 files by hand. After changing `protocol.yaml`:
 
-1. Run `python tools/gen_protocol.py`. It writes `generated/wire.ts` and the C header in both
-   places that build with it, `kiosk/include/relay_proto.h` and `Nintendont/kernel/relay_proto.h`.
-   `npm test` fails if any of them drift.
-2. Commit and push the header in the Nintendont submodule, then commit `generated/wire.ts`,
-   `kiosk/include` and the new Nintendont position here.
-3. Rebuild the module and the loader together. A Wii with a module and loader from different
-   protocol versions shows `NO SETS LOADED YET`.
+1. Run `python tools/gen_protocol.py`. It writes `generated/wire.ts` and the C header in the
+   three places that build with it, `kiosk/include/relay_proto.h`,
+   `Nintendont/kernel/relay_proto.h` and
+   `slippi-beamer/components/beamer_lazyto/include/relay_proto.h`. `npm test` fails if any of
+   them drift.
+2. Commit and push the header in the Nintendont and slippi-beamer submodules, then commit
+   `generated/wire.ts`, `kiosk/include` and both new submodule positions here.
+3. Rebuild the module, the loader and the beamer firmware together. A Wii with a module and
+   loader from different protocol versions shows `NO SETS LOADED YET`.
 
 ## The kiosk module
 
@@ -138,8 +140,9 @@ address. `python kiosk/tools/resolve_crash.py <address>` turns it into a functio
 
 ## Working in a submodule
 
-`melee/` is never edited. `Nintendont/` is the loader fork. A submodule checkout starts on a
-fixed commit, not a branch, so before changing the loader:
+`melee/` is never edited. `Nintendont/` is the loader fork and `slippi-beamer/` the beamer
+firmware fork, both on their `LazyTO` branch. A submodule checkout starts on a fixed commit, not a
+branch, so before changing the loader (or, the same way, the firmware):
 
 ```
 cd Nintendont

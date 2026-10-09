@@ -4,8 +4,10 @@
 Outputs (committed; never edit by hand):
     generated/wire.ts                 DataView encode/decode for the relay
     kiosk/include/relay_proto.h       packed big-endian structs + _Static_asserts,
-    Nintendont/kernel/relay_proto.h   the same header for the kiosk module and
-                                      the Nintendont kernel (two copies, one each)
+    Nintendont/kernel/relay_proto.h   the same header for the kiosk module, the
+    slippi-beamer/components/beamer_lazyto/include/relay_proto.h
+                                      Nintendont kernel and the beamer firmware
+                                      (three copies, one each)
 
 The generator computes every struct layout with natural alignment and refuses
 to emit anything if a field would need implicit padding (padding must be an
@@ -581,11 +583,14 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 
 # ---------------------------------------------------------------- main
 
-# The C header: the kiosk module builds with one copy, and the Nintendont
-# submodule's kernel builds the relay EXI device with the other (it builds on
-# its own in its own CI). Written and checked together, so they never drift.
+# The C header: the kiosk module builds with one copy, the Nintendont
+# submodule's kernel builds the relay EXI device with another (it builds on
+# its own in its own CI), and the slippi-beamer submodule's firmware builds
+# the beamer's side of the mailbox and the sync with the third. Written and
+# checked together, so they never drift.
 HEADER_COPIES = (ROOT / "kiosk" / "include" / "relay_proto.h",
-                 ROOT / "Nintendont" / "kernel" / "relay_proto.h")
+                 ROOT / "Nintendont" / "kernel" / "relay_proto.h",
+                 ROOT / "slippi-beamer" / "components" / "beamer_lazyto" / "include" / "relay_proto.h")
 
 
 def generate() -> dict[Path, str]:

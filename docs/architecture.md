@@ -222,7 +222,7 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 
 ## Wire protocol
 
-[`protocol.yaml`](../protocol.yaml) is the source of truth (version 2, MIT). `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary; [protocol-v2.md](protocol-v2.md) is the implementer's guide for each part, the beamer firmware included.
+[`protocol.yaml`](../protocol.yaml) is the source of truth (version 2, MIT). `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in three copies, `kiosk/include/` for the module, `Nintendont/kernel/` for the kernel and `slippi-beamer/components/beamer_lazyto/include/` for the beamer firmware, and CI fails on drift. This section is a summary; [protocol-v2.md](protocol-v2.md) is the implementer's guide for each part, the beamer firmware included.
 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fail if the generated protocol files are out of date with protocol.yaml (the CI drift check).
 
-Regenerates generated/wire.ts and the two relay_proto.h copies (kiosk/include and
-the Nintendont submodule) in memory and compares them against the committed files.
+Regenerates generated/wire.ts and the three relay_proto.h copies (kiosk/include,
+the Nintendont submodule and the slippi-beamer submodule) in memory and compares
+them against the committed files.
 Prints a unified diff and exits non-zero on any mismatch, so a PR that touches
 protocol.yaml without regenerating (or hand-edits a generated file) fails CI.
 
@@ -47,9 +48,9 @@ def main() -> int:
             rc = max(rc, 1)
 
     if rc == 0:
-        print("generated/wire.ts and both relay_proto.h copies are up to date with protocol.yaml")
+        print("generated/wire.ts and all three relay_proto.h copies are up to date with protocol.yaml")
     else:
-        print("\nfix: python tools/gen_protocol.py  (then commit generated/wire.ts, kiosk/include and the Nintendont header)",
+        print("\nfix: python tools/gen_protocol.py  (then commit generated/wire.ts, kiosk/include, and the Nintendont and slippi-beamer headers)",
               file=sys.stderr)
     return rc
 

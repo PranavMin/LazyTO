@@ -104,7 +104,7 @@ Kernel side (Nintendont branch `redesign`, the pinned commit):
 
 ## First hardware test (when the beamers arrive)
 
-1. **Beamer firmware alone.** Flash the fork's v2 firmware (branch `lazyto-redesign`, build 2),
+1. **Beamer firmware alone.** Flash the fork's v2 firmware (branch `LazyTO`, the `slippi-beamer/` submodule, build 2),
    set `LAZYTO = true` and `LAZYTO-SECRET` in the beamer's `CONFIG/config.txt`, and give it a
    number with its button. Plug it into a Linux machine. Run `tools/lazyto_host.py` from the
    firmware repo against a dev relay: HELLO, then a LIST_SETS round trip.
