@@ -132,11 +132,16 @@ A card for a module change: make the station's zip on a relay's SD cards page, u
 card, then replace its `lazyto_kiosk.bin` with `kiosk/build/lazyto_kiosk.bin`. Never put a `--demo`
 build on a card. A loader change needs a CI loader in `apps/LazyTO/` (above).
 
-**Debugging on hardware.** Each Wii sends its kernel log and module status to the relay, so the
-status page's **Wii consoles** table and `/log?station=N` are the first place to look. The relay
-also saves each Wii's log as `wii-station-N.log` in its audit folder. If a Wii never reports,
-turn on **Log** in the loader and read `slippi_ndebug.log` on the SD card. A crash line names an
-address. `python kiosk/tools/resolve_crash.py <address>` turns it into a function name.
+**Debugging on hardware.** Each Wii sends its kernel log and module status to the relay through
+its beamer, so the status page's **Wii consoles** table and `/log?station=N` are the first place
+to look. The relay also saves each Wii's log as `wii-station-N.log` in its audit folder. A crash
+line names an address. `python kiosk/tools/resolve_crash.py <address>` turns it into a function
+name. If a Wii never reports, its screen says why (the beamer's own state). **Log** in the loader
+writes `slippi_ndebug.log` on the SD card with the main thread's lines only: boot, the game path,
+whether the module loaded. Only the kernel's main thread writes that file: a relay-thread write
+during a game read froze Melee (2026-10-03), so the relay thread's `RelayEXI:` lines go to the
+status page alone, and only once the beamer reaches the relay. The beamer keeps its own log on
+its drive (`LOGS/debug_N.txt`, with `DEBUG=true` in its `config.txt`).
 
 ## Working in a submodule
 

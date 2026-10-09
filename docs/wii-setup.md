@@ -112,5 +112,10 @@ relay.
 | Loader: `Failed to load IOS58 from NAND` | The loader can't start | Use the loader from the zip. A loader you build yourself fails here. |
 | Boots to the character select instead of the Tournament screen | An old `lazyto_kiosk.bin`, or a card made before 2026-10-02 (its files were `tournament.bin` and `tournament.cfg`) | Unzip the zip onto the card again. |
 
-If a Wii never appears on the status page, turn on **Log** in the loader's menu, boot once, and
-read `slippi_ndebug.log` on the SD card. Then turn Log off again.
+If a Wii never appears on the status page, its screen says why: the beamer's own state (no
+number, no Wi-Fi, no relay, the wrong secret). The loader's **Log** option writes
+`slippi_ndebug.log` on the SD card with what happens at boot: the game path and whether the module
+loaded and why not. Use it when a Wii boots plain Melee instead of the Tournament screen, then
+turn Log off again. Relay lines are not in it: they reach the status page through the beamer. A
+loader older than Nintendont `aca4032` (2026-10-08) could freeze Melee at the set list with Log
+on.
