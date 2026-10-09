@@ -10,7 +10,7 @@
 
 import { ROUND_LEN } from '../generated/wire.js';
 import { bestOfFor, bracketShape, type SetFormat } from './format.js';
-import type { StartggClient, UpstreamEntrant, UpstreamSet } from './startgg.js';
+import type { StartggClient, UpstreamEntrant, UpstreamPhaseGroup, UpstreamSet } from './startgg.js';
 
 export interface CachedSet {
   id: number; // fits uint32
@@ -18,6 +18,8 @@ export interface CachedSet {
   round: number;
   roundShort: string; // "WR2", "LF", "GF" -- the status page
   roundName: string; // "WINNERS QUARTER-FINAL" -- the wire field the Wii shows (ROUND_LEN chars)
+  fullRoundText: string; // "Winners Quarter-Final" -- start.gg's own text, for the set archive
+  phaseGroup: UpstreamPhaseGroup | null; // the pool, for the set archive's context.json
   bestOf: number; // what the Wiis are sent: the TO's override if any, else autoBestOf
   autoBestOf: number; // setFormat's answer (format.ts)
   bestOfOverridden: boolean; // the TO set it on the status page (admin.ts)
@@ -127,6 +129,8 @@ export class SetCache {
         round: s.round,
         roundShort: abbreviateRound(s.fullRoundText),
         roundName: wireRoundName(s.fullRoundText),
+        fullRoundText: s.fullRoundText,
+        phaseGroup: s.phaseGroup,
         ...this.withOverride(
           s.id,
           bestOfFor(

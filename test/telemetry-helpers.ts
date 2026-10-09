@@ -9,7 +9,6 @@ import {
   MAGIC_0,
   ModuleState,
   PROTO_VERSION,
-  SECRET_LEN,
   TELEMETRY_MAGIC_1,
   encodeCrashReport,
   encodeRelayAuth,
@@ -18,6 +17,7 @@ import {
   type CrashReport,
   type StationStatus,
 } from '../generated/wire.js';
+import { relayAuthKey } from '../src/sync.js';
 import { TEST_SECRET } from './wii-client.js';
 
 export function statusPayload(s: Partial<StationStatus>): Uint8Array {
@@ -60,11 +60,9 @@ export function telemetryDatagram(
 ): Uint8Array {
   const body =
     typeof payload === 'string' ? new Uint8Array(Buffer.from(payload, 'latin1')) : payload;
-  const secretBytes = Buffer.alloc(SECRET_LEN);
-  secretBytes.write(secret, 'ascii');
   const auth = encodeRelayAuth({
     magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]),
-    secret: secretBytes.toString('latin1').replace(/\0+$/, ''),
+    key: relayAuthKey(secret),
   });
   const hdr = encodeTelemetryHdr({
     magic: new Uint8Array([MAGIC_0, TELEMETRY_MAGIC_1]),

@@ -5,11 +5,22 @@
 // not by carrying its SD card to a PC (first hardware run, 2026-09-30: the
 // module silently refused to load and only the SD log said why).
 //
-// Every datagram is relay_auth + telemetry_hdr + payload. A wrong or missing
-// secret is dropped and counted, exactly like a TCP request (decisions.md R16), so
-// nobody else on the venue Wi-Fi can paint a station's row. Nothing is ever
-// sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
+// Every datagram is relay_auth + telemetry_hdr + payload, from the station's
+// beamer. A key that is not this secret's (sync.ts relayAuthKey), or none, is
+// dropped and counted, exactly like a TCP
+// request (decisions.md R16), so nobody else on the venue Wi-Fi can paint a
+// station's row; so is a datagram from the newcomer of two beamers on one
+// station number (beamer.ts). Nothing is ever sent back. Memory is bounded: MAX_STATIONS rows, MAX_LINES lines each,
 // lines cut to MAX_LINE_LEN.
+//
+// A row is one Wii, not one station number: the number is the beamer's
+// button, and a TO pressing it from 1 up to 11 made one Wii eleven rows
+// (hardware test, 2026-10-08). A datagram carries no station_id, only the
+// number and its source address, which is the beamer's (a beamer is its
+// Wii's only link). So a row is keyed by the station_id a sync from that
+// address named (beamer.ts stationIdAt), which also survives a DHCP renewal,
+// and by the address until the beamer's first sync. The row shows the
+// number of its latest datagram.
 
 import { createSocket, type Socket } from 'node:dgram';
 import { timingSafeEqual } from 'node:crypto';
@@ -39,6 +50,7 @@ import {
   type CrashReport,
   type StationStatus,
 } from '../generated/wire.js';
+import { relayAuthKey } from './sync.js';
 
 export const MAX_STATIONS = 64;
 export const MAX_LINES = 400;
@@ -122,6 +134,10 @@ export interface TelemetryOptions {
   beaconPayload?: Uint8Array;
   /** Where the unicast answer goes; tests override it. */
   beaconReplyPort?: number;
+  /** Whether the beamer at `from` may report for `station`; false drops the datagram (beamer.ts). */
+  admit?: (station: number, from: string) => boolean;
+  /** The station_id of the beamer at `from`, once one has synced from there (beamer.ts). */
+  identify?: (from: string) => string | undefined;
 }
 
 export interface BeaconRequestStatus {
@@ -158,14 +174,15 @@ export function moduleStateText(s: StationStatus): string {
 
 export class StationTelemetry {
   private socket: Socket | null = null;
-  private readonly expectedSecret: Buffer;
-  private readonly rows = new Map<number, StationTelemetryRow & { seq: number; partial: string }>();
+  private readonly expectedKey: Buffer; // relay_auth's key for this relay's secret (sync.ts)
+  // By the beamer's station_id, or `@address` until a sync from that address names one.
+  private readonly rows = new Map<string, StationTelemetryRow & { seq: number; partial: string }>();
   private refusals: TelemetryRefused | null = null;
   private beaconRequests: BeaconRequestStatus | null = null;
+  private duplicates = 0;
 
   constructor(private readonly opts: TelemetryOptions) {
-    this.expectedSecret = Buffer.alloc(SECRET_LEN);
-    this.expectedSecret.write(opts.secret, 'ascii');
+    this.expectedKey = relayAuthKey(opts.secret);
   }
 
   async start(): Promise<void> {
@@ -197,13 +214,14 @@ export class StationTelemetry {
     if (s) await new Promise<void>((resolve) => s.close(() => resolve()));
   }
 
-  /** One row per station heard from, lowest station first. */
+  /** One row per Wii heard from, lowest station first. */
   stations(): StationTelemetryRow[] {
     return [...this.rows.values()]
-      .sort((a, b) => a.station - b.station)
+      .sort((a, b) => a.station - b.station || b.lastSeenAt - a.lastSeenAt)
       .map(({ seq: _seq, partial: _partial, ...row }) => ({ ...row, lines: [...row.lines] }));
   }
 
+  /** The Wii last heard as `station` (a silent one may still show a number another took since). */
   get(station: number): StationTelemetryRow | undefined {
     return this.stations().find((r) => r.station === station);
   }
@@ -212,16 +230,24 @@ export class StationTelemetry {
     return this.refusals ? { ...this.refusals } : null;
   }
 
+  /** Datagrams dropped because another beamer holds their station number. */
+  duplicateDropped(): number {
+    return this.duplicates;
+  }
+
   /** Beacon requests answered so far (a station that could not hear the broadcast). */
   beaconRequested(): BeaconRequestStatus | null {
     return this.beaconRequests ? { ...this.beaconRequests } : null;
   }
 
-  /** A 12-byte relay_beacon with tcp_port 0 is a station asking for the beacon; answer it unicast. */
+  /**
+   * A 12-byte relay_beacon with tcp_port 0 is a beamer asking for the beacon; answer it unicast.
+   * The beacon is frozen (protocol.yaml relay_beacon): checked by length and magic, never by
+   * version, so a beamer built against an older protocol still finds this relay.
+   */
   private answerBeaconRequest(msg: Uint8Array, from: string, now = Date.now()): boolean {
     if (msg.length !== RELAY_BEACON_SIZE || msg[0] !== MAGIC_0 || msg[1] !== MAGIC_1) return false;
-    const b = decodeRelayBeacon(msg);
-    if (b.version !== PROTO_VERSION || b.tcp_port !== 0) return false;
+    if (decodeRelayBeacon(msg).tcp_port !== 0) return false;
     const payload = this.opts.beaconPayload;
     if (payload && this.socket) {
       this.socket.send(payload, this.opts.beaconReplyPort ?? BEACON_PORT, from, (err) => {
@@ -248,7 +274,7 @@ export class StationTelemetry {
     if (msg.length < payloadOff + hdr.len) return;
 
     const secretOk =
-      authed && timingSafeEqual(Buffer.from(msg.subarray(4, 4 + SECRET_LEN)), this.expectedSecret);
+      authed && timingSafeEqual(Buffer.from(msg.subarray(4, 4 + SECRET_LEN)), this.expectedKey);
     if (!secretOk) {
       this.refusals = {
         count: (this.refusals?.count ?? 0) + 1,
@@ -258,8 +284,23 @@ export class StationTelemetry {
       };
       return;
     }
+    if (this.opts.admit && !this.opts.admit(hdr.station, from)) {
+      this.duplicates++;
+      return;
+    }
 
-    let row = this.rows.get(hdr.station);
+    const id = this.opts.identify?.(from);
+    const byAddress = `@${from}`;
+    let row = id !== undefined ? this.rows.get(id) : undefined;
+    if (row) {
+      this.rows.delete(byAddress); // its datagrams before a sync named it, if any
+    } else {
+      row = this.rows.get(byAddress);
+      if (row && id !== undefined) {
+        this.rows.delete(byAddress);
+        this.rows.set(id, row);
+      }
+    }
     if (!row) {
       if (this.rows.size >= MAX_STATIONS) return;
       row = {
@@ -277,7 +318,7 @@ export class StationTelemetry {
         seq: -1,
         partial: '',
       };
-      this.rows.set(hdr.station, row);
+      this.rows.set(id ?? byAddress, row);
     }
     if (row.seq >= 0 && hdr.seq <= row.seq) {
       if (hdr.seq < row.seq) {
@@ -293,6 +334,11 @@ export class StationTelemetry {
       row.lost += hdr.seq - row.seq - 1;
     }
     row.seq = hdr.seq;
+    if (row.station !== hdr.station) {
+      const was = row.station;
+      row.station = hdr.station;
+      this.pushLine(row, `--- now station ${hdr.station} (was ${was}) ---`);
+    }
     row.from = from;
     row.lastSeenAt = now;
     row.uptimeMs = hdr.uptime_ms;

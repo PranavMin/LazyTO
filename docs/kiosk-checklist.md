@@ -15,15 +15,17 @@ Legend: each item is something *you* verify by eye on the running build.
 
 - [ ] Built with **`python kiosk/tools/build_module.py`** (needs the `melee/` submodule set up:
       `python configure.py --non-matching` once). The tail of its output lists every patch
-      and ends with `guard: 0x8016D800 == 0x7C0802A6` and the `.bin` size (~26 KB). *A failed
-      external resolution or a gecko overlap stops the build with the symbol/address named -
-      never hand-edit `lazyto_kiosk.bin`.*
+      (30 since the record gate, among them `ptr 0x803DA950 ... lbTourney_MatchEnter`) and
+      ends with `guard: 0x8016D800 == 0x7C0802A6` and the `.bin` size (~88 KB, under 100 KB).
+      *A failed external resolution or a gecko overlap stops the build with the
+      symbol/address named - never hand-edit `lazyto_kiosk.bin`.*
 - [ ] **No non-ASCII in edited C files** before building (scan for em-dash U+2014,
       smart quotes, etc.). *MWCC parses source as Shift-JIS and errors on them.*
 - [ ] If any on-screen text looks jammed/wrong after an edit, **delete `kiosk/build/obj/*.o`** and
       rebuild. *A stale `mntourney.o` once rendered "STARTPapa VS Hotel" / wrong confirm text.*
-- [ ] For hardware: copy `lazyto_kiosk.bin` to the SD card root next to `lazyto_station.txt`; the
-      Nintendont boot log must show the module line *and* `Patch:Apply Slippi core`.
+- [ ] For hardware: copy `lazyto_kiosk.bin` to the SD card root (protocol v2: no station file;
+      the station number and the secret are the beamer's); the Nintendont boot log must show
+      the module line *and* `Patch:Apply Slippi core`.
 
 ## 1. Boot & menu flow
 
@@ -68,7 +70,9 @@ Legend: each item is something *you* verify by eye on the running build.
       sits under an amber `PLAYING HERE` header of its own); the cursor row yellow on a
       translucent light-blue bar with a yellow left edge; the right pane shows the
       highlighted set (round, tags, BEST OF n, READY / PLAYING HERE, `A START` or
-      `A RESUME` for the set already running here); hints
+      `A RESUME` for the set already running here); top right, on the header row, a white
+      `STATION n` (`STATION -` while the beamer has no number, `STATION 0` in Dolphin) with
+      the small dim version text (`hash date  WII n`) above it, in every view; hints
       `Z FRIENDLIES  Y REFRESH  B MENU` centred between the panel's bottom corner boxes.
       *Every position is a `L_*` constant at the top of mntourney.c; measured centring
       via `lbButton_Measure`, never by eye. Both panes are rounded translucent navy
@@ -97,23 +101,25 @@ Legend: each item is something *you* verify by eye on the running build.
       400-set fake (56 shown, the wire cap).*
 - [ ] **Cold boot waits for the beacon, never errors on it:** with the relay up, the list
       appears without an intermediate error; with the relay down, `LOOKING FOR THE RELAY`
-      pulses for 10 s, then `NO RELAY FOUND` / `NO BEACON HEARD FOR 10 SECONDS` / `IS THE
-      RELAY ON THIS WI-FI?` with a red `NOT FOUND` dot; A searches again. *The
-      kernel/forwarder answer a request sent before their first beacon with a synthetic
-      "no relay found yet" (decisions.md R15); the module peeks `exi_poll_hdr.relay_ip` first
-      (`lbRelayExi_Peek`) and only then sends LIST_SETS. In Dolphin the beacon listener
-      starts on the first EXI command, so the very first boot after launch may search for
-      up to 2 s.*
+      pulses for 10 s, then `BEAMER HEARS NO RELAY` / `NO BEACON FOR 10 SECONDS` / `IS THE
+      LAPTOP ON THIS WI-FI?` with a red `NO RELAY` dot; A searches again. *The module peeks
+      `exi_poll_hdr` first (`lbRelayExi_Peek`, `searchStep` in mntourney.c) and sends
+      LIST_SETS only once the beamer is ready and `relay_ip` is known, so a cold boot never
+      greets players with an error. In Dolphin the beacon listener starts on the first EXI
+      command, so the very first boot after launch may search for up to 2 s.*
 - [ ] **Confirm / error stay in the frame:** A dims the list and asks `START THIS SET?` in
       the pane with both tags and `A YES  B BACK`, the hint bar says CHECK BOTH TAGS FIRST;
-      a dead relay shows `NO LINK TO THE RELAY` + the message + `YOUR LIST IS STILL HERE`
-      or `NO SETS LOADED YET`, and the pane shows `STATION n / RELAY / a.b.c.d / PORT p`
-      with a red `NO LINK` dot (a relay-reported error says `THE RELAY SAID NO` / `REFUSED`;
-      a shared-secret mismatch says `RELAY SECRET MISMATCH` / `CHECK THE SECRET ON THIS
-      CARD` / `BAD SECRET`, decisions.md R15).
-      *Station/relay come from `exi_poll_hdr`, which the kernel/forwarder fill on every
-      poll; Dolphin shows station 0 (decisions.md R10). The confirm view has not been captured
-      in the dev loop (no controller input there) - eyeball it on the Wii.*
+      a dead relay shows `NO LINK TO THE RELAY` + the message (`THE RELAY DID NOT ANSWER`,
+      `CONNECT TO THE LAPTOP FAILED`, ...) + `YOUR LIST IS STILL HERE` or `NO SETS LOADED
+      YET` + the hint, and the pane shows `RELAY / a.b.c.d / PORT p` with a red
+      `NO LINK` dot. A relay-reported error says `THE RELAY SAID NO` / `REFUSED`; a
+      shared-secret mismatch `RELAY SECRET MISMATCH` / `THE BEAMER HAS ANOTHER SECRET` /
+      `BAD SECRET` (decisions.md R16); a second beamer on a taken number `TWO BEAMERS ARE
+      STATION n` / `RENUMBER ONE WITH ITS BUTTON` / `DUPLICATE`. *Station/relay come from
+      `exi_poll_hdr`, which the kernel/forwarder fill on every poll; Dolphin shows station 0
+      (decisions.md R10), hardware `STATION -` while the beamer has no number. The words are
+      picked in `whyFailed` (mntourney.c). The confirm view has not been captured in the dev
+      loop (no controller input there) - eyeball it on the Wii.*
 - [ ] **No missing/garbage glyphs.** *The SIS text encoder (hsd_3A64.c) maps only
       these ASCII bytes: space `" ' , - . : 0-9 A-Z a-z`. Any other ASCII byte (`+ ( ) /
       [ ] % & * @ # $ = < > ? !`) is taken as a Shift-JIS lead byte and eats the next
@@ -148,10 +154,16 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
 - [ ] **Neutral spawns** *(venue code)*: on Battlefield a 2P match starts on the **left and
       right side platforms**, not centre/top. FoD `+/-41.25` on the side platforms is the venue's
       real value, not a bug.
-- [ ] **A `.slp` is written** for every game (Dolphin: `SlippiReplayDir`; Wii: the USB drive).
-      *The whole point of the module architecture; if it stops, a patch is colliding with the
-      Slippi core codes - `build_module.py` checks overlaps at build time, so look for a
-      changed codeset first.*
+- [ ] **A `.slp` is written for every set game, and only for those** (Wii: the beamer, with a
+      loader whose `host_build` is at least 7, the record gate). Friendlies, a Z + X
+      handwarmer, LGL's tiebreak game and a match started from the vanilla main menu leave
+      no file; the next set game is still recorded. *`lbTourney_MatchEnter` (`ptr
+      0x803DA950`) sets the gate's `want` around vanilla `gm_Scene_Vs_OnEnter` (docs/kiosk.md,
+      The record gate). If set games stop being recorded, check the hook is in the patch
+      list, then that a patch is not colliding with the Slippi core codes -
+      `build_module.py` checks overlaps at build time, so look for a changed codeset first.
+      Dolphin has no gate (`host_build` 0): it records by its own `SlippiReplayDir`
+      settings.*
 - [ ] **Nothing of ours in the DOL**: the Nintendont boot log shows no "Tournament build ...
       skipping" line (that gate is reverted); Dolphin's ISO properties show the plain 1.02 image.
 
@@ -221,8 +233,35 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       a double KO on the last stocks: the game plays LGL's tiebreak (1 stock, 0%, 3:00), and
       back on the CSS the score counts ONE game, to the tiebreak's winner (`GAME n TO
       <TAG>`). A tiebreak that ties again: `TIE - SCORE IT MANUALLY`, nothing appended.
-      *Scored by `lbTourney_TiebreakExit` (`ptr 0x803DA968`, the GS_SUDDEN_DEATH exit),
-      armed only by a set game's tie.*
+      The game is reported with the main game's replay id (the relay log shows it) and
+      without stocks (start.gg shows no per-game score for it), and no second `.slp` appears
+      for the tiebreak. *Scored by `lbTourney_TiebreakExit` (`ptr
+      0x803DA968`, the GS_SUDDEN_DEATH exit), armed only by a set game's tie; the tiebreak's
+      scene does not touch the record gate, so the main game stays the set's last match.*
+- [ ] **Replay ids in the reports (record gate):** on a Wii with a beamer, every auto-scored
+      game's `game_result.replay_id` names its `.slp` (`Game_<MAC>_<UTC stamp>.slp` on the
+      beamer; the relay log and the set archive show the binding), with both ports. A game
+      scored by hand after a recorded match takes that match's id once: flicking the same
+      game twice gives the second copy 0, undo (Z + C-down) frees the id, and a hand-scored
+      handwarmer gets 0. Dolphin reports 0 throughout. *`lastMatchReplay` in lbtourney.c,
+      read from the gate's `file_seq` / `file_id` when the game is appended.*
+- [ ] **Beamer card full on the CSS and the set list:** with the beamer's storage FULL (or
+      a card fault), the CSS banner alternates with `REPLAYS NOT SAVING - TELL THE TO` (red)
+      every 2 s and the set list's pane shows a red `REPLAYS NOT SAVING` instead of READY /
+      PLAYING HERE; play is not blocked. FILLING shows nothing. Unplugging the beamer
+      mid-set makes the banner say `WAITING FOR THE BEAMER` (amber) while the kernel reports
+      it starting. *Both screens peek `exi_poll_hdr` every 2 s while idle; hardware only
+      (Dolphin sends 0).*
+- [ ] **B from the set list leaves the set:** start a set, go back to the list with B on
+      the CSS, then B again to the vanilla main menu and start a VS match from there: no
+      score banner, nothing scored, nothing recorded. Z back into the list shows the set as
+      PLAYING HERE, and A RESUME starts it again with the games already reported. *`exitToMainMenu`
+      calls `lbTourney_ClearCurrent`.*
+- [ ] **A Wii reboot mid-set keeps the games (N3):** report two games, power the Wii off and on,
+      pick the set (first in the list, PLAYING HERE): the CSS shows the score it had (1 - 1),
+      and the next game is reported as game 3 with games 1 and 2 still on start.gg. *The
+      START_SET reply carries `start_set_resp`; `lbTourney_SetCurrent` takes its games. A
+      reply without it is BAD RESPONSE.*
 - [ ] **Characters and stage reported (v38):** after an auto-scored game the start.gg
       set's game row shows both characters and the stage (check the set page or the
       relay audit log). *Filled from `MatchEnd.player_standings[].ckind` per entrant and
@@ -239,15 +278,27 @@ same bytes converted into `GALE01r2.ini`. Our old native ports (`lbucf.c`, `lbne
       costume as 0 (`10X`): the module read `players[]` behind `gm_GetStartMeleeRules()`,
       but that is the bare 0x60-byte rules at the end of `VsSceneController` with nothing
       after it, so the read landed in zeroed .bss. Fixed in the build after `34db7bd`.*
-- [ ] **Joining the Wi-Fi is a wait, not a hang (v40):** power on with the Wi-Fi slow or
-      refused (or the router off). The loader must get past `Slippi network init...` at once,
-      Melee boots, and the Tournament screen pulses `JOINING THE WI-FI` with the pane dot
-      `NO WI-FI`; B still returns to the menu. When the join completes the search continues
-      on its own (`LOOKING FOR THE RELAY`, then the list). After 60 s without it: `THIS WII
-      COULD NOT JOIN THE WI-FI / POWER CYCLE, CHECK THE ROUTER`. With Network
-      off in the loader: `NETWORK IS OFF IN THE LOADER` immediately. *Poll flag
-      `PF_NET_JOINING` from Nintendont host build 2, whose kernel runs `NCDInit()` on its own
-      thread; `TM_JOIN_FRAMES` in mntourney.c. Dolphin sends flags 0, so this is hardware-only.*
+- [ ] **The beamer's state on the search screen (protocol v2; the Wii's own network is not
+      used):** each wait pulses with B back to the menu and a pane dot, each error is
+      immediate with A to retry. Waits: boot or replug the beamer: `WAITING FOR THE BEAMER` /
+      `IT MAY BE STARTING OR ERASING` (dot `STARTING`), until the kernel finds it or, after
+      about 45 s, names the reason; a beamer without a number: `THIS BEAMER HAS NO NUMBER` /
+      `PRESS THE BEAMER BUTTON` (dot `NO NUMBER`), until the first click; Wi-Fi joining:
+      `BEAMER JOINING THE WI-FI` (dot `JOINING`), then after 60 s `BEAMER STILL JOINING
+      WI-FI` / `STILL JOINING AFTER 60 SECONDS`. Errors (title / hint / dot): replays off or
+      the game not on SD `REPLAYS ARE OFF IN THE LOADER` / `TURN ON REPLAYS, GAME ON SD` /
+      `NO BEAMER`; no drive `NO BEAMER ON THIS WII` / `PLUG THE BEAMER INTO THIS WII`; a
+      drive that does not answer `NO LINK TO THE BEAMER` / `CHECK THE BEAMER IS PLUGGED IN`; a
+      plain stick or `LAZYTO` off `NOT A LAZYTO BEAMER`; old firmware `UPDATE THE BEAMER` /
+      `OLD BEAMER`; a newer mailbox `UPDATE THE SD CARD` / `OLD CARD`; no secret `THE
+      BEAMER HAS NO SECRET`; Wi-Fi `NO WI-FI NAME ON THE BEAMER`, `THE BEAMER CANNOT JOIN
+      WI-FI`, `THE WI-FI GAVE NO ADDRESS`, `THE BEAMER RADIO FAILED` (dot `NO WI-FI`); a
+      stale beacon after a failed request `BEAMER HEARS NO RELAY`. A request that fails over
+      USB says `NO LINK TO THE BEAMER`; a stalled USB cycle `TIMEOUT - RELAY NOT ANSWERING`
+      with the beamer card's state as the hint. Every title fits the list panel (a long one
+      shrinks) and no line loses characters. *`searchStep` / `whyFailed` in mntourney.c, in
+      the check order of docs/protocol-v2.md. Dolphin sends 0 in every field, so this is
+      hardware-only; the texts need the LazyTO kernel with mailbox v2.*
 - [ ] **Who is who, inferred (v37, claim-only since v41):** with exactly two human doors,
       the L + R hold by the player named first places both (the other human door is the
       other entrant) - the score line shows both port labels after the one hold, and

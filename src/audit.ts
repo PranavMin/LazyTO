@@ -6,7 +6,8 @@
 //
 // The log is also the relay's persistence across a restart (architecture.md
 // Error handling): replayClaims() folds claim / score / release events back
-// into the station -> set map, and replayBestOf() the TO's best-of overrides.
+// into the station -> set map, replayHolders() which beamer made each live
+// claim, and replayBestOf() the TO's best-of overrides.
 // relay.ts drops any replayed claim whose set is no longer live in the cache.
 
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
@@ -89,6 +90,40 @@ export function replayClaims(path: string): Map<number, Claim> {
     }
   }
   return claims;
+}
+
+/** The beamer that claimed a station's live set (tcp.ts recordClaim). */
+export interface Holder {
+  setId: number;
+  address: string;
+  /** Its station_id (hex), when it had synced before the claim. */
+  stationId: string | null;
+}
+
+/**
+ * Which beamer made each live claim, by station: claim events that name it
+ * (from), cleared by release. A claim an older relay wrote without `from`
+ * has no holder. Same log, same torn-line rule as replayClaims.
+ */
+export function replayHolders(path: string): Map<number, Holder> {
+  const holders = new Map<number, Holder>();
+  for (const event of readEvents(path)) {
+    const station = event.station as number;
+    if (event.type === 'claim') {
+      if (typeof event.from === 'string') {
+        holders.set(station, {
+          setId: event.setId as number,
+          address: event.from,
+          stationId: typeof event.beamer === 'string' ? event.beamer : null,
+        });
+      } else {
+        holders.delete(station);
+      }
+    } else if (event.type === 'release') {
+      holders.delete(station);
+    }
+  }
+  return holders;
 }
 
 /**

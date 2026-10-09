@@ -1,0 +1,472 @@
+{
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "note": "getReplaysInDir (replay.ts:154-596) on each trimmed replay, TZ=UTC. rr-ref/src/inspect.ts gives the same result for the trimmed and the full replays in every field except file size and raw length (checked 2026-10-07).",
+  "replays": [
+    {
+      "fileName": "Game_001FC5FE0637_20110202T204931.slp",
+      "sha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "fullSha256": "6fcb655abc9093d9eb06239e83a65a9c60899e0d90e122a9035c9e9a2a051a29",
+      "startAt": "2011-02-02T20:49:31.000Z",
+      "lastFrame": 4576,
+      "stageId": 2,
+      "isTeams": false,
+      "timeout": false,
+      "invalidReasons": [
+        "Has CPU Player(s)."
+      ],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 0,
+          "finalPercent": 0,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 1,
+          "externalCharacterId": 2,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 2,
+          "finalPercent": 0,
+          "isWinner": true,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T205816.slp",
+      "sha256": "6e331b0322026dde97eb04a0a742650e24455a15fe06b1283632dfbab3897fcc",
+      "fullSha256": "e0a196e6bbc8b1fe23201043b00e5342df7ac220f749cf3406f94017faf64ff9",
+      "startAt": "2011-02-02T20:58:16.000Z",
+      "lastFrame": 10800,
+      "stageId": 2,
+      "isTeams": false,
+      "timeout": true,
+      "invalidReasons": [
+        "Has CPU Player(s)."
+      ],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 1,
+          "externalCharacterId": 14,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T213333.slp",
+      "sha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "fullSha256": "abd1aa463b66e30ac42a46c5e7cadee11d765dd0adf00c3913fb19cd684b0b7c",
+      "startAt": "2011-02-02T21:33:33.000Z",
+      "lastFrame": 18000,
+      "stageId": 3,
+      "isTeams": false,
+      "timeout": true,
+      "invalidReasons": [
+        "Has CPU Player(s)."
+      ],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 19.520000457763672,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 1,
+          "externalCharacterId": 14,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 16,
+          "isWinner": true,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T213903.slp",
+      "sha256": "48d8195d275197165384e12bcdba3525397e3913a4157abf3dc9b20e7d8e60b3",
+      "fullSha256": "3c292279f3277e3028b39fc667ffb176571255b865aaa823c6e3e47f6a1aa91b",
+      "startAt": "2011-02-02T21:39:03.000Z",
+      "lastFrame": 3600,
+      "stageId": 28,
+      "isTeams": false,
+      "timeout": true,
+      "invalidReasons": [
+        "Has CPU Player(s).",
+        "1 minute timed game."
+      ],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 20.979999542236328,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 1,
+          "externalCharacterId": 14,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": true,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T222643.slp",
+      "sha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "fullSha256": "37ad3c1ad5638ea738468817157ab048f26666471f5f24c28e6ec6310229bb8f",
+      "startAt": "2011-02-02T22:26:43.000Z",
+      "lastFrame": 7200,
+      "stageId": 3,
+      "isTeams": false,
+      "timeout": true,
+      "invalidReasons": [],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 14,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": true,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 0,
+          "externalCharacterId": 2,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 14.729999542236328,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T223058.slp",
+      "sha256": "256aa941bd56786605e2e1c8eb15812f966f87d0cc14b36f396df748b3c98cfc",
+      "fullSha256": "dee90fab516e29e5b7d8c5386a349eab41cda7dba1d11881a74ef26c34a3693b",
+      "startAt": "2011-02-02T22:30:58.000Z",
+      "lastFrame": 10800,
+      "stageId": 3,
+      "isTeams": false,
+      "timeout": true,
+      "invalidReasons": [],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 0,
+          "externalCharacterId": 11,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 4,
+          "finalPercent": 0,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    },
+    {
+      "fileName": "Game_001FC5FE0637_20110202T223403.slp",
+      "sha256": "6814ed983897ace66d8bbd2c84bf1c8316ebcd2da330b23dcf0b234536da5fa6",
+      "fullSha256": "efa7e3d1a5097a2dd2153d7ab37fb0eca6b1fdee97bd47e6333ff99dcd62da04",
+      "startAt": "2011-02-02T22:34:03.000Z",
+      "lastFrame": 352,
+      "stageId": 3,
+      "isTeams": false,
+      "timeout": false,
+      "invalidReasons": [
+        "Game duration less than 1 minute."
+      ],
+      "players": [
+        {
+          "port": 1,
+          "playerType": 0,
+          "externalCharacterId": 20,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 0,
+          "finalPercent": 300,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 2,
+          "playerType": 0,
+          "externalCharacterId": 11,
+          "costumeIndex": 0,
+          "teamId": -1,
+          "stocksRemaining": 1,
+          "finalPercent": 300,
+          "isWinner": true,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 3,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        },
+        {
+          "port": 4,
+          "playerType": 3,
+          "externalCharacterId": null,
+          "costumeIndex": null,
+          "teamId": -1,
+          "stocksRemaining": -1,
+          "finalPercent": -1,
+          "isWinner": false,
+          "nametag": "",
+          "displayName": "",
+          "connectCode": ""
+        }
+      ]
+    }
+  ]
+}

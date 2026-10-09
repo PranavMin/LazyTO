@@ -26,12 +26,18 @@
 //   --wii=<dir> (any of the above)
 //       a bundle's wii/ folder (unpacked lazyto.tgz), so the SD cards page
 //       serves real zips; without it, the page says there are no Wii files
+//   --laptop (any of the above)
+//       as the desktop app runs it (src/platform.ts): a Windows Firewall note
+//       with its "Allow" button (which only says it was pressed), "LazyTO
+//       v99.0.0 is out", no update channel on the settings page, and the
+//       archive folder default Documents/LazyTO
 import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TelemetryKind, ModuleState } from '../generated/wire.js';
+import { TelemetryKind, ModuleState, SyncKind } from '../generated/wire.js';
 import { App } from '../src/app.js';
 import { configPath, saveConfig } from '../src/config.js';
+import type { Platform } from '../src/platform.js';
 import {
   defaultFixture,
   entrant,
@@ -42,6 +48,8 @@ import {
 import { game } from '../test/wii-client.js';
 import { telemetryDatagram, statusPayload } from '../test/telemetry-helpers.js';
 import { harnessConfig, startHarness, TEST_PASSWORD } from '../test/harness.js';
+import { FakeBeamer } from '../test/fake-beamer.js';
+import { makeSlp } from '../test/slp-fixture.js';
 
 const args = process.argv.join(' ');
 const port = Number(/--port=(\d+)/.exec(args)?.[1] ?? 29480);
@@ -54,6 +62,29 @@ if (!['running', 'setup', 'failed'].includes(pageKind)) {
   console.error(`preview-status: --page is running, setup or failed, not ${pageKind}`);
   process.exit(2);
 }
+
+/** --laptop: what the desktop app (desktop/platform.ts) would report on a blocked Windows laptop. */
+const laptop: { platform?: Platform; archiveDir?: string } = process.argv.includes('--laptop')
+  ? {
+      platform: {
+        notes: () => [
+          {
+            text: 'Windows Firewall blocks LazyTO on "Venue router" (Public): the beamers can\'t reach this laptop.',
+            action: { name: 'firewall', label: 'Allow LazyTO through the firewall' },
+          },
+        ],
+        latest: () => ({
+          version: '99.0.0',
+          url: 'https://github.com/PranavMin/LazyTO/releases/tag/v99.0.0',
+        }),
+        act: async (name) => ({
+          ok: true,
+          msg: `preview: "${name}" pressed; nothing was changed.`,
+        }),
+      },
+      archiveDir: join(homedir(), 'Documents', 'LazyTO'),
+    }
+  : {};
 
 let sets: FakeSet[] = defaultFixture();
 for (let i = 0; i < 6; i++) {
@@ -103,6 +134,7 @@ if (pageKind !== 'running') {
   }
   const app = new App({
     dataDir,
+    archiveDir: join(dataDir, 'archive'),
     httpPort: port,
     tcpPort: 0,
     host: '127.0.0.1',
@@ -111,6 +143,7 @@ if (pageKind !== 'running') {
     retryDelaysMs: [120_000],
     clockSynced: () => true,
     wiiDir,
+    ...laptop,
   });
   await app.start();
   const url = `http://127.0.0.1:${app.web.address().port}`;
@@ -130,6 +163,7 @@ if (pageKind !== 'running') {
     tcpPort: network ? 29470 : 0,
     secret,
     wiiDir,
+    ...laptop,
   });
 
   if (!entrantsFile) await startDemoSets(h);
@@ -142,13 +176,14 @@ if (pageKind !== 'running') {
 async function startDemoSets(h: Awaited<ReturnType<typeof startHarness>>): Promise<void> {
   await h.wii(1, 1).startSet(107949994, 1);
   await h.wii(1, 1).reportScore(107949994, [game(1), game(2)]);
-  await h.wii(2).startSet(107949995);
+  await h.wii(2, 0, '127.0.0.2').startSet(107949995);
   h.fake.failNext('reportBracketSet', 'gqlError', 1, 'Set is already completed');
-  await h.wii(2).reportScore(107949995, [game(1)]);
+  await h.wii(2, 0, '127.0.0.2').reportScore(107949995, [game(1)]);
   await h.wii(3).startSet(107949996);
+  // A Wii's telemetry comes from its beamer's address, which is the Wii (telemetry.ts).
   for (const [station, from] of [
-    [1, '192.168.1.81'],
-    [2, '192.168.1.82'],
+    [1, '127.0.0.1'],
+    [2, '127.0.0.2'],
   ] as const) {
     h.ev.telemetry.receive(
       telemetryDatagram(
@@ -169,4 +204,24 @@ async function startDemoSets(h: Awaited<ReturnType<typeof startHarness>>): Promi
       from,
     );
   }
+  // Two beamers: station 1's, with a replay it has served and one being
+  // recorded, and a new one with no number yet. They stay up for the preview.
+  const one = new FakeBeamer(1, 1, '127.0.0.1');
+  await one.listen();
+  one.add(
+    'Game_0017AB12CD34_20261007T201502.slp',
+    makeSlp({
+      stage: 0x1f,
+      ports: [{ character: 2, costume: 0 }, null, { character: 9, costume: 0 }, null],
+    }),
+  );
+  one.add('Game_0017AB12CD34_20261007T202300.slp', Buffer.alloc(4096), SyncKind.SK_LIVE);
+  await one.sync(h.tcpPort);
+  await h.ev.collector.idle();
+  await one.sync(h.tcpPort);
+  const unset = new FakeBeamer(9, null, '127.0.0.3');
+  await unset.listen();
+  await unset.sync(h.tcpPort);
+  // A game reported without a replay: flagged on its station.
+  await h.wii(3).reportScore(107949996, [game(1)]);
 }

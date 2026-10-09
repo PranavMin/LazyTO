@@ -10,8 +10,8 @@ and wires in with a short list of word patches. Design rationale and history:
 
 | TU | Role |
 |---|---|
-| `kiosk/src/melee/mn/mntourney.c` | Tournament menu (set list, filter, confirm, error, loading), boot warm-up, `forceKioskDefaults` |
-| `kiosk/src/melee/lb/lbtourney.c` | set state, CSS binds, who-is-who (the L+R port claim), Z+X handwarmer, auto-score from `MatchEnd`, the score in the CSS banner, overlays |
+| `kiosk/src/melee/mn/mntourney.c` | Tournament menu (set list, filter, confirm, error, loading), the search for the beamer and the relay and what the error screen says (`searchStep`, `whyFailed`), boot warm-up, `forceKioskDefaults` |
+| `kiosk/src/melee/lb/lbtourney.c` | set state, CSS binds, who-is-who (the L+R port claim), Z+X handwarmer, auto-score from `MatchEnd`, the record gate and each game's replay id, the score and alerts in the CSS banner, overlays |
 | `kiosk/src/melee/lb/lbrelayexi.c` | EXI driver for the relay device (channel 1 / device 0 / freq 4) |
 | `kiosk/src/melee/lb/lbbuttonglyph.c` | button icons and menu shapes: 13 I4 32x32 glyphs in SIS font slot 4 (`lbbuttonglyph_shapes.inc` from `kiosk/tools/gen_button_glyphs.py`) |
 | `kiosk/src/melee/lb/lbmodule_glue.c` | vanilla statics the kiosk reads (`mnCharSel_*`), `tm_bootOnLoad`, `tm_menuLightColor` |
@@ -25,7 +25,7 @@ external fails the build.
 ## Build
 
 ```
-python kiosk/tools/build_module.py        # -> kiosk/build/lazyto_kiosk.bin (about 81 KB, under 100 KB)
+python kiosk/tools/build_module.py        # -> kiosk/build/lazyto_kiosk.bin (about 88 KB, under 100 KB)
 ```
 
 Prerequisite: the `melee/` submodule (the unmodified decomp) and its compilers and
@@ -96,12 +96,70 @@ in the full-DOL patch pass). A development setup in Dolphin uses an equivalent l
 
 One line per patch: `ptr <addr> <symbol>` (write the module symbol's address), `branch <addr>
 <symbol>` (write `b symbol` over a vanilla function's first instruction), `word <addr> <hex>`.
-Today: scene-table rows (GS_MENU exit, GS_VS frame/exit, GS_SUDDEN_DEATH exit, GS_CSS frame/exit, GS_SSS enter), the main-menu
+Today: scene-table rows (GS_MENU exit, GS_VS enter/frame/exit, GS_SUDDEN_DEATH exit, GS_CSS frame/exit, GS_SSS enter), the main-menu
 think, the hijacked Trophies row (kind 3: think, description indices, selection count,
 anim/start_frame, panel-animation rows, light-colour jump-table entries), `bootOnLoad` and
 `mn_8022C010` branches. The builder decodes every Nintendont codeset in `kernel/gecko/` and
 refuses a patch or blob range that a gecko `04`/`C2` also touches - gecko codes are applied
 after the module and would win silently.
+
+## The record gate
+
+Only set games are recorded ([redesign.md](redesign.md), Recording only set games). The kiosk
+chooses through `record_gate` (`protocol.yaml`), 64 bytes of MEM2 at `0xD3003200` that the
+Nintendont kernel reads when Slippi's Game Start arrives:
+
+- **The hook.** `ptr 0x803DA950 lbTourney_MatchEnter`, the GS_VS on_enter row, wrapping vanilla
+  `gm_Scene_Vs_OnEnter`. Vanilla calls StartMelee, where Slippi's core code sends Game Start,
+  and the PPC waits until the kernel has taken it. CSS exit is too early (B leaves it too) and
+  the first VS frame too late.
+- **When it asks.** A current set, not a handwarmer, and a host whose `host_build` (from the
+  START_SET reply) is at least `RECORD_GATE_HOST_BUILD`. Then it reads `start_seq`, writes
+  `want = RECORD_THIS_MATCH`, calls vanilla, writes `want = 0`, and keeps `start_seq` as the
+  match's sequence if it moved by exactly one. Friendlies, handwarmers, matches from the vanilla
+  main menu and every other scene leave `want` at 0. LGL's tiebreak game runs in
+  GS_SUDDEN_DEATH, whose on_enter is not wrapped, so it is never recorded.
+- **Access.** u32 loads and stores through the uncached window only, with `PPCSync` after each
+  store (the window breaks 64-bit moves, see `lbcrash.c`). Never in Dolphin: it has no MEM2 and
+  sends `host_build` 0.
+- **The replay id.** Every appended game, auto-scored or hand-scored, gets the file of the set's
+  last VS match: `file_id` when `file_seq` equals that match's sequence and no earlier game of
+  the set already carries it, else 0. It is read when the game is appended (the first CSS frame
+  back, or the flick), not at the VS exit, so a writer that opened the file late still counts.
+  A tiebreak game therefore reports its main game's replay (and no stocks, which would
+  contradict that replay), a handwarmer that turned into a real game gets 0, and undo frees an
+  id. Hand-scored games send the L + R claim's ports.
+- **Resume (N3).** The START_SET reply's `start_set_resp` holds the games the relay has for the
+  set: none for a new set, the games already reported on a resume after a reboot.
+  `lbTourney_SetCurrent` takes them as the game list, with their replay ids, so the next report
+  keeps them on start.gg.
+- **Leaving the set list** (B to the vanilla main menu) clears the current set, so a match
+  started from there is neither scored nor recorded.
+
+## What the kiosk says about the beamer
+
+The kernel fills `exi_poll_hdr` from the beamer's hello on every poll (all 0 in Dolphin). The
+kiosk picks literals by code; nothing is parsed.
+
+- **Search screen** (`searchStep`), in this order: no beamer (with its reason; old and new
+  firmware are reasons), no number, no secret, the beamer's Wi-Fi, the relay. Waits: WAITING FOR
+  THE BEAMER while the kernel says "starting" (it ends that itself after about 45 s), THIS
+  BEAMER HAS NO NUMBER until its button is pressed, BEAMER JOINING THE WI-FI for up to 60 s,
+  LOOKING FOR THE RELAY for up to 10 s. Everything else is an error at once. A stale beacon still
+  has an address, so the request goes and its answer decides.
+- **Error screen** (`whyFailed`): the relay's own answer as it is (RELAY SECRET MISMATCH, TWO
+  BEAMERS ARE STATION n, THE RELAY SAID NO); for a link failure the host's verdict on the beamer
+  first, then `last_fail` (NO LINK TO THE RELAY, NO LINK TO THE BEAMER, TIMEOUT - RELAY NOT
+  ANSWERING with the beamer card's state, SOMETHING BROKE - TELL THE TO for the codes that mean
+  a bug). The message line says what the request itself hit.
+- **Replays not saving.** When `beamer_storage` is full or faulty (`lbRelayExi_NotSaving`;
+  FILLING is the TO's), the set list's pane says REPLAYS NOT SAVING and the CSS banner alternates
+  with REPLAYS NOT SAVING - TELL THE TO. Both read the header every 2 s while idle
+  (`lbRelayExi_Peek`). The banner also says WAITING FOR THE BEAMER while the kernel reports the
+  beamer starting, and play goes on.
+- **Limits.** `fail()` messages at most 30 characters (`MSG_LEN`); every line under 128 encoded
+  bytes (a space after a letter costs 7); pane labels about 10 characters; no underscore. The
+  error title is shrunk to the panel if it is too wide.
 
 ## Rules
 

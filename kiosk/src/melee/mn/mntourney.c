@@ -35,9 +35,10 @@ u16 mnTourney_DescIndices[1] = { 0 };
 
 /* Menu flow (design 6.1):
  *
- *   [Searching]   no relay known yet: the host learns the relay's address
- *                 from its UDP beacon (decisions.md R15), at most a couple of
- *                 seconds; the first request waits for it
+ *   [Searching]   the beamer or the relay is not ready yet (searchStep): the
+ *                 beamer is starting, has no number or is joining the Wi-Fi,
+ *                 or has not heard the relay's UDP beacon yet (decisions.md
+ *                 R15, every 2 s); the first request waits for them
  *   [Loading]     LIST_SETS in flight
  *   Set list      up/down moves, left/right pages, L/R first-letter tag
  *                 filter, X jumps to the set this station is playing, Y
@@ -69,11 +70,15 @@ enum mnTourney_State {
 
 #define TM_TIMEOUT_FRAMES (5 * 60)
 #define TM_SEARCH_FRAMES (10 * 60) /* beacons come every 2 s */
-/* How long to wait for the host's Wi-Fi join (PF_NET_JOINING) before calling
- * it a failure. The kernel brings the network up on its own thread since
- * Nintendont host build 2 (a stuck join used to hang the whole boot); a join
- * normally takes 5-15 s, one that is still going after a minute never ends. */
-#define TM_JOIN_FRAMES (60 * 60)
+/* How long to wait for the beamer's own Wi-Fi join (exi_poll_hdr.beamer_wifi
+ * WIFI_JOINING, protocol.yaml: the kiosk waits up to 60 s) before calling it
+ * a failure: a join normally takes 5-15 s, one still going after a minute
+ * never ends. The other waits have no timer of ours: the kernel ends
+ * "starting" itself (about 45 s), and a missing number ends at the button. */
+#define TM_BEAMER_JOIN_FRAMES (60 * 60)
+/* The set list reads the host's header this often (lbRelayExi_Peek), so a
+ * beamer whose card fills up shows REPLAYS NOT SAVING while the list is up. */
+#define TM_PEEK_FRAMES 120
 /* Largest row count that fits the 4 KB poll buffer alongside the headers. */
 #define TM_MAX_SETS                                                          \
     ((int) ((sizeof(((struct lbRelayExi_PollBuf*) 0)->payload) -             \
@@ -181,11 +186,20 @@ static u16 tm_top;    /* first visible slot (headers count as slots) */
 static u16 tm_chosen; /* tm_sets index picked on the confirm screen */
 static char tm_filter; /* 0 = all sets, else 'A'..'Z' */
 static u32 tm_timeout;
-static u16 tm_join_frames; /* frames spent on JOINING THE WI-FI this search */
+static u16 tm_beamer_join; /* frames this search waited for the beamer's join */
 static u8 tm_retry_cmd; /* relay_cmd the error screen's A retries */
 static char tm_errmsg[MSG_LEN + 1];
-static bool tm_err_link; /* the error is ours/transport, not the relay's answer */
-static u8 tm_err_status; /* relay_status of the relay's answer when !tm_err_link */
+/* What failed, which decides what the error screen says (whyFailed). */
+enum tm_err {
+    TE_EXI,     /* the game's own EXI transfer failed: the host said nothing */
+    TE_HOST,    /* the host's poll header says why: the search found a beamer
+                 * problem, or the request ended RELAY_ERROR (last_fail) */
+    TE_TIMEOUT, /* nothing ended the request within TM_TIMEOUT_FRAMES */
+    TE_BAD,     /* a reply that does not echo the request: a bug */
+    TE_RELAY    /* the relay answered with a status other than ST_OK */
+};
+static u8 tm_err_kind;
+static u8 tm_err_status; /* relay_status of the relay's answer (TE_RELAY) */
 static bool tm_dirty;
 static u32 tm_keep_id; /* set_id to put the cursor back on after a reload */
 static struct exi_poll_hdr tm_ph; /* station / relay address, host-filled */
@@ -458,11 +472,337 @@ static void selectSet(u32 set_id)
     ensureVisible();
 }
 
-/* The relay refused us over the shared secret (relay_status ST_BAD_SECRET,
- * decisions.md R15): lazyto_station.txt's secret= does not match the relay's. */
-static bool errIsSecret(void)
+/* ------------------------------------------------------- what is wrong */
+
+/* What the host says (exi_poll_hdr, from the beamer's hello and the last
+ * request; all 0 in Dolphin), turned into the search screen's waits and the
+ * error screen's words. Every text is a literal picked by code: the host
+ * sends enums and nothing is parsed (docs/protocol-v2.md, Kiosk). Limits: a
+ * fail() message is at most MSG_LEN (30) characters; a title fits the list
+ * panel at 0.62 (redraw shrinks a long one); every line encodes in under 128
+ * bytes for HSD_SisLib_803A6B98, where a space after a letter costs 7; a
+ * pane label is about 10 characters; no underscore (not in the font). */
+struct tm_why {
+    const char* title; /* red, the error screen's first line */
+    const char* hint;  /* what to do, under the message */
+    const char* label; /* the pane's red dot */
+};
+
+#define HINT_AGAIN "TELL THE TO IF THIS REPEATS"
+#define HINT_APP "SET IT UP WITH THE LAZYTO APP"
+#define HINT_NUMBER "PRESS THE BEAMER BUTTON"
+#define HINT_RELAY "IS THE LAPTOP ON THIS WI-FI?"
+#define HINT_ROUTER "CHECK THE ROUTER, THEN RETRY"
+#define TITLE_NO_RELAY "BEAMER HEARS NO RELAY"
+#define TITLE_NO_LINK "NO LINK TO THE RELAY"
+#define TITLE_TIMEOUT "TIMEOUT - RELAY NOT ANSWERING"
+#define TITLE_BUG "SOMETHING BROKE - TELL THE TO"
+#define HINT_BUG "A BUG, NOT YOUR SETUP"
+
+static void setWhy(struct tm_why* w, const char* title, const char* hint,
+                   const char* label)
 {
-    return !tm_err_link && tm_err_status == ST_BAD_SECRET;
+    w->title = title;
+    w->hint = hint;
+    w->label = label;
+}
+
+/* No LazyTO beamer the kernel can use; no_beamer_reason says why. */
+static bool hostNoBeamer(void)
+{
+    return (tm_ph.flags & PF_NO_BEAMER) != 0;
+}
+
+/* No hello yet, within about 45 s of kernel boot or a USB change: the beamer
+ * may still be booting, erasing or joining. A wait the kernel ends itself
+ * (with another reason if no beamer turns up). */
+static bool hostStarting(void)
+{
+    return hostNoBeamer() && tm_ph.no_beamer_reason == NB_STARTING;
+}
+
+/* The beamer has no station number yet: a wait its button ends. */
+static bool hostNoNumber(void)
+{
+    return !hostNoBeamer() && (tm_ph.flags & PF_NO_STATION) != 0;
+}
+
+/* The beamer is joining the Wi-Fi: a wait of up to TM_BEAMER_JOIN_FRAMES. */
+static bool hostJoining(void)
+{
+    return !hostNoBeamer() && tm_ph.beamer_wifi == WIFI_JOINING;
+}
+
+static void whyNoBeamer(struct tm_why* w)
+{
+    switch (tm_ph.no_beamer_reason) {
+    case NB_REPLAYS_OFF:
+        /* USB never starts without replays on and the game on SD. */
+        setWhy(w, "REPLAYS ARE OFF IN THE LOADER",
+               "TURN ON REPLAYS, GAME ON SD", "NO BEAMER");
+        break;
+    case NB_NOT_LAZYTO:
+        /* A plain stick, or a beamer without LAZYTO = true. */
+        setWhy(w, "NOT A LAZYTO BEAMER", HINT_APP, "NOT LAZYTO");
+        break;
+    case NB_OLD_FIRMWARE:
+        setWhy(w, "UPDATE THE BEAMER", "FLASH IT WITH THE LAZYTO APP",
+               "OLD BEAMER");
+        break;
+    case NB_NEW_FIRMWARE:
+        setWhy(w, "UPDATE THE SD CARD", "MAKE A NEW CARD WITH LAZYTO",
+               "OLD CARD");
+        break;
+    case NB_STARTING:
+        setWhy(w, "WAITING FOR THE BEAMER", "IT MAY BE STARTING OR ERASING",
+               "STARTING");
+        break;
+    case NB_UNKNOWN:
+        /* A drive, but its reads fail, or none got through within the
+         * kernel's 45 s starting window (the USB lock stayed taken). */
+        setWhy(w, "NO LINK TO THE BEAMER", "CHECK THE BEAMER IS PLUGGED IN",
+               "NO LINK");
+        break;
+    default: /* NB_NO_DRIVE */
+        setWhy(w, "NO BEAMER ON THIS WII", "PLUG THE BEAMER INTO THIS WII",
+               "NO BEAMER");
+        break;
+    }
+}
+
+static void whyWifi(struct tm_why* w)
+{
+    switch (tm_ph.beamer_wifi) {
+    case WIFI_JOINING:
+        setWhy(w, "BEAMER STILL JOINING WI-FI", HINT_ROUTER, "NO WI-FI");
+        break;
+    case WIFI_NO_SSID:
+        setWhy(w, "NO WI-FI NAME ON THE BEAMER", HINT_APP, "NO WI-FI");
+        break;
+    case WIFI_NO_ADDRESS:
+        setWhy(w, "THE WI-FI GAVE NO ADDRESS", "THE ROUTER MAY BE FULL",
+               "NO WI-FI");
+        break;
+    case WIFI_RADIO:
+        setWhy(w, "THE BEAMER RADIO FAILED", "UNPLUG THE BEAMER, PLUG IT IN",
+               "NO WI-FI");
+        break;
+    default: /* WIFI_CANT_JOIN */
+        setWhy(w, "THE BEAMER CANNOT JOIN WI-FI",
+               "CHECK THE WI-FI NAME, PASSWORD", "NO WI-FI");
+        break;
+    }
+}
+
+/* A stalled USB cycle is the Slippi writer or the beamer's SD card: the
+ * timeout's hint is the card's state. */
+static const char* storageHint(void)
+{
+    switch (tm_ph.beamer_storage) {
+    case STORE_NO_CARD:
+        return "THE BEAMER HAS NO SD CARD";
+    case STORE_UNREADABLE:
+        return "BEAMER CARD UNREADABLE";
+    case STORE_WRITE_FAILED:
+        return "BEAMER CARD WRITE FAILED";
+    case STORE_WRONG_FORMAT:
+        return "BEAMER CARD WRONG FORMAT";
+    case STORE_FILLING:
+        return "THE BEAMER CARD IS FILLING UP";
+    case STORE_FULL:
+        return "THE BEAMER CARD IS FULL";
+    default:
+        return HINT_AGAIN;
+    }
+}
+
+/* The host's verdict on the beamer, in the search screen's order: no beamer
+ * (old and new firmware are reasons of that), no number, no secret, off the
+ * Wi-Fi, no relay (never heard, or a stale beacon). False when it knows of
+ * nothing wrong. */
+static bool whyHost(struct tm_why* w)
+{
+    if (hostNoBeamer()) {
+        whyNoBeamer(w);
+    } else if ((tm_ph.flags & PF_NO_STATION) != 0) {
+        setWhy(w, "THIS BEAMER HAS NO NUMBER", HINT_NUMBER, "NO NUMBER");
+    } else if ((tm_ph.flags & PF_NO_SECRET) != 0) {
+        setWhy(w, "THE BEAMER HAS NO SECRET", HINT_APP, "NO SECRET");
+    } else if (tm_ph.beamer_wifi != WIFI_UP) {
+        whyWifi(w);
+    } else if (tm_ph.relay_ip == 0 || (tm_ph.flags & PF_RELAY_STALE) != 0) {
+        setWhy(w, TITLE_NO_RELAY, HINT_RELAY, "NO RELAY");
+    } else {
+        return false;
+    }
+    return true;
+}
+
+/* Why the request itself ended RELAY_ERROR (exi_poll_hdr.last_fail: the
+ * beamer's result below 0x80, the kernel's own codes from 0x80). */
+static void whyLastFail(struct tm_why* w)
+{
+    switch (tm_ph.last_fail) {
+    case BR_NO_RELAY:
+        setWhy(w, TITLE_NO_RELAY, HINT_RELAY, "NO RELAY");
+        break;
+    case BR_NO_WIFI:
+        setWhy(w, "THE BEAMER LOST THE WI-FI", HINT_ROUTER, "NO WI-FI");
+        break;
+    case BR_CONNECT:
+        /* The laptop is unreachable, or its firewall blocks LazyTO. */
+        setWhy(w, TITLE_NO_LINK, "CHECK THE LAPTOP FIREWALL", "NO LINK");
+        break;
+    case BR_NO_STATION:
+        setWhy(w, "THIS BEAMER HAS NO NUMBER", HINT_NUMBER, "NO NUMBER");
+        break;
+    case BR_NO_SECRET:
+        setWhy(w, "THE BEAMER HAS NO SECRET", HINT_APP, "NO SECRET");
+        break;
+    case LF_NO_BEAMER:
+        setWhy(w, "NO BEAMER ON THIS WII", "PLUG THE BEAMER INTO THIS WII",
+               "NO BEAMER");
+        break;
+    case LF_USB_WRITE:
+    case LF_USB_READ:
+    case LF_BEAMER_LOST:
+        setWhy(w, "NO LINK TO THE BEAMER", "CHECK THE BEAMER IS PLUGGED IN",
+               "NO LINK");
+        break;
+    case LF_USB_BUSY:
+        setWhy(w, TITLE_TIMEOUT, storageHint(), "TIMEOUT");
+        break;
+    case BR_TOO_LARGE:
+    case BR_BAD_REQ:
+    case LF_BAD_REPLY:
+    case LF_BAD_REQUEST:
+        setWhy(w, TITLE_BUG, HINT_BUG, "ERROR");
+        break;
+    default: /* BR_TIMEOUT, LF_NO_ANSWER */
+        setWhy(w, TITLE_NO_LINK, HINT_AGAIN, "NO LINK");
+        break;
+    }
+}
+
+/* The error screen's message for a RELAY_ERROR (at most MSG_LEN). */
+static const char* lastFailMsg(u8 code)
+{
+    switch (code) {
+    case BR_NO_RELAY:
+        return "THE BEAMER HAS NO RELAY YET";
+    case BR_NO_WIFI:
+        return "THE BEAMER IS NOT ON WI-FI";
+    case BR_CONNECT:
+        return "CONNECT TO THE LAPTOP FAILED";
+    case BR_TIMEOUT:
+        return "THE RELAY DID NOT ANSWER";
+    case BR_TOO_LARGE:
+        return "REPLY TOO LARGE FOR THE BEAMER";
+    case BR_BAD_REQ:
+        return "THE BEAMER GOT A BAD REQUEST";
+    case BR_NO_STATION:
+        return "REFUSED: NO STATION NUMBER";
+    case BR_NO_SECRET:
+        return "REFUSED: NO SECRET";
+    case LF_NO_BEAMER:
+        return "NO BEAMER TO SEND THROUGH";
+    case LF_USB_WRITE:
+        return "USB WRITE TO THE BEAMER FAILED";
+    case LF_USB_READ:
+        return "USB READ FROM BEAMER FAILED";
+    case LF_USB_BUSY:
+        return "THE USB LINK STAYED BUSY";
+    case LF_NO_ANSWER:
+        return "NO ANSWER IN 3 SECONDS";
+    case LF_BAD_REPLY:
+        return "BAD REPLY FROM THE BEAMER";
+    case LF_BAD_REQUEST:
+        return "BAD REQUEST FROM THE GAME";
+    case LF_BEAMER_LOST:
+        return "THE BEAMER WENT AWAY";
+    default:
+        return "RELAY LINK ERROR";
+    }
+}
+
+static char tm_why_title[32]; /* TWO BEAMERS ARE STATION n */
+
+/* What the error screen says about the current error: the relay's own answer
+ * as it is; for everything else the host's verdict on the beamer first, then
+ * the request's own failure. */
+static void whyFailed(struct tm_why* w)
+{
+    switch (tm_err_kind) {
+    case TE_RELAY:
+        if (tm_err_status == ST_BAD_SECRET) {
+            /* The beamer's LAZYTO-SECRET is not the laptop's (R16). */
+            setWhy(w, "RELAY SECRET MISMATCH", "THE BEAMER HAS ANOTHER SECRET",
+                   "BAD SECRET");
+        } else if (tm_err_status == ST_DUP_STATION) {
+            /* Another beamer already plays as this number; this one, the
+             * newcomer, is refused until one of them is renumbered. */
+            putInt(putStr(tm_why_title, "TWO BEAMERS ARE STATION "),
+                   (int) tm_ph.station);
+            setWhy(w, tm_why_title, "RENUMBER ONE WITH ITS BUTTON",
+                   "DUPLICATE");
+        } else {
+            setWhy(w, "THE RELAY SAID NO", HINT_AGAIN, "REFUSED");
+        }
+        break;
+    case TE_HOST:
+        if (!whyHost(w)) {
+            whyLastFail(w);
+        }
+        break;
+    case TE_TIMEOUT:
+        if (!whyHost(w)) {
+            setWhy(w, TITLE_TIMEOUT, storageHint(), "TIMEOUT");
+        }
+        break;
+    default: /* TE_EXI, TE_BAD */
+        setWhy(w, TITLE_BUG, HINT_BUG, "ERROR");
+        break;
+    }
+}
+
+/* The search screen's wait, in the search order (searchStep). */
+static const char* searchTitle(void)
+{
+    if (hostStarting()) {
+        return "WAITING FOR THE BEAMER";
+    }
+    if (hostNoNumber()) {
+        return "THIS BEAMER HAS NO NUMBER";
+    }
+    if (hostJoining()) {
+        return "BEAMER JOINING THE WI-FI";
+    }
+    return "LOOKING FOR THE RELAY";
+}
+
+static const char* searchHint(void)
+{
+    if (hostStarting()) {
+        return "IT MAY BE STARTING OR ERASING";
+    }
+    if (hostNoNumber()) {
+        return HINT_NUMBER;
+    }
+    return NULL;
+}
+
+static const char* searchLabel(void)
+{
+    if (hostStarting()) {
+        return "STARTING";
+    }
+    if (hostNoNumber()) {
+        return "NO NUMBER";
+    }
+    if (hostJoining()) {
+        return "JOINING";
+    }
+    return "SEARCHING";
 }
 
 /* ------------------------------------------------------------ drawing */
@@ -704,23 +1044,39 @@ static void drawRow(f32 y, const struct set_entry* set, bool selected,
 }
 
 /* Filter pill on the left, position on the right, scroll-up cue. */
-/* Version text, top-right at the header row: the module's git hash and build
- * date (lbmodule_version.inc, written by tools/build_module.py), then the
- * host's build when it reports one (exi_poll_hdr.host_build, 0 = unknown:
- * Dolphin). Small and dim: for the TO checking a dozen Wiis, not for players. */
+/* Top right, drawn in every state: STATION n on the header row, at the
+ * floor size and in white, so a player or the TO reads which station a Wii
+ * is from across the room. The number is the beamer's (exi_poll_hdr), so
+ * STATION - while it has none; Dolphin says 0 (decisions.md R10). Above it,
+ * small and dim, the version text: the module's git hash and build date
+ * (lbmodule_version.inc, written by tools/build_module.py), then the host's
+ * build when it reports one (exi_poll_hdr.host_build, 0 = unknown: Dolphin),
+ * for the TO checking a dozen Wiis. The station never reaches left of the
+ * pane's box, so it stays clear of the header's position and cue (x <= 382). */
 #include "../lb/lbmodule_version.inc"
 #define L_VER_X 578.0f /* right edge: the CSS hint's, inside the safe area */
+#define L_VER_Y 56.0f  /* its line ends 2 px above the station's glyphs */
 #define L_VER_S 0.40f
+#define L_STN_S 0.70f
 
-static void drawVersion(void)
+static void drawCorner(void)
 {
     char buf[48];
-    char* p = putStr(buf, TM_MODULE_VERSION);
+    char* p;
+    f32 s;
+    if ((tm_ph.flags & (PF_NO_BEAMER | PF_NO_STATION)) != 0) {
+        putStr(buf, "STATION -");
+    } else {
+        putInt(putStr(buf, "STATION "), tm_ph.station);
+    }
+    s = fitText(buf, L_STN_S, L_HEAD_S, L_VER_X - L_PANE_BOX_X);
+    rightAt(L_VER_X, L_HEAD_Y, s, &c_white, buf);
+    p = putStr(buf, TM_MODULE_VERSION);
     if (tm_ph.host_build != 0) {
         p = putStr(p, "  WII ");
         putInt(p, (int) tm_ph.host_build);
     }
-    rightAt(L_VER_X, L_HEAD_Y, L_VER_S, &c_dim2, buf);
+    rightAt(L_VER_X, L_VER_Y, L_VER_S, &c_dim2, buf);
 }
 
 static void drawHeader(void)
@@ -833,35 +1189,29 @@ static void panePill(f32 y, int best_of)
     lineC(L_PANE_X + 7.0f, y, 0.55f, &c_white, buf);
 }
 
-/* The host's own verdict (exi_poll_hdr.flags): a card or network problem it
- * knows about before any beacon could arrive. 0 on Dolphin. */
-static bool hostNoNetwork(void)
+/* REPLAYS NOT SAVING with a red dot, shrunk to the pane's width: the
+ * beamer's card cannot take the next replay (lbRelayExi_NotSaving). */
+static void paneNotSaving(f32 y)
 {
-    return (tm_ph.flags & PF_NO_NETWORK) != 0;
+    char buf[24];
+    f32 s;
+    putStr(buf, "REPLAYS NOT SAVING");
+    s = fitText(buf, L_HINT_S, 0.40f, L_PANE_W - 16.0f);
+    dotLabel(L_PANE_X, y, s, &c_red, buf);
 }
 
-/* Network is on but the host has not finished joining the Wi-Fi yet. */
-static bool hostNetJoining(void)
-{
-    return (tm_ph.flags & PF_NET_JOINING) != 0;
-}
-static bool hostNoCard(void)
-{
-    return (tm_ph.flags & (PF_NO_CFG | PF_NO_SECRET)) != 0;
-}
-
-/* STATION n / RELAY / a.b.c.d from the poll header the host fills. */
-static void paneWhereAmI(f32 y)
+/* RELAY / a.b.c.d / PORT p from the poll header the host fills, once the
+ * beamer has heard the relay's beacon. The station number is the top right
+ * corner's (drawCorner), in every view. */
+static void paneRelay(f32 y)
 {
     char buf[24];
     char* p;
     u32 ip = tm_ph.relay_ip;
-    putInt(putStr(buf, "STATION "), tm_ph.station);
-    lineC(L_PANE_X, y, L_HINT_S, &c_dim2, buf);
     if (ip == 0) {
         return;
     }
-    lineC(L_PANE_X, y + 24.0f, L_HINT_S, &c_dim2, "RELAY");
+    lineC(L_PANE_X, y, L_HINT_S, &c_dim2, "RELAY");
     p = putInt(buf, (int) (ip >> 24));
     p = putStr(p, ".");
     p = putInt(p, (int) ((ip >> 16) & 0xFF));
@@ -869,9 +1219,9 @@ static void paneWhereAmI(f32 y)
     p = putInt(p, (int) ((ip >> 8) & 0xFF));
     p = putStr(p, ".");
     putInt(p, (int) (ip & 0xFF));
-    lineC(L_PANE_X, y + 48.0f, 0.45f, &c_dim2, buf);
+    lineC(L_PANE_X, y + 24.0f, 0.45f, &c_dim2, buf);
     putInt(putStr(buf, "PORT "), tm_ph.relay_port);
-    lineC(L_PANE_X, y + 72.0f, 0.45f, &c_dim2, buf);
+    lineC(L_PANE_X, y + 48.0f, 0.45f, &c_dim2, buf);
 }
 
 /* The pane in three groups: context (round, best-of), matchup (tag / VS /
@@ -886,7 +1236,10 @@ static void drawPane(void)
     case TM_LIST:
         if (tm_nview == 0) {
             lineC(L_PANE_X, 126.0f, L_HINT_S, &c_dim2, "NO SETS");
-            paneWhereAmI(174.0f);
+            paneRelay(174.0f);
+            if (lbRelayExi_NotSaving(&tm_ph)) {
+                paneNotSaving(308.0f);
+            }
             return;
         }
         set = &tm_sets[tm_view[tm_sel]];
@@ -897,13 +1250,18 @@ static void drawPane(void)
         paneTag(212.0f, set->p1_tag, &c_yel);
         lineC(L_PANE_X, 240.0f, L_HINT_S, &c_dim2, "VS");
         paneTag(268.0f, set->p2_tag, &c_yel);
-        if (set->state != 0) {
+        /* The state line gives way to the beamer's full card: the set can
+         * still be played (the list's PLAYING HERE header and RESUME keep
+         * saying which set is running here), but nothing will be saved. */
+        if (lbRelayExi_NotSaving(&tm_ph)) {
+            paneNotSaving(308.0f);
+        } else if (set->state != 0) {
             dotLabel(L_PANE_X, 308.0f, L_HINT_S, &c_amb, "PLAYING HERE");
-            lineC(L_PANE_X, 340.0f, L_ACTION_S, &c_white, "#A RESUME");
         } else {
             dotLabel(L_PANE_X, 308.0f, L_HINT_S, &c_grn, "READY");
-            lineC(L_PANE_X, 340.0f, L_ACTION_S, &c_white, "#A START");
         }
+        lineC(L_PANE_X, 340.0f, L_ACTION_S, &c_white,
+              set->state != 0 ? "#A RESUME" : "#A START");
         break;
     case TM_CONFIRM:
     case TM_STARTING:
@@ -930,23 +1288,19 @@ static void drawPane(void)
         }
         break;
     case TM_SEARCHING:
-        paneWhereAmI(126.0f);
-        dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_amb, "SEARCHING");
+        paneRelay(126.0f);
+        dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_amb, searchLabel());
         break;
     case TM_LOADING:
-        paneWhereAmI(126.0f);
+        paneRelay(126.0f);
         break;
-    case TM_ERROR:
-        paneWhereAmI(126.0f);
-        dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_red,
-                 hostNetJoining()    ? "NO WI-FI"
-                 : hostNoNetwork()   ? "NET OFF"
-                 : hostNoCard()      ? "BAD CARD"
-                 : tm_ph.relay_ip == 0 ? "NOT FOUND"
-                 : tm_err_link       ? "NO LINK"
-                 : errIsSecret()     ? "BAD SECRET"
-                                     : "REFUSED");
+    case TM_ERROR: {
+        struct tm_why w;
+        whyFailed(&w);
+        paneRelay(126.0f);
+        dotLabel(L_PANE_X, 236.0f, L_HINT_S, &c_red, w.label);
         break;
+    }
     default:
         break;
     }
@@ -980,17 +1334,22 @@ static void redraw(void)
     paneBox(L_PANE_BOX_X, L_PANE_BOX_Y, L_PANE_BOX_W, L_PANE_BOX_H, c_scrim,
             true);
     /* The LazyTO title is the wordmark sprite (lbWordmark_Show), which
-     * lives across redraws. The version text is drawn in every state, so a
-     * station that cannot reach the relay still says which build it runs. */
-    drawVersion();
+     * lives across redraws. The corner is drawn in every state, so a
+     * station that cannot reach the relay still says which station it is
+     * and which build it runs. */
+    drawCorner();
 
     switch (tm_state) {
-    case TM_SEARCHING:
-        centredAt(L_LIST_CX, 214.0f, 0.62f, &c_dim,
-                  hostNetJoining() ? "JOINING THE WI-FI" : "LOOKING FOR THE RELAY");
+    case TM_SEARCHING: {
+        const char* hint = searchHint();
+        centredAt(L_LIST_CX, 214.0f, 0.62f, &c_dim, searchTitle());
         pulse(L_LIST_CX, 250.0f, 0.62f);
+        if (hint != NULL) {
+            centredAt(L_LIST_CX, 286.0f, L_HINT_S, &c_white, hint);
+        }
         centredAt(L_HINT_CX, L_HINT_Y, L_HINT_S, &c_white, "#B MENU");
         break;
+    }
     case TM_LOADING:
         centredAt(L_LIST_CX, 214.0f, 0.62f, &c_dim, "LOADING SETS");
         pulse(L_LIST_CX, 250.0f, 0.62f);
@@ -1020,15 +1379,15 @@ static void redraw(void)
                       "CHECK BOTH TAGS FIRST");
         }
         break;
-    case TM_ERROR:
-        lineC(L_TEXT_X, 150.0f, 0.62f, &c_red,
-              hostNetJoining()    ? "THIS WII COULD NOT JOIN THE WI-FI"
-              : hostNoNetwork()   ? "NETWORK IS OFF IN THE LOADER"
-              : hostNoCard()      ? "THIS CARD IS NOT SET UP"
-              : tm_ph.relay_ip == 0 ? "NO RELAY FOUND"
-              : tm_err_link       ? "NO LINK TO THE RELAY"
-              : errIsSecret()     ? "RELAY SECRET MISMATCH"
-                                  : "THE RELAY SAID NO");
+    case TM_ERROR: {
+        struct tm_why w;
+        char title[32];
+        f32 s;
+        whyFailed(&w);
+        /* A title longer than the panel shrinks (fitText), never spills. */
+        copyStr(title, w.title, sizeof(title) - 1);
+        s = fitText(title, 0.62f, 0.50f, L_LIST_W - 24.0f);
+        lineC(L_TEXT_X, 150.0f, s, &c_red, title);
         wrap2(L_TEXT_X, 190.0f, 26.0f, L_HDR_S, 0.45f, L_LIST_W - 24.0f, &c_white,
               tm_errmsg);
         lineC(L_TEXT_X, 262.0f, 0.45f, &c_dim,
@@ -1036,16 +1395,11 @@ static void redraw(void)
         /* Each line encodes to under 128 bytes: HSD_SisLib_803A6B98 encodes
          * into a 128-byte stack buffer without a bound, and a space after a
          * letter costs 7 bytes there. */
-        lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim,
-              hostNetJoining()    ? "POWER CYCLE, CHECK THE ROUTER"
-              : hostNoNetwork()   ? "TURN ON NETWORK IN THE LOADER"
-              : hostNoCard()      ? "UNZIP THE STATION ZIP AGAIN"
-              : tm_ph.relay_ip == 0 ? "IS THE RELAY ON THIS WI-FI?"
-              : errIsSecret()     ? "CHECK THE SECRET ON THIS CARD"
-                                  : "TELL THE TO IF THIS REPEATS");
+        lineC(L_TEXT_X, 286.0f, 0.45f, &c_dim, w.hint);
         centredAt(L_HINT_CX, L_HINT_Y, L_HINT_S, &c_white,
                   "#A RETRY   #B BACK");
         break;
+    }
     default:
         break;
     }
@@ -1054,10 +1408,12 @@ static void redraw(void)
 
 /* ------------------------------------------------------------ relay */
 
-static void fail(const char* msg)
+/* msg is at most MSG_LEN characters; "" when the title and hint say it all
+ * (whyFailed). */
+static void fail(u8 kind, const char* msg)
 {
     copyStr(tm_errmsg, msg, MSG_LEN);
-    tm_err_link = true;
+    tm_err_kind = kind;
     tm_err_status = 0;
     tm_state = TM_ERROR;
     tm_dirty = true;
@@ -1069,7 +1425,7 @@ static void failFromResp(const struct relay_resp* resp)
     if (tm_errmsg[0] == '\0') {
         copyStr(tm_errmsg, "RELAY ERROR", MSG_LEN);
     }
-    tm_err_link = false;
+    tm_err_kind = TE_RELAY;
     tm_err_status = resp->status;
     tm_state = TM_ERROR;
     tm_dirty = true;
@@ -1079,45 +1435,68 @@ static void sendList(void)
 {
     tm_retry_cmd = CMD_LIST_SETS;
     tm_timeout = 0;
-    tm_join_frames = 0;
     if (lbRelayExi_Request(CMD_LIST_SETS, NULL, 0)) {
         tm_state = TM_LOADING;
     } else {
-        fail("EXI ERROR");
+        fail(TE_EXI, "EXI ERROR");
     }
     tm_dirty = true;
 }
 
-/* Has the host found the relay yet? Reads the poll image for its
- * exi_poll_hdr (kept for the pane). -1 = EXI failure, 0 = no beacon heard,
- * 1 = relay known. */
-static int peekRelay(void)
+/* Reads the poll image for its exi_poll_hdr (the beamer's state, the relay's
+ * address; kept for the pane). False on an EXI failure. */
+static bool peekRelay(void)
 {
     struct exi_poll_hdr ph;
     if (!lbRelayExi_Peek(&ph)) {
-        return -1;
+        return false;
     }
     tm_ph = ph;
-    return tm_ph.relay_ip != 0 ? 1 : 0;
+    return true;
 }
 
-/* The list request, held back until the host knows the relay: a request
- * sent before the first beacon is answered "no relay found yet" by the
- * host itself, which on a cold boot would greet every player with an
- * error. Searching shows its own view and gives up after TM_SEARCH_FRAMES. */
+/* One search step on a fresh header: send LIST_SETS once the beamer and the
+ * relay are ready, fail at once on what no wait cures, else keep waiting.
+ * The check order (docs/protocol-v2.md): no beamer (old and new firmware
+ * included), no number, no secret, the beamer's Wi-Fi, the relay. "Starting"
+ * and "no number" end by themselves, the Wi-Fi join gets
+ * TM_BEAMER_JOIN_FRAMES, the beacon TM_SEARCH_FRAMES. A beacon gone stale
+ * still has an address, so the request goes, and its answer decides. Holding
+ * the request back matters on a cold boot: sent before the beamer has heard
+ * the relay it would greet every player with an error. */
+static void searchStep(void)
+{
+    if (hostStarting() || hostNoNumber()) {
+        return;
+    }
+    if (hostNoBeamer() || (tm_ph.flags & PF_NO_SECRET) != 0) {
+        fail(TE_HOST, "");
+    } else if (hostJoining()) {
+        if (++tm_beamer_join > TM_BEAMER_JOIN_FRAMES) {
+            fail(TE_HOST, "STILL JOINING AFTER 60 SECONDS");
+        }
+    } else if (tm_ph.beamer_wifi != WIFI_UP) {
+        fail(TE_HOST, "");
+    } else if (tm_ph.relay_ip != 0) {
+        sendList();
+    } else if (++tm_timeout > TM_SEARCH_FRAMES) {
+        fail(TE_HOST, "NO BEACON FOR 10 SECONDS");
+    }
+}
+
+/* The list request, through the search: straight to LOADING when the host
+ * is ready, else the search screen waits (or the error says why now). */
 static void startList(void)
 {
-    int r = peekRelay();
-    if (r < 0) {
-        fail("EXI ERROR");
-    } else if (r > 0) {
-        sendList();
+    tm_retry_cmd = CMD_LIST_SETS;
+    tm_timeout = 0;
+    tm_beamer_join = 0;
+    tm_state = TM_SEARCHING;
+    tm_dirty = true;
+    if (!peekRelay()) {
+        fail(TE_EXI, "EXI ERROR");
     } else {
-        tm_retry_cmd = CMD_LIST_SETS;
-        tm_timeout = 0;
-        tm_join_frames = 0;
-        tm_state = TM_SEARCHING;
-        tm_dirty = true;
+        searchStep();
     }
 }
 
@@ -1126,17 +1505,16 @@ static void sendStart(void)
     struct start_set_req req;
     req.set_id = tm_sets[tm_chosen].set_id;
     /* Unused by the relay, which picks the stream station itself. The kernel
-     * stamps hdr.station from lazyto_station.txt. */
+     * stamps hdr.station from the beamer's hello. */
     req.stream = 0;
     req._pad[0] = req._pad[1] = req._pad[2] = 0;
 
     tm_retry_cmd = CMD_START_SET;
     tm_timeout = 0;
-    tm_join_frames = 0;
     if (lbRelayExi_Request(CMD_START_SET, &req, sizeof(req))) {
         tm_state = TM_STARTING;
     } else {
-        fail("EXI ERROR");
+        fail(TE_EXI, "EXI ERROR");
     }
     tm_dirty = true;
 }
@@ -1146,6 +1524,9 @@ static void exitToMainMenu(void)
     destroyText();
     lbWordmark_Hide();
     tm_state = TM_OFF;
+    /* Leaving the set list leaves the set: a VS match started from the
+     * vanilla main menu is neither scored into it nor recorded. */
+    lbTourney_ClearCurrent();
     /* B-back: the player wants the real main menu, so show its visuals again
      * before its think takes over. */
     setMenuVisualsHidden(false);
@@ -1184,20 +1565,21 @@ static void pollRelay(void)
     s32 state = lbRelayExi_Poll();
 
     if (state < 0) {
-        fail("EXI ERROR");
+        fail(TE_EXI, "EXI ERROR");
         return;
     }
     /* Every poll image starts with where we are (host-filled, even while the
      * relay is silent) - keep the latest for the side pane. */
     tm_ph = lbRelayExi_Response()->ph;
     if (state == RELAY_ERROR) {
-        fail("RELAY LINK ERROR");
+        /* The kernel's code says why; whyFailed picks the words. */
+        fail(TE_HOST, lastFailMsg(tm_ph.last_fail));
         return;
     }
     if (state != RELAY_DONE) {
         if (++tm_timeout > TM_TIMEOUT_FRAMES) {
             lbRelayExi_Abort();
-            fail("TIMEOUT - RELAY NOT ANSWERING");
+            fail(TE_TIMEOUT, "NO ANSWER IN 5 SECONDS");
         }
         return;
     }
@@ -1205,7 +1587,7 @@ static void pollRelay(void)
     if (r->hdr.magic[0] != RELAY_MAGIC_0 || r->hdr.magic[1] != RELAY_MAGIC_1 ||
         r->hdr.cmd != tm_retry_cmd)
     {
-        fail("BAD RESPONSE");
+        fail(TE_BAD, "BAD RESPONSE");
         return;
     }
     if (r->resp.status != ST_OK) {
@@ -1216,8 +1598,20 @@ static void pollRelay(void)
         acceptList(r);
     } else {
         /* START_SET accepted: hand the set to lbtourney and enter the CSS.
-         * The scene teardown frees this think and the overlay. */
-        lbTourney_SetCurrent(&tm_sets[tm_chosen]);
+         * The scene teardown frees this think and the overlay. The header
+         * is this reply's, a real host's: its host_build decides the record
+         * gate for the set. The reply carries the set's games (a resume
+         * after a reboot goes on from them, N3). */
+        const struct start_set_resp* held =
+            (const struct start_set_resp*) r->payload;
+        if (r->hdr.len < sizeof(struct relay_resp) + sizeof(*held) ||
+            held->set_id != tm_sets[tm_chosen].set_id ||
+            held->game_count > MAX_GAMES)
+        {
+            fail(TE_BAD, "BAD RESPONSE");
+            return;
+        }
+        lbTourney_SetCurrent(&tm_sets[tm_chosen], &tm_ph, held);
         tm_state = TM_OFF;
         mn_80229860(GM_VS);
     }
@@ -1340,43 +1734,21 @@ void mnTourney_Think(HSD_GObj* gobj)
     }
 
     switch (tm_state) {
-    case TM_SEARCHING: {
-        int r = peekRelay();
-        if (r < 0) {
-            fail("EXI ERROR");
-        } else if (r > 0) {
-            sendList();
-        } else if (hostNetJoining()) {
-            /* The host is still joining the Wi-Fi (its network comes up on
-             * its own thread): wait, keep B working, and only give up after
-             * TM_JOIN_FRAMES. The beacon timeout below starts once it is on. */
-            if (buttons & MenuInput_Back) {
-                sfxBack();
-                exitToMainMenu();
-                return;
-            }
-            if (++tm_join_frames > TM_JOIN_FRAMES) {
-                fail("NO WI-FI AFTER 60 SECONDS");
-            }
-        } else if (hostNoNetwork()) {
-            /* The loader's Network option is off: no beacon will ever come,
-             * say so now. */
-            fail("NETWORK IS OFF IN THE LOADER");
-        } else if (hostNoCard()) {
-            /* The font has no underscore, so the file is "the station file". */
-            fail((tm_ph.flags & PF_NO_CFG) ? "NO STATION FILE ON THE CARD"
-                                           : "NO SECRET IN THE STATION FILE");
-        } else if (buttons & MenuInput_Back) {
+    case TM_SEARCHING:
+        if (buttons & MenuInput_Back) {
             sfxBack();
             exitToMainMenu();
             return;
-        } else if (++tm_timeout > TM_SEARCH_FRAMES) {
-            fail("NO BEACON HEARD FOR 10 SECONDS");
-        } else if (tm_frame % L_PULSE_FRAMES == 0) {
-            tm_dirty = true;
+        }
+        if (!peekRelay()) {
+            fail(TE_EXI, "EXI ERROR");
+        } else {
+            searchStep();
+        }
+        if (tm_state == TM_SEARCHING && tm_frame % L_PULSE_FRAMES == 0) {
+            tm_dirty = true; /* the dots walk, and the text follows the wait */
         }
         break;
-    }
     case TM_LOADING:
         pollRelay();
         if (tm_state == TM_LOADING && (buttons & MenuInput_Back)) {
@@ -1398,6 +1770,14 @@ void mnTourney_Think(HSD_GObj* gobj)
         break;
     case TM_LIST:
         buildView();
+        if (tm_frame % TM_PEEK_FRAMES == 0) {
+            /* The beamer's card may fill while the list is up; a failed read
+             * keeps the last header (the next request says what is wrong). */
+            bool was = lbRelayExi_NotSaving(&tm_ph);
+            if (peekRelay() && lbRelayExi_NotSaving(&tm_ph) != was) {
+                tm_dirty = true;
+            }
+        }
 #if TM_DEMO_AUTOSTART
         if (tm_nview > 0 && tm_frame % 600 == 120) {
             buttons |= MenuInput_Confirm;

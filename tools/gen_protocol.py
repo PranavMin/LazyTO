@@ -4,8 +4,10 @@
 Outputs (committed; never edit by hand):
     generated/wire.ts                 DataView encode/decode for the relay
     kiosk/include/relay_proto.h       packed big-endian structs + _Static_asserts,
-    Nintendont/kernel/relay_proto.h   the same header for the kiosk module and
-                                      the Nintendont kernel (two copies, one each)
+    Nintendont/kernel/relay_proto.h   the same header for the kiosk module, the
+    slippi-beamer/components/beamer_lazyto/include/relay_proto.h
+                                      Nintendont kernel and the beamer firmware
+                                      (three copies, one each)
 
 The generator computes every struct layout with natural alignment and refuses
 to emit anything if a field would need implicit padding (padding must be an
@@ -32,6 +34,14 @@ PROTOCOL_YAML = ROOT / "protocol.yaml"
 WIRE_TS = ROOT / "generated" / "wire.ts"
 
 GENERATED_BANNER = "GENERATED from protocol.yaml by tools/gen_protocol.py -- DO NOT EDIT."
+
+# protocol.yaml and everything generated from it are MIT (docs/decisions.md,
+# "The protocol is MIT"), so the beamer firmware (MIT) can compile the header.
+# The rest of LazyTO, this script included, is GPL-2.0-only.
+LICENSE_LINES = (
+    "SPDX-License-Identifier: MIT",
+    "Copyright (C) 2026 Kegstand Jesus (PranavMin)",
+)
 
 PRIMITIVES = {
     # name: (size, align, c type, DataView getter/setter suffix)
@@ -148,6 +158,11 @@ def _load_structs(spec: dict, constants: dict[str, tuple[int, str | None]]) -> d
         seen: dict[str, Field] = {}
         for i, f in enumerate(s["fields"]):
             fname, ftype = f["name"], f["type"]
+            if fname == "size":
+                # The C header's guards are <struct>_size (sizeof) and
+                # <struct>_<field> (offsetof): a field named size would
+                # declare the same typedef twice under MWCC's pre-C11 asserts.
+                raise ProtocolError(f"{sname}.size: no field may be named size")
             is_struct = ftype in structs
             if not is_struct and ftype not in PRIMITIVES:
                 raise ProtocolError(f"{sname}.{fname}: unknown type {ftype!r} "
@@ -245,10 +260,15 @@ def c_array_suffix(f: Field) -> str:
 def emit_c(p: Protocol) -> str:
     out: list[str] = []
     w = out.append
-    w(f"/* relay_proto.h -- {GENERATED_BANNER}")
+    w(f"/* {LICENSE_LINES[0]}")
+    for line in LICENSE_LINES[1:]:
+        w(f" * {line}")
     w(" *")
-    w(" * Wire protocol between the Wii (Melee decomp / Nintendont kernel) and the")
-    w(" * relay on the Pi. See docs/architecture.md.")
+    w(f" * relay_proto.h -- {GENERATED_BANNER}")
+    w(" *")
+    w(" * Wire protocol between the Wii (kiosk module / Nintendont kernel), the")
+    w(" * LazyTO beamer and the relay. See docs/protocol-v2.md and")
+    w(" * docs/architecture.md in PranavMin/LazyTO.")
     w(" *")
     w(" * All integers big-endian on the wire; PowerPC is big-endian, so these")
     w(" * structs are sent and received as-is with zero byte-swapping.")
@@ -287,7 +307,8 @@ def emit_c(p: Protocol) -> str:
     name_w = max(len(n) for n in p.constants)
     for name, (value, doc) in p.constants.items():
         comment = f"  /* {doc} */" if doc else ""
-        cval = f"0x{value:X}" if value > 0x7FFFFFFF else str(value)
+        # Addresses and magic words read in hex; counts and sizes in decimal.
+        cval = f"0x{value:X}" if value >= 0x10000 else str(value)
         w(f"#define {name:<{name_w}} {cval}{comment}")
 
     for ename, (doc, values) in p.enums.items():
@@ -346,6 +367,9 @@ def _wrap_comment(doc: str, width: int = 76) -> list[str]:
 def emit_ts(p: Protocol) -> str:
     out: list[str] = []
     w = out.append
+    for line in LICENSE_LINES:
+        w(f"// {line}")
+    w("//")
     w(f"// wire.ts -- {GENERATED_BANNER}")
     w("//")
     w("// Struct encode/decode for the Wii <-> relay protocol (architecture.md).")
@@ -559,11 +583,14 @@ def _ts_decode(w, st: Struct, p: Protocol) -> None:
 
 # ---------------------------------------------------------------- main
 
-# The C header: the kiosk module builds with one copy, and the Nintendont
-# submodule's kernel builds the relay EXI device with the other (it builds on
-# its own in its own CI). Written and checked together, so they never drift.
+# The C header: the kiosk module builds with one copy, the Nintendont
+# submodule's kernel builds the relay EXI device with another (it builds on
+# its own in its own CI), and the slippi-beamer submodule's firmware builds
+# the beamer's side of the mailbox and the sync with the third. Written and
+# checked together, so they never drift.
 HEADER_COPIES = (ROOT / "kiosk" / "include" / "relay_proto.h",
-                 ROOT / "Nintendont" / "kernel" / "relay_proto.h")
+                 ROOT / "Nintendont" / "kernel" / "relay_proto.h",
+                 ROOT / "slippi-beamer" / "components" / "beamer_lazyto" / "include" / "relay_proto.h")
 
 
 def generate() -> dict[Path, str]:

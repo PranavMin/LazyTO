@@ -11,8 +11,10 @@ import {
   RELAY_RESP_SIZE,
   RelayCmd,
   decodeListSetsResp,
+  decodeStartSetResp,
   decodeRelayHdr,
   decodeRelayResp,
+  NO_PORT,
   encodeEndSetReq,
   encodeRelayHdr,
   encodeRelayAuth,
@@ -22,9 +24,11 @@ import {
   encodeStartSetReq,
   type GameResult,
   type ListSetsResp,
+  type StartSetResp,
   type RelayHdr,
   type RelayResp,
 } from '../generated/wire.js';
+import { relayAuthKey } from '../src/sync.js';
 
 /** The secret tests and the sim use; a relay under test is configured with it. */
 export const TEST_SECRET = 'test-secret-1234';
@@ -40,9 +44,18 @@ export function rawRequest(
   station: number,
   cmd: number,
   payload: Uint8Array = new Uint8Array(0),
-  { version = PROTO_VERSION, host = '127.0.0.1', timeoutMs = 3000, secret = TEST_SECRET } = {},
+  {
+    version = PROTO_VERSION,
+    host = '127.0.0.1',
+    timeoutMs = 3000,
+    secret = TEST_SECRET,
+    localAddress = undefined as string | undefined,
+  } = {},
 ): Promise<WireReply> {
-  const auth = encodeRelayAuth({ magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]), secret });
+  const auth = encodeRelayAuth({
+    magic: new Uint8Array([AUTH_MAGIC_0, AUTH_MAGIC_1]),
+    key: relayAuthKey(secret),
+  });
   const req = Buffer.concat([
     auth,
     encodeRelayHdr({
@@ -55,7 +68,8 @@ export function rawRequest(
     payload,
   ]);
   return new Promise((resolve, reject) => {
-    const socket = connect({ port, host });
+    // A Wii's request reaches the relay from its beamer's address: tests give a second beamer 127.0.0.2.
+    const socket = connect({ port, host, localAddress });
     const chunks: Buffer[] = [];
     socket.setTimeout(timeoutMs, () => {
       socket.destroy();
@@ -86,12 +100,15 @@ export class WiiClient {
     private readonly stream: 0 | 1 = 0,
     private readonly host = '127.0.0.1',
     private readonly secret: string = TEST_SECRET,
+    /** The address of the beamer this Wii's requests come through. */
+    private readonly localAddress?: string,
   ) {}
 
   private request(cmd: number, payload?: Uint8Array): Promise<WireReply> {
     return rawRequest(this.port, this.station, cmd, payload, {
       host: this.host,
       secret: this.secret,
+      localAddress: this.localAddress,
     });
   }
 
@@ -102,6 +119,17 @@ export class WiiClient {
 
   startSet(setId: number, stream = this.stream): Promise<WireReply> {
     return this.request(RelayCmd.CMD_START_SET, encodeStartSetReq({ set_id: setId, stream }));
+  }
+
+  /** START_SET, with the games the relay holds for the set (none unless it is a resume). */
+  async startSetGames(
+    setId: number,
+    stream = this.stream,
+  ): Promise<{ resp: RelayResp; games: GameResult[] | null; reply: StartSetResp | null }> {
+    const r = await this.startSet(setId, stream);
+    if (r.resp.status !== 0) return { resp: r.resp, games: null, reply: null };
+    const reply = decodeStartSetResp(r.payload);
+    return { resp: r.resp, games: reply.games.slice(0, reply.game_count), reply };
   }
 
   reportScore(setId: number, games: GameResult[]): Promise<WireReply> {
@@ -121,7 +149,8 @@ export class WiiClient {
 
 // Defaults are what an auto-scored game carries: Fox (ext 2) vs Marth (ext 9)
 // on Battlefield (StKind 0x1F). A hand-scored game sends 0xFF, 0xFF, 0
-// (0 is Captain Falcon on the external character scale).
+// (0 is Captain Falcon on the external character scale). Ports and the
+// replay id default to unknown and none; `more` sets them.
 export function game(
   winnerSlot: 1 | 2,
   p1Char = 2,
@@ -129,6 +158,7 @@ export function game(
   stage = 0x1f,
   stocks: [number, number] = [0xff, 0xff],
   costumes: [number, number] = [0xff, 0xff],
+  more: Partial<Pick<GameResult, 'p1_port' | 'p2_port' | 'replay_id'>> = {},
 ): GameResult {
   return {
     winner_slot: winnerSlot,
@@ -139,6 +169,10 @@ export function game(
     p2_stocks: stocks[1],
     p1_costume: costumes[0],
     p2_costume: costumes[1],
+    p1_port: NO_PORT,
+    p2_port: NO_PORT,
+    replay_id: 0,
+    ...more,
   };
 }
 
@@ -154,6 +188,9 @@ function padGames(games: GameResult[]): GameResult[] {
       p2_stocks: 0,
       p1_costume: 0,
       p2_costume: 0,
+      p1_port: 0,
+      p2_port: 0,
+      replay_id: 0,
     });
   return out;
 }

@@ -1,0 +1,176 @@
+{
+  "fixture": "03-bo3-port-swap",
+  "description": "Bo3 won 2-1 by entrant1 (Marlow), who plays game 1 on port 2 and games 2-3 on port 1. RR keys the running score by port-ordered slot, not by player, so scores[1..] and finalScore credit the wrong player (finalScore says Marlow 1, Juniper 2) and bestOf comes out 3 only by luck. Tournament has two Melee events (event.hasSiblings true), one phase.",
+  "generatedBy": "lazyto-bundle/tools/make-bundle.ts (RR code from rr-ref/src/rr, verbatim)",
+  "rrCommit": "708b9c912ba92d46aa52e59cc8d91cd6d97a5d2c",
+  "node": "v24.19.0",
+  "tz": "UTC",
+  "clock": "2026-10-03T20:31:09Z",
+  "zipName": "Melee Singles WR1 - Marlow (Fox, Falco, ICs) vs Juniper (Falco, ICs, Fox).zip",
+  "zipNameHex": "4d656c65652053696e676c657320575231202d204d61726c6f772028466f782c2046616c636f2c2049437329207673204a756e69706572202846616c636f2c204943732c20466f78292e7a6970",
+  "subdir": "Melee Singles WR1 - Marlow (Fox, Falco, ICs) vs Juniper (Falco, ICs, Fox)",
+  "contextSha256": "09e2d1696eb7ad6eee65a51a8d82ef67295ee13df508f4e4c1d13508a89d2425",
+  "games": [
+    {
+      "game": 1,
+      "file": "game-1.slp",
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "replaySha256": "683dffb4c016382bd22a2ae98f579284417cdaf2c242499d378bd9523f7013a5",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ],
+      "entry": "1 - Juniper (Falco), Marlow (Fox) - Fountain of Dreams.slp",
+      "startAt": "2026-10-03T18:51:52.811Z",
+      "outputSha256": "4a3b6c82e41f19401e8f336b17f8d521aa67c5b83bada48423ce6fac477ccb73",
+      "outputSize": 1268
+    },
+    {
+      "game": 2,
+      "file": "game-2.slp",
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "replaySha256": "ce63ff77c2cd93f6ff5942c258ccf0d9f1aa2ebec5a2ce50184e753e06c78994",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "2 - Marlow (Falco), Juniper (ICs) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T19:35:54.811Z",
+      "outputSha256": "807d96b5449610e14ebdecff5f555ec20ac1e8ccb2ce7dbe94607df340a97a61",
+      "outputSize": 1420
+    },
+    {
+      "game": 3,
+      "file": "game-3.slp",
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "replaySha256": "9f4a555380bcdb3db21410ee0daa57cf6e1759990f0656f4f1204315ee1a04d2",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ],
+      "entry": "3 - Marlow (ICs), Juniper (Fox) - Pokémon Stadium.slp",
+      "startAt": "2026-10-03T20:29:04.811Z",
+      "outputSha256": "34d579549c77de2d90bab1fd0e7cb08af3c2284308c85562a06e9cd5595f9dc5",
+      "outputSize": 1420
+    }
+  ],
+  "zip": {
+    "rrEntryOrder": [
+      "context.json",
+      "2 - Marlow (Falco), Juniper (ICs) - Pokémon Stadium.slp",
+      "1 - Juniper (Falco), Marlow (Fox) - Fountain of Dreams.slp",
+      "3 - Marlow (ICs), Juniper (Fox) - Pokémon Stadium.slp"
+    ],
+    "eocd": {
+      "entriesTotal": 4,
+      "comment": ""
+    },
+    "zip64": false,
+    "entries": [
+      {
+        "name": "context.json",
+        "nameHex": "636f6e746578742e6a736f6e",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "8c58e4a5",
+        "uncompressedSize": 1521,
+        "dosTime": 41956,
+        "dosDate": 23875,
+        "sha256": "09e2d1696eb7ad6eee65a51a8d82ef67295ee13df508f4e4c1d13508a89d2425"
+      },
+      {
+        "name": "2 - Marlow (Falco), Juniper (ICs) - Pokémon Stadium.slp",
+        "nameHex": "32202d204d61726c6f77202846616c636f292c204a756e69706572202849437329202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "018c50b7",
+        "uncompressedSize": 1420,
+        "dosTime": 41956,
+        "dosDate": 23875,
+        "sha256": "807d96b5449610e14ebdecff5f555ec20ac1e8ccb2ce7dbe94607df340a97a61"
+      },
+      {
+        "name": "1 - Juniper (Falco), Marlow (Fox) - Fountain of Dreams.slp",
+        "nameHex": "31202d204a756e69706572202846616c636f292c204d61726c6f772028466f7829202d20466f756e7461696e206f6620447265616d732e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "62c0b546",
+        "uncompressedSize": 1268,
+        "dosTime": 41956,
+        "dosDate": 23875,
+        "sha256": "4a3b6c82e41f19401e8f336b17f8d521aa67c5b83bada48423ce6fac477ccb73"
+      },
+      {
+        "name": "3 - Marlow (ICs), Juniper (Fox) - Pokémon Stadium.slp",
+        "nameHex": "33202d204d61726c6f772028494373292c204a756e697065722028466f7829202d20506f6bc3a96d6f6e205374616469756d2e736c70",
+        "flags": 2048,
+        "method": 8,
+        "versionMadeBy": 831,
+        "versionNeeded": 20,
+        "localVersionNeeded": 20,
+        "internalAttributes": 0,
+        "externalAttributes": 2176057344,
+        "centralExtraHex": "",
+        "localExtraHex": "",
+        "comment": "",
+        "dataDescriptorHex": null,
+        "crc32": "5a7f31ad",
+        "uncompressedSize": 1420,
+        "dosTime": 41956,
+        "dosDate": 23875,
+        "sha256": "34d579549c77de2d90bab1fd0e7cb08af3c2284308c85562a06e9cd5595f9dc5"
+      }
+    ]
+  }
+}

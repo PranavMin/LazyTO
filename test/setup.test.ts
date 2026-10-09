@@ -22,6 +22,7 @@ async function setup(t: { after(fn: () => Promise<void> | void): void }) {
   const dir = mkdtempSync(join(tmpdir(), 'lazyto-setup-'));
   const app = new App({
     dataDir: dir,
+    archiveDir: join(dir, 'archive'),
     httpPort: 0,
     tcpPort: 0,
     host: '127.0.0.1',

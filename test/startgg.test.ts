@@ -60,6 +60,70 @@ test('startgg client', async (t) => {
     assert.equal(fake.getSet(SET).state, 1);
   });
 
+  await t.test(
+    "START_SET's participants and END_SET's completedAt and stream come back",
+    async () => {
+      const fake2 = makeFake();
+      await fake2.start();
+      try {
+        const set = fake2.getSet(SET);
+        set.slots[0] = {
+          ...entrant(1),
+          name: 'LZY | Alpha',
+          participants: [{ id: 61, gamerTag: ' Alpha ', prefix: 'LZY', pronouns: 'she/her' }],
+        };
+        set.stream = { id: 8001, streamName: 'lazytomelee', streamSource: 'TWITCH' };
+        set.completedAt = 1791056530;
+        const started = await client(fake2).markSetInProgress(SET);
+        assert.deepEqual(started.entrants, [
+          {
+            id: entrant(1).id,
+            participants: [{ id: 61, gamerTag: ' Alpha ', prefix: 'LZY', pronouns: 'she/her' }],
+          },
+          {
+            id: entrant(2).id,
+            participants: [
+              { id: entrant(2).id + 1_000_000, gamerTag: 'Bravo', prefix: '', pronouns: '' },
+            ],
+          },
+        ]);
+        const reported = await client(fake2).reportWinner(SET, entrant(1).id, [
+          { gameNum: 1, winnerId: entrant(1).id },
+        ]);
+        assert.deepEqual(reported, {
+          completedAt: 1791056530,
+          stream: { id: 8001, streamName: 'lazytomelee', streamSource: 'TWITCH' },
+        });
+      } finally {
+        await fake2.close();
+      }
+    },
+  );
+
+  await t.test(
+    "REST goes to the endpoint's origin without the token; a 5xx is retried twice",
+    async () => {
+      fake.failNext('restPhaseGroup', '5xx', 2);
+      const c = client(fake);
+      const before = fake.restCalls.length;
+      const json = await c.getPhaseGroupRest(3290148);
+      assert.equal(json.entities.groups.groupTypeId, 2);
+      assert.equal(fake.restCalls.length, before + 3);
+      assert.equal(c.callsInWindow(), 0, 'the call rate is GraphQL, the rate-limited API');
+      const last = fake.restCalls.at(-1)!;
+      assert.equal(
+        last.path,
+        '/phase_group/3290148?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true',
+      );
+      assert.equal(last.auth, null, 'no token, as Replay Reporter sends it');
+      fake.failNext('restPhaseGroup', '5xx', 3);
+      await assert.rejects(
+        c.getPhaseGroupRest(3290148),
+        (e: StartggError) => e.kind === 'upstream_5xx',
+      );
+    },
+  );
+
   await t.test('wrong token surfaces as rejected', async () => {
     await assert.rejects(
       client(fake, { token: 'bad' }).markSetInProgress(SET),

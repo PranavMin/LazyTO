@@ -110,11 +110,13 @@ The Wii boots straight into the set list. The menu hijacks the main menu's Troph
 
 | View | What it shows |
 |------|---------------|
-| Searching | LOOKING FOR THE RELAY until the host has heard a beacon. After 10 s: NO RELAY FOUND. A searches again. |
-| Loading | LOADING SETS, plus station number and the relay's address and port. |
+| Searching | Waits for the beamer and the relay, in this order: WAITING FOR THE BEAMER (the kernel's "starting"), THIS BEAMER HAS NO NUMBER (until its button is pressed), BEAMER JOINING THE WI-FI (up to 60 s), LOOKING FOR THE RELAY (up to 10 s, then BEAMER HEARS NO RELAY). Anything no wait cures is an error at once. |
+| Loading | LOADING SETS, plus the relay's address and port. |
 | Set list | Two panes. Left: "tag VS tag" rows grouped under round names, earliest round first. Right: the highlighted set (round, tags, best of, A START or A RESUME). |
 | Confirm | START THIS SET? A starts it and opens the CSS. B goes back. |
-| Error | NO LINK TO THE RELAY or THE RELAY SAID NO, the relay's message, A retries. |
+| Error | What is wrong, picked by code from the host's poll header ([kiosk.md](kiosk.md)): the beamer (none, its reason, no number, no secret, its Wi-Fi), the relay (not heard, no link, timeout), or the relay's own answer (RELAY SECRET MISMATCH, TWO BEAMERS ARE STATION n, THE RELAY SAID NO with its message). A retries. |
+
+Every view shows STATION n at the top right in white (STATION - while the beamer has no number), with the module's version and the host's build small and dim above it.
 
 Set list controls: up/down move, left/right page, L/R first-letter filter, X jumps to this station's set, Y refreshes, Z enters friendlies (CSS with no set), B goes to the main menu.
 
@@ -132,7 +134,7 @@ Set list controls: up/down move, left/right page, L/R first-letter filter, X jum
 
 Any controller port can drive these. A trigger counts at its click or any analog press.
 
-The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 ZAIN`. The banner is also the status: yellow digits, amber while a report is in flight, green after SCORE SENT, red after a failure (alternating with SEND FAILED - TELL THE TO). Until the players are placed it alternates with HOLD L+R IF YOU ARE &lt;name&gt;.
+The score lives in the CSS's own rules banner, for example `MANGO P1  2 - 1  P3 ZAIN`. The banner is also the status: yellow digits, amber while a report is in flight, green after SCORE SENT, red after a failure (alternating with SEND FAILED - TELL THE TO). It alternates with WAITING FOR THE BEAMER while the beamer restarts, with REPLAYS NOT SAVING - TELL THE TO when the beamer's card is full or faulty, and until the players are placed with HOLD L+R IF YOU ARE &lt;name&gt;.
 
 #### Auto-score
 
@@ -140,7 +142,7 @@ When a game ends by KO or time-out with exactly two players in it, both human, t
 
 The cards run Slippi's Gameplay: Both, which is LGL (UnclePunch's ledge-grab limit) plus the anti-wobbling code. On a time-out LGL takes the player ahead on stocks, then on lower percent. If that player is over the ledge-grab limit (more than 45 ledge grabs at 8:00; the limit scales with the time limit) and the other is not, the other player wins, whatever the stocks or percent. That includes an exact stock and percent tie with one player over. The banner then reads `GAME n TO <tag> - LGL`, and the game carries no stocks, so start.gg gets no per-game score for it (the loser may have more stocks left than the winner); characters, stage and costumes still go.
 
-A tie goes to LGL's tiebreak game: 1 stock each at 0% for 3:00 (its own time-out uses a limit of 17 grabs), played in vanilla's Sudden Death scene. A tie is an exact stock and percent tie at a time-out with neither or both players over the limit, or a double KO on the last stocks. The tied game is not appended. The module also wraps the Sudden Death scene's exit (`ptr 0x803DA968`, vanilla `gm_Scene_Vs_OnExit`) and scores the tiebreak game like any other, so the set gets one game for the two. A tiebreak that ties again goes to the results screen, not another tiebreak, and is left to the players (`TIE - SCORE IT MANUALLY`).
+A tie goes to LGL's tiebreak game: 1 stock each at 0% for 3:00 (its own time-out uses a limit of 17 grabs), played in vanilla's Sudden Death scene. A tie is an exact stock and percent tie at a time-out with neither or both players over the limit, or a double KO on the last stocks. The tied game is not appended. The module also wraps the Sudden Death scene's exit (`ptr 0x803DA968`, vanilla `gm_Scene_Vs_OnExit`) and scores the tiebreak game like any other, so the set gets one game for the two. That game carries the tied game's replay and no stocks (its 1 and 0 would contradict that replay, whose stocks are tied), so start.gg gets no per-game score for it. A tiebreak that ties again goes to the results screen, not another tiebreak, and is left to the players (`TIE - SCORE IT MANUALLY`).
 
 Also left to the players:
 
@@ -150,7 +152,11 @@ Also left to the players:
 - a Team battle (`TEAMS ON - SCORE BY HAND`): the game decides it by team standings, which LGL does not touch;
 - a game with a CPU or more than two players (`AUTO-SCORE NEEDS 2 PLAYERS`).
 
-Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner only.
+Who is who comes from the L + R port claim (the player named first holds it on the CSS); a game played without one is left to be scored by hand. The module does not touch Melee's nametags. Hand-scored games (C-stick) carry the winner, the claim's ports when known, and the replay id below; no characters, stage, stocks or costumes.
+
+#### Recording only set games
+
+The module wraps the VS scene's on_enter (`ptr 0x803DA950`, vanilla `gm_Scene_Vs_OnEnter`, which sends Slippi's Game Start). For a game of the current set that is not a handwarmer, on a host with the gate (`host_build` 7 or later), it sets `record_gate.want` in MEM2 around the vanilla call, and the kernel records that match only. Friendlies, handwarmers, matches from the vanilla main menu (B from the set list clears the set) and LGL's tiebreak game leave no replay. Each game appended to the set gets the replay id of the set's last match if the kernel opened a file for it and no earlier game took it, else 0; so a tiebreak game reports its main game's replay. Dolphin has no gate and reports 0. Details: [kiosk.md](kiosk.md), The record gate.
 
 #### EXI device contract
 
@@ -162,18 +168,19 @@ The module talks to a fake EXI device that the host implements.
 | Request | command word `EXI_RELAY_REQ << 24`, then `relay_hdr` + payload |
 | Poll | command word `EXI_RELAY_POLL << 24`, then a 4096-byte DMA read: `exi_poll_hdr`, `relay_hdr`, `relay_resp`, payload |
 | Game timeout | 5 s; any poll state other than DONE or ERROR means "still waiting" |
+| Record gate | `record_gate`, 64 bytes of MEM2 at PPC `0xD3003200`: line 0 (`want`) written by the module, line 1 (`start_seq`, `file_seq`, `file_id`) by the kernel; u32 accesses only, and only when `host_build` is at least 7 |
 
 The game never blocks. It polls once per frame. All buffers are static. The command values (0xF0, 0xF1) sit clear of Slippi's EXI command space.
 
 ### LazyTO Nintendont
 
-LazyTO Nintendont is Slippi Nintendont plus four additions in the kernel. Its loader is otherwise the venue's normal Slippi Nintendont.
+LazyTO Nintendont is Slippi Nintendont plus these additions in the kernel (protocol v2: [protocol-v2.md](protocol-v2.md), Kernel). Its loader is otherwise the venue's normal Slippi Nintendont. The kernel opens no IOS socket and reads no settings file of its own: the beamer is the Wii's only link, and the station number and the secret live on the beamer. Slippi's own network code (console mirroring) is untouched; the loader's Network option means mirroring only.
 
-1. **Config.** At boot it reads `sd:/lazyto_station.txt` (see [Deployment](#deployment)). A missing or bad file sets a poll flag and every request answers `ST_INTERNAL` "no station file".
+1. **The beamer.** USB is the replay drive only with Slippi replays on and the game on SD; the relay thread then reads the beamer's hello (the mailbox sector right after its replay partition) about once a second, and every poll's `exi_poll_hdr` carries what it says: no beamer and why (`no_beamer_reason`, "starting" for about 45 s after boot or a USB change), no station number, no secret, a stale beacon, the beamer's Wi-Fi and card. A hello below mailbox v2 or firmware build 2 is old firmware.
 2. **Module loader.** For Melee NTSC 1.02 it loads `sd:/lazyto_kiosk.bin` after the Slippi core codes and before the game starts, with the guard and arena checks above. A missing file leaves a plain Slippi Nintendont.
-3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from `lazyto_station.txt`, writes `relay_auth` with the secret, and hands off to a dedicated kernel thread. That thread does connect, send, receive and close with a 3 s budget. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
-4. **Discovery.** While idle, the relay thread listens on UDP 29471 for the relay's beacon and takes the source address plus the advertised TCP port. If it hears nothing it sends a beacon request to UDP 29472 and gets a unicast beacon back.
-5. **Telemetry.** Once it knows the relay, the kernel sends UDP datagrams to port 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
+3. **Relay EXI device.** On a request it copies the buffer, stamps the station number from the beamer's hello, and hands off to a dedicated kernel thread. That thread writes the request to the beamer's request sector (no `relay_auth`: the beamer puts its own in front) and polls the response sector, within a 3 s budget that includes the wait for the USB lock. Every failure is `RELAY_ERROR` with a code in `exi_poll_hdr.last_fail` (the beamer's `BR_*` or the kernel's `LF_*`), and the kiosk picks the words. The EXI handler never blocks, because the game is frozen until the kernel's main loop acks the transfer.
+4. **Telemetry.** Once the beamer has a number, a secret and a relay, the kernel writes datagrams to the beamer's telemetry sector, which the beamer sends to UDP 29472: log lines (`TM_LOG`), a status record at least every 5 s (`TM_STATUS`: module load result, patch count, load address), and a crash report (`TM_CRASH`) when the game takes an unhandled exception.
+5. **Record gate.** At each Slippi Game Start (inside the EXI DMA handler, no lock, no wait) the kernel reads the module's `want` word and keeps the choice. The replay writer opens a file only for a match the module asked for (every match when no module is loaded), drains a skipped match at once, and publishes which Game Start it opened a file for and that file's id. It syncs each recording once after its first data block, and a match that never sent Game End no longer costs the next one. `RELAY_HOST_BUILD` 7 has the gate.
 
 The kernel interprets nothing beyond the header length. One buffer, one thread, four states, no retries.
 
@@ -186,15 +193,17 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `app.ts` | The process: web server first, then the night's event by mode (setup, starting, failed, running) |
 | `web.ts` | The web server on 29473: routing, password and same-site checks, the shared page style |
 | `setup.ts` | Setup wizard and settings page |
-| `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry |
-| `cards.ts` | The SD-card zips: the bundle's Wii files plus `lazyto_station.txt` and the loader's settings (`zip.ts` writes them) |
+| `relay.ts` | The night's relay for one event: cache, state, audit replay, TCP, beacon, telemetry, the beamers, the archive |
+| `guard.ts` | One LazyTO per network: another relay's beacon keeps the event from starting |
+| `cards.ts` | The SD-card zip, the same for every Wii: the bundle's Wii files plus the loader's settings (`zip.ts` writes it) |
 | `generated/wire.ts` | Struct encode/decode, generated from `protocol.yaml` |
+| `generated/sjis.ts` | iconv-lite 0.6.3's Shift-JIS tables, generated by `tools/gen_sjis.mjs` for the set archive's display names |
 | `tcp.ts` | TCP server on 29470, one request per connection, dispatch by command |
 | `beacon.ts` | Discovery beacon on UDP 29471 |
 | `telemetry.ts` | Station telemetry and beacon requests on UDP 29472 |
 | `resolve.ts` | Finds the tournament, event and stream ids at startup |
 | `cache.ts` | Pending-set cache, one `event.sets` query every 20 s |
-| `startgg.ts` | GraphQL client, rate limiter, retry on 5xx only |
+| `startgg.ts` | GraphQL client, rate limiter, retry on 5xx only; the set archive's two REST reads |
 | `state.ts` | In-memory station to set map |
 | `audit.ts` | Append-only JSONL log |
 | `status.ts` | The status page and the TO's actions on it |
@@ -203,36 +212,48 @@ The relay is a Node 22 / TypeScript service on the Pi, `lazyto-relay`. It holds 
 | `stages.ts` | Melee stage id to start.gg stage id |
 | `config.ts` | The settings file: one field table, strict values, optional fields with defaults |
 | `format.ts` | Best-of per set (`setFormat`) |
+| `beamer.ts` | Each beamer from its syncs; who holds which station number (duplicates); replay downloads over HTTP |
+| `collect.ts` | `CMD_BEAMER_SYNC`: answers each file held, wanted or noted, signs the reply (`sync.ts`), downloads what it wants |
+| `rawstore.ts` | The archive folder's replays: `archive.json`, `index.jsonl`, `raw/`, `unmatched/`, resumable parts |
+| `archive.ts` | Binds replays to games by replay id and writes one zip per finished set whose games all have one |
+| `setzip.ts` | The set zip in Replay Reporter's format, with the values LazyTO reported |
+| `slp.ts`, `sjis.ts` | Replay parsing; display names and `startAt` written as Replay Reporter writes them, in its Shift-JIS |
+| `names.ts`, `phasegroup.ts` | Replay Reporter's names (templates, characters, stages, sanitize-filename); its phase group facts and set ordinals |
 
 ## Wire protocol
 
-[`protocol.yaml`](../protocol.yaml) is the source of truth. `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in two copies, `kiosk/include/` for the module and `Nintendont/kernel/` for the kernel, and CI fails on drift. This section is a summary.
+[`protocol.yaml`](../protocol.yaml) is the source of truth (version 2, MIT). `tools/gen_protocol.py` generates `generated/wire.ts` (for the relay) and the C header `relay_proto.h` in three copies, `kiosk/include/` for the module, `Nintendont/kernel/` for the kernel and `slippi-beamer/components/beamer_lazyto/include/` for the beamer firmware, and CI fails on drift. This section is a summary; [protocol-v2.md](protocol-v2.md) is the implementer's guide for each part, the beamer firmware included.
 
 - TCP, one connection per request: request, response, close.
 - All integers big-endian. Strings are ASCII, NUL-padded, not terminated when full.
 - Every message is a fixed-size struct with a version byte. No JSON, no varints.
-- The host writes a 20-byte `relay_auth` (`'M','K'`, pad, 16-byte secret) before each request. The game never sees it. A missing or wrong secret gets `ST_BAD_SECRET` and nothing happens.
+- The beamer writes a 20-byte `relay_auth` (`'M','K'`, pad, a 16-byte key derived from the secret in its `CONFIG/config.txt`) before each request it forwards and before its own sync. The key is HMAC-SHA256 keyed with the secret over `LazyTO relay_auth`, cut to 16 bytes: the secret itself never travels, because it signs the sync replies that let a beamer erase (`src/sync.ts`). The Wii never holds the secret. A missing or wrong key gets `ST_BAD_SECRET` and nothing happens.
 - Every request and response starts with an 8-byte `relay_hdr` (`'M','T'`, version, command, station, length). Every response then has a 32-byte `relay_resp` (status, 30-character message for the menu).
 
 | Command | Request | Relay does |
 |---------|---------|------------|
 | `CMD_LIST_SETS` | nothing | Returns up to 56 `set_entry` rows (72 bytes each), this station's set first, then earliest round first |
-| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station |
+| `CMD_START_SET` | set id, an unused stream byte | Checks, then `markSetInProgress`, then `assignStream` on the stream station. The reply carries the games the relay holds for the set: none for a new set, the claim's games on a resume after a reboot |
 | `CMD_REPORT_SCORE` | set id, game list | `reportBracketSet` with game data and no winner. Full overwrite every time |
 | `CMD_END_SET` | set id, game list | Derives the winner, `reportBracketSet` with winner, clears the station |
 | `CMD_ABANDON_SET` | set id | `resetSet` if no games are reported, else "ask TO" |
+| `CMD_BEAMER_SYNC` | a beamer's inventory and ack questions (frozen layout, its own version 1) | Records the beamer, answers each listed file held, wanted or noted, signs the reply with the secret, and downloads what it wants (see [Replays](#replays)) |
 
-The game list is up to five 8-byte `game_result` records: winner slot, both characters, stage, and each player's stocks and costume. Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected.
+Command 6 (`CMD_GAME_START`, v1) is retired.
 
-The game always sends station 0. The host stamps it from `lazyto_station.txt`, and the relay trusts what it receives.
+The game list is up to five 16-byte `game_result` records: winner slot, both characters, stage, each player's stocks and costume, both entrants' CSS ports and the replay id (the match's Slippi `gameStartTime`, 0 = no replay). Sending the whole list every time makes reports idempotent and makes undo trivial. Zero or unknown values are left out of the start.gg call, never rejected; both stocks 0xFF send no per-game score.
+
+The game always sends station 0. The kernel stamps it from the beamer's number (its hello), and the relay trusts what it receives.
 
 UDP messages (not on the TCP wire):
 
 | Message | Port | Direction |
 |---------|------|-----------|
 | `relay_beacon` (12 bytes) | 29471 | relay broadcasts every 2 s to each interface's directed broadcast address |
-| beacon request (a `relay_beacon` with zero port and event) | 29472 | station to relay; the relay answers with a unicast beacon |
-| `relay_auth` + `telemetry_hdr` + payload | 29472 | station to relay; never answered |
+| beacon request (a `relay_beacon` with zero port and event) | 29472 | beamer to relay; the relay answers with a unicast beacon, whatever the request's version |
+| `relay_auth` + `telemetry_hdr` + payload | 29472 | beamer to relay, for its Wii; never answered |
+
+The beacon, `relay_auth`, `relay_hdr`, `relay_resp` and the sync are frozen: beamers check the beacon by length and magic only, never by version.
 
 ### Status codes
 
@@ -247,6 +268,7 @@ UDP messages (not on the TCP wire):
 | `ST_RATE_LIMITED` | No rate-limit token within 2 s |
 | `ST_INTERNAL` | Anything else, with a message ("finish current set first", "ask TO", "no station file") |
 | `ST_BAD_SECRET` | `relay_auth` missing or wrong |
+| `ST_DUP_STATION` | Another beamer already plays as this station number: this one, the newcomer, is refused |
 
 ## Relay internals
 
@@ -258,7 +280,7 @@ The web server on 29473 starts first and stays up (`src/app.ts`). The relay is t
 |------|------|----------------|
 | setup | no valid settings yet | the setup wizard, guarded by a one-time setup code |
 | starting | settings saved | "finding tonight's event" |
-| failed | the event couldn't be found or started: bad token, a short URL on no tournament, start.gg or the internet down, the clock not set yet | the reason, with Retry; it also retries after 30 s, 60 s, then every 2 min |
+| failed | the event couldn't be found or started: bad token, a short URL on no tournament, start.gg or the internet down, the clock not set yet, another LazyTO relay on the network | the reason, with Retry; it also retries after 30 s, 60 s, then every 2 min |
 | running | the event resolved and the cache loaded | the status page; TCP, beacon and telemetry are up |
 
 The settings live in `/var/lib/lazyto/config.json` (`src/config.ts`), written by the setup page:
@@ -297,20 +319,27 @@ The cache refreshes every 20 s with one `event.sets(filters: {state: [1,2]})` qu
    └────────────────────────────────────────┘
 ```
 
-A station in `IN_SET` that lists again (after a reboot) gets its own set first with state 1. Selecting it is a no-op resume. The relay only moves a start.gg set forward (1 not started, 2 in progress, 3 complete), plus `resetSet` for an abandon before any games.
+A station in `IN_SET` that lists again (after a reboot) gets its own set first with state 1. Selecting it is a resume with no upstream call, and the reply hands the Wii the set's games as last reported, so it carries on from them. The relay only moves a start.gg set forward (1 not started, 2 in progress, 3 complete), plus `resetSet` for an abandon before any games.
 
 ### start.gg calls
 
-| Relay action | GraphQL |
-|--------------|---------|
+| Relay action | start.gg |
+|--------------|----------|
 | startup (short URL) | `currentUser.tournaments(filter: {tournamentView: "admin"})`, paged |
 | startup | `tournament(slug)` → events, streams |
+| startup | REST `GET /tournament/<slug>?expand[]=event` → `locationDisplayName`, the events (for the set archive) |
 | cache refresh | `event(id).sets(filters: {state: [1,2]}, perPage: 100)` |
 | cache refresh, ready preview set | `markSetInProgress(previewId)`, then `resetSet(realId)`: starts the pool |
-| START_SET | `markSetInProgress`, then `assignStream` on the stream station |
+| START_SET | `markSetInProgress` → the entrants and their participants (`id gamerTag prefix player { user { genderPronoun } }`), then `assignStream` on the stream station |
+| START_SET, after the claim | REST `GET /phase_group/<id>?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true` (for the set archive; the Wii does not wait for it) |
 | REPORT_SCORE | `reportBracketSet(setId, gameData)` |
-| END_SET | `reportBracketSet(setId, winnerId, gameData)` |
+| END_SET | `reportBracketSet(setId, winnerId, gameData)` → the set's `completedAt` and `stream { id streamName streamSource }` |
 | ABANDON_SET | `resetSet(setId)` |
+
+The two REST reads are the requests Replay Reporter for Slippi makes, without the token, to the
+origin of the GraphQL endpoint (`https://api.start.gg`): GraphQL has none of what they give the set
+archive ([redesign.md](redesign.md#the-zip-and-lucky-stats)). They are undocumented, and whether
+they answer for an unpublished tournament has not been checked yet.
 
 Per game, characters go out as `selections` and the stage as `stageId`. Stocks and costume go out as `entrant1Score`/`entrant2Score` = `(costume + 1) * 100 + stocks`, which start.gg shows as stocks and set pages render as colour plus stock icons.
 
@@ -320,11 +349,86 @@ Per game, characters go out as `selections` and the stage as `stageId`. Stocks a
 
 ### Rate limit and retries
 
-A token bucket allows 70 calls per 60 s, under start.gg's 80. A request waits up to 2 s for a token, else `ST_RATE_LIMITED`. 12 stations need about 15 calls per minute, so the limiter is a guard, not a throttle. A start.gg 5xx is retried twice (1 s, then 3 s). Nothing else retries anywhere.
+A token bucket allows 70 GraphQL calls per 60 s, under start.gg's 80. A request waits up to 2 s for a token, else `ST_RATE_LIMITED`. 12 stations need about 15 calls per minute, so the limiter is a guard, not a throttle. The REST reads (one per START_SET) take no token. A start.gg 5xx, GraphQL or REST, is retried twice (1 s, then 3 s). Nothing else retries anywhere.
 
 ### Audit log
 
 Every request, response, refusal and upstream call is appended as one JSON line to `<auditDir>/<eventId>.jsonl`. On restart the relay replays claim, score and release events against the live cache, so stations keep their sets.
+
+### Beamers
+
+Every Wii request and telemetry datagram arrives from its beamer's address, and each beamer's own
+sync says which beamer (its `station_id`, from its MAC) is at that address (`src/beamer.ts`).
+There is no beamer configuration and no announce.
+
+- **Duplicates.** The relay remembers which beamer last used each station number. Another beamer
+  using the same number within 15 s is the newcomer: its Wii's requests get `ST_DUP_STATION`
+  ("two beamers are station n") and its telemetry is dropped and counted, until one is renumbered
+  or the holder falls silent. The station already playing keeps playing. Two addresses whose syncs
+  name one `station_id` are one beamer. A sync is never refused. A number another beamer takes
+  over after its holder fell silent (a beamer replaced mid-event) is noted on the status page for
+  10 minutes; each game's replay is still fetched from the beamer it was played through.
+- **One LazyTO per network** (`src/guard.ts`). Beamers follow the last beacon they heard, so the
+  relay listens on the beacon port for any other relay's beacon. It does not start its event while
+  one was heard in the last 10 s (the failed page says where), and a running relay shows the other
+  one on its status page.
+
+### Replays
+
+The beamers record only set games, and the relay collects every file they have
+(`src/collect.ts`, `src/rawstore.ts`, `src/archive.ts`; why: [redesign.md](redesign.md)).
+
+- **The sync.** A beamer syncs when it has no Wii request pending: after each file it served, when
+  it finds a new file, and every 30 s. For each listed file the relay answers:
+  - `SA_HELD` with the stored copy's SHA-256, when the beamer served it whole this boot and its
+    hash equals the laptop's copy. The beamer acks it and erases it at its next cold boot.
+  - `SA_WANTED` to download it now: not stored yet, stored but not hashed by the beamer this boot
+    (served again so the beamer can hash it), or stored with another hash.
+  - `SA_NOTED`: being recorded, downloading right now, a name that is not a plain `.slp`, or too
+    little free disk.
+
+  The reply carries the archive's `archive_id` and an HMAC-SHA256 over the beamer's nonce, its
+  `station_id` and the reply, keyed by the secret, so nobody else on the Wi-Fi can make a beamer
+  erase.
+- **Downloads.** One at a time per beamer, from the address it synced from, after a free-disk check
+  (256 MB must stay free), resumed with `X-Replay-From`. A failure is not retried: the next sync
+  asks again.
+- **The archive folder** (`AppOptions.archiveDir`, `Documents/LazyTO` by default): `archive.json`
+  (the random `archive_id`), `index.jsonl`, `raw/<station_id>/<name>`,
+  `unmatched/<station_id>/<name>`, `.sets/` and the zips. A copy is stored through a part file:
+  fsync, rename, read back, hash. The same name with other content is `<stem>~<sha8>.slp`. "Held"
+  needs the copy to stat at its size, and a re-hash when its last check is over 24 h old. Raw
+  copies stay until the TO deletes them; a new archive folder has a new `archive_id`, so the
+  beamers drop their acks and everything is collected again.
+- **Matching.** A game's replay is `Game_<Wii MAC>_<replay_id as UTC>.slp` on the beamer the game
+  was reported through, whichever arrives first. Finished replays a game names go to `raw/`;
+  strays and incomplete recordings go to `unmatched/` (moved to `raw/` if a later report names
+  them). The content check (stage, characters, costumes, and stocks only when the game sent them)
+  flags a mismatch and still binds.
+- **Zips.** A finished set is zipped once every game has a complete replay and start.gg's phase
+  group lookup has answered. A set with a game without one gets no zip and is listed on the status
+  page with the reason; a replay that arrives later, even at a later event, zips it then.
+- **The zip is Replay Reporter's** (`src/setzip.ts`; why: [redesign.md](redesign.md#the-zip-and-lucky-stats),
+  D21). It is what Replay Reporter for Slippi v2.7.0 writes when it reports and copies a set,
+  compared byte for byte with its own output by `npm test` (`test/rr-conformance/`), with the
+  values LazyTO reported where Replay Reporter's are wrong.
+  - The zip is named `<phase, or the event> <round letters> - <entrant 1 (characters)> vs
+    <entrant 2 (characters)>.zip` after sanitize-filename, with ` 2`, ` 3` on a clash. It holds
+    `context.json` first, then `<n> - <players in port order, each with this game's character> -
+    <stage>.slp` per game.
+  - `context.json` (minified, only when every player of every game has a name): `bestOf` (the
+    set's), `durationMs`, `scores` (two slots per game in port order: names, 1-based ports,
+    prefixes, pronouns, and the player's games won before it), `finalScore`, `players` (each
+    entrant's name and characters in order of first use), `startMs`, and `startgg` (the
+    tournament's name and location; the event; the phase; the phase group with its bracket type,
+    wave and winners target phase; the set's id, round text, ordinal, round and stream).
+  - Every replay is re-timed so the last game ends at the set's `completedAt` (`startMs`, and each
+    replay's `metadata.startAt`). The players' tags go into its display-name fields in Replay
+    Reporter's Shift-JIS, without its byte remap of double-byte characters and never into the
+    next port's field.
+  - The entries carry the zip's writing time; the headers are yazl's (version made by 3.63, mode
+    0664).
+  - A game with no L + R claim gives no `context.json`, and its players are named by character.
 
 ### Status page
 
@@ -332,24 +436,31 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 - Per station: set, score, last action and its age, the status the player saw, and the station's telemetry (module state, recent log lines, last crash).
 - Every failed start.gg call with its message, until the TO clicks "ack". Ack only hides the flag.
-- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it, because the protocol never sends a Wii earlier games.
+- **Free a station** (`src/admin.ts`). A Wii that died mid-set keeps its claim, and the set stays in progress on start.gg, where no other Wii may take it. Free asks first, naming the set and the score it discards, then resets the set on start.gg (the call a Wii's abandon makes) and drops the claim: the set is back on every Wii's list at 0-0. The score cannot move with it: only the station's own resume gets the set's games back.
 - **Waiting sets** with their best-of and a button to switch Bo3/Bo5 or go back to `setFormat`'s answer. Only for sets no station holds, since a Wii learns best-of when it starts a set. Overrides are `bestof` events in the audit log and replay at startup.
+- **Beamers**: one row per beamer from its syncs: number (or none), address, firmware, Wi-Fi signal, free space and space lost to interrupted recordings, replays on the card (to collect, to erase, empty, incomplete), up since ("not unplugged since"), the last erase, downloads and the last Wii round trip. Warnings for a full or faulty card, old firmware, a beamer never unplugged after an event, a full laptop disk. Above them, "All replays collected: safe to unplug beamers" once no beamer has anything left to collect.
+- **Replays**: games reported without a replay flagged on their station, finished sets skipped for Lucky Stats with the reason per game, the zips written, the strays kept, the archive folder and its free space.
+- At the top: another LazyTO relay on the network, two beamers on one station number, a beamer with another secret, macOS blocking the beacon (Local Network), and "No beamer has reached this relay" after 2 minutes of unanswered beacons.
 - Footer: event, cache size, cache age (warns after 60 s), upstream call rate, last refresh error, a pool the relay could not start, beacon targets and send errors, and refused requests (wrong secret, source address, claimed station).
 
 ## Error handling
 
 | Failure | Where seen | Behaviour |
 |---------|------------|-----------|
-| No `lazyto_station.txt` | Wii | "NO STATION FILE ON THE CARD". Station unusable until fixed. |
+| No beamer, or not a LazyTO one | Wii | `NO BEAMER ON THIS WII`, `NOT A LAZYTO BEAMER` or `UPDATE THE BEAMER`; `WAITING FOR THE BEAMER` while it starts. |
+| Beamer without a number | Wii | `THIS BEAMER HAS NO NUMBER`, a wait that clears at the first button click. |
 | Wrong or missing secret | Wii + status page | RELAY SECRET MISMATCH. Counted on the status page. |
-| No beacon heard | Wii | NO RELAY FOUND after 10 s. A searches again. |
-| Relay unreachable | Wii | Times out after 3 s. A retries. TO checks the Pi and network. |
+| No beacon heard | Wii | BEAMER HEARS NO RELAY after 10 s. A searches again. |
+| Relay unreachable | Wii | The beamer's connect fails (`BR_CONNECT`) or no answer comes within 3 s: `NO LINK TO THE RELAY`. A retries. TO checks the relay's firewall and the network. |
 | Set taken | Wii | "started on station N". Player picks again. |
 | `assignStream` fails after `markSetInProgress` | Wii + status page | Set is in progress but not on stream. TO assigns it by hand and acks. |
 | start.gg 5xx | Relay | Retry twice, then `ST_STARTGG_ERROR`; row flagged. Retrying later is safe. |
 | start.gg 4xx (for example the TO already reported the set) | Wii | "start.gg rejected - ask TO". No retry. The station clears on the next list. |
 | Rate limited | Relay | `ST_RATE_LIMITED` after 2 s. |
-| Wii reboot mid-set | Wii | The set is offered first; resume is a no-op. The CSS shows 0-0 until the next report, which overwrites in full. |
+| Wii reboot mid-set | Wii | The set is offered first; the resume's reply carries the set's games, so the kiosk goes on from them. |
+| Two beamers on one station number | Wii + status page | The newcomer's Wii gets `ST_DUP_STATION`; the station already playing keeps playing. The status page names both. |
+| Another LazyTO relay on the network | Status page | This relay does not start its event; one already running says so. |
+| A game without its replay | Status page | Flagged on the station; the set gets no Lucky Stats zip until the replay arrives. |
 | Relay restart | Relay | Audit log replay; sets no longer pending are dropped. |
 | Game crash | Status page | The kernel sends a crash report with registers and a short stack. |
 
@@ -357,20 +468,15 @@ A server-rendered page on port 29473, refreshed every 5 s, readable on a phone. 
 
 ### Wii (each station)
 
-- The stock Melee 1.02 disc image on USB or SD, as at any Slippi local.
+- The stock Melee 1.02 disc image on the SD card: with the game on USB, the beamer is not used.
 - LazyTO Nintendont as the loader. The venue's own Nintendont settings (UCF, tournament codes, stages, audio) stay as they are.
-- On the SD card root, all from the station's zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder):
+- On the SD card root, all from the one SD-card zip on the status page (`src/cards.ts`, from the bundle's `wii/` folder). Every card is the same:
   - `apps/LazyTO/`: the loader.
-  - `lazyto_kiosk.bin`: the kiosk module, the same file on every card. Updating the kiosk means replacing this file.
-  - `lazyto_nincfg.bin`: the loader's settings, Network and Auto Boot on. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
-  - `lazyto_station.txt`: per card.
+  - `lazyto_kiosk.bin`: the kiosk module. Updating the kiosk means replacing this file.
+  - `lazyto_nincfg.bin`: the loader's settings: Slippi replays and Auto Boot on, Network off, the game on SD (UseUSB 0), Gameplay: Both. The kernel starts USB, and with it the beamer's mailbox, only with replays on and the game on SD. A file of its own, apart from Slippi Nintendont's `slippi_nincfg.bin`, so a venue's Slippi Nintendont on the same card never reads or overwrites it.
+- A LazyTO beamer in the Wii's USB port, its only USB drive. It holds the station number (its button) and the secret (`LAZYTO-SECRET` in its `CONFIG/config.txt`).
 
-```
-station=3
-secret=<the relay's secret>
-```
-
-The relay decides the stream by station number (`streamStation`), so no card says it is the stream station and a mis-copied card cannot take over the stream. There is no relay address: stations find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
+The relay decides the stream by station number (`streamStation`), so no card says it is the stream station. There is no relay address: beamers find the relay by its beacon. Step by step: [wii-setup.md](wii-setup.md).
 
 ### Pi
 
@@ -390,7 +496,7 @@ Logs go to journald. Settings and audit logs go to `/var/lib/lazyto`.
 
 ### Network
 
-The Pi, the Wiis and the TO's phone must share one network. Addresses do not matter, because stations find the relay by its beacon. Wiis should use Ethernet where possible (Wii Wi-Fi is 802.11g). A guest Wi-Fi with client isolation blocks Wii-to-Pi traffic: check once by opening the status page from a phone on the venue Wi-Fi.
+The relay's computer, the beamers and the TO's phone must share one network. Addresses do not matter, because beamers find the relay by its beacon. The Wiis use no network: each reaches the relay through its beamer. A guest Wi-Fi with client isolation blocks beamer-to-relay traffic: check once by opening the status page from a phone on the venue Wi-Fi.
 
 The secret travels in plain text. It keeps passers-by out, not someone capturing the Wi-Fi traffic.
 

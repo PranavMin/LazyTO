@@ -12,12 +12,13 @@ import {
   NIN_CFG_MAGIC,
   NIN_CFG_NETWORK,
   NIN_CFG_SIZE,
+  NIN_CFG_SLIPPI_REPLAYS,
   LOADER_SETTINGS_FILE,
   loaderSettings,
-  stationZip,
+  cardZip,
 } from '../src/cards.js';
 import { buildZip, crc32 } from '../src/zip.js';
-import { startHarness, STREAM_STATION, TEST_PASSWORD } from './harness.js';
+import { startHarness, TEST_PASSWORD } from './harness.js';
 import { TEST_SECRET } from './wii-client.js';
 
 /** Every entry of a zip: checks each local header against the central directory, inflates, checks the CRC. */
@@ -85,12 +86,17 @@ test('buildZip round-trips names, empty files and binary data', () => {
   for (const e of entries) assert.deepEqual(files.get(e.name), e.data);
 });
 
-test('loaderSettings is the NIN_CFG the loader saves: version 0xE, Network, Auto Boot, the game, UCF, Gameplay Both', () => {
+test('loaderSettings is the NIN_CFG the loader saves: version 0xE, Slippi replays, Auto Boot, Network off, the game on SD, UCF, Gameplay Both', () => {
   const b = loaderSettings();
   assert.equal(b.length, NIN_CFG_SIZE);
   assert.equal(b.readUInt32BE(0x00), NIN_CFG_MAGIC);
   assert.equal(b.readUInt32BE(0x04), 0xe, 'the version the loader writes itself');
-  assert.equal(b.readUInt32BE(0x08), NIN_CFG_NETWORK | NIN_CFG_AUTO_BOOT, 'Log off');
+  assert.equal(b.readUInt32BE(0x08), NIN_CFG_SLIPPI_REPLAYS | NIN_CFG_AUTO_BOOT, 'Log off');
+  assert.equal(
+    b.readUInt32BE(0x08) & NIN_CFG_NETWORK,
+    0,
+    'Network off: LazyTO never uses the Wii network',
+  );
   assert.equal(b.readUInt32BE(0x0c), 0, 'video: auto');
   assert.equal(b.readUInt32BE(0x10), 0xffffffff, 'language: auto');
   assert.equal(
@@ -102,7 +108,7 @@ test('loaderSettings is the NIN_CFG the loader saves: version 0xE, Network, Auto
   );
   assert.equal(b.subarray(0x114, 0x118).toString('ascii'), 'GALE');
   assert.equal(b[0x118], 2, 'memory card: 251 blocks');
-  assert.equal(b.readUInt32BE(0x11c), 0, 'game on SD');
+  assert.equal(b.readUInt32BE(0x11c), 0, 'UseUSB 0: the game on SD, so USB is the beamer');
   const codes = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => b.readUInt32BE(0x120 + 4 * i));
   assert.deepEqual(
     codes,
@@ -112,17 +118,10 @@ test('loaderSettings is the NIN_CFG the loader saves: version 0xE, Network, Auto
   assert.equal(b.readUInt32BE(0x140), 0);
 });
 
-test('a station zip: the loader, the module, its lazyto_station.txt, the loader settings, the READMEs', () => {
+test('one zip for every Wii: the loader, the module, the loader settings, the READMEs; no station file, no secret', () => {
   const dir = wiiDir();
-  const files = unzip(
-    stationZip({
-      wiiDir: dir,
-      station: 3,
-      streamStation: 1,
-      secret: TEST_SECRET,
-      version: 'v1.2.3',
-    }),
-  );
+  const zip = cardZip({ wiiDir: dir, version: 'v1.2.3' });
+  const files = unzip(zip);
   assert.deepEqual([...files.keys()].sort(), [
     'README.txt',
     'apps/LazyTO/boot.dol',
@@ -131,44 +130,42 @@ test('a station zip: the loader, the module, its lazyto_station.txt, the loader 
     'games/GALE01/README.txt',
     'lazyto_kiosk.bin',
     'lazyto_nincfg.bin',
-    'lazyto_station.txt',
   ]);
   assert.deepEqual(files.get('apps/LazyTO/boot.dol'), Buffer.alloc(70_000, 7));
   assert.equal(files.get('lazyto_kiosk.bin')!.toString(), 'TMOD module');
-  assert.equal(files.get('lazyto_station.txt')!.toString(), `station=3\nsecret=${TEST_SECRET}\n`);
   assert.deepEqual(files.get(LOADER_SETTINGS_FILE), loaderSettings());
-  assert.match(files.get('README.txt')!.toString(), /station 3\n[\s\S]*LazyTO v1\.2\.3 relay/);
-
-  const stream = unzip(
-    stationZip({ wiiDir: dir, station: 1, streamStation: 1, secret: TEST_SECRET, version: 'dev' }),
+  const readme = files.get('README.txt')!.toString();
+  assert.match(readme, /Every Wii gets the same card/);
+  assert.match(readme, /LazyTO v1\.2\.3 relay/);
+  assert.doesNotMatch(readme, /lazyto_station\.txt/);
+  assert.equal(
+    zip.includes(Buffer.from(TEST_SECRET)),
+    false,
+    'the secret is on the beamer, never the card',
   );
-  assert.equal(stream.get('lazyto_station.txt')!.toString(), `station=1\nsecret=${TEST_SECRET}\n`);
-  assert.match(stream.get('README.txt')!.toString(), /station 1 \(the stream station\)/);
+  assert.deepEqual(cardZip({ wiiDir: dir, version: 'v1.2.3' }), zip, 'identical every time');
 });
 
-test('/cards and its zips need the admin password; bad station numbers are refused', async (t) => {
+test('/cards and its zip need the admin password; the zip is the same for every Wii', async (t) => {
   const h = await startHarness({ wiiDir: wiiDir() });
   t.after(h.close);
   const auth = basic(TEST_PASSWORD);
 
   assert.equal((await fetch(`${h.statusUrl}/cards`)).status, 401);
-  assert.equal((await fetch(`${h.statusUrl}/cards/zip?station=2`)).status, 401);
+  assert.equal((await fetch(`${h.statusUrl}/cards/zip`)).status, 401);
   const pageHtml = await (await fetch(`${h.statusUrl}/cards`, { headers: auth })).text();
-  assert.match(pageHtml, /Station 1 is the stream station/);
-  assert.match(pageHtml, /action="\/cards\/zip"/);
+  assert.match(pageHtml, /One zip for every Wii/);
+  assert.match(pageHtml, /href="\/cards\/zip"/);
+  assert.doesNotMatch(pageHtml, /Station number/);
   assert.match(await (await fetch(h.statusUrl)).text(), /<a href="\/cards">SD cards<\/a>/);
 
-  const r = await fetch(`${h.statusUrl}/cards/zip?station=${STREAM_STATION}`, { headers: auth });
+  const r = await fetch(`${h.statusUrl}/cards/zip`, { headers: auth });
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('content-type'), 'application/zip');
-  assert.match(r.headers.get('content-disposition') ?? '', /filename="lazyto-station-1\.zip"/);
+  assert.match(r.headers.get('content-disposition') ?? '', /filename="lazyto-sd-card\.zip"/);
   const files = unzip(Buffer.from(await r.arrayBuffer()));
-  assert.match(files.get('lazyto_station.txt')!.toString(), /^station=1\nsecret=/);
-
-  for (const bad of ['0', 'abc', '70000', '', '1.5']) {
-    const b = await fetch(`${h.statusUrl}/cards/zip?station=${bad}`, { headers: auth });
-    assert.equal(b.status, 400, `station=${bad}`);
-  }
+  assert.equal(files.has('lazyto_station.txt'), false);
+  assert.deepEqual(files.get(LOADER_SETTINGS_FILE), loaderSettings());
 });
 
 test('a relay without Wii files says so instead of serving a broken zip', async (t) => {
@@ -179,5 +176,5 @@ test('a relay without Wii files says so instead of serving a broken zip', async 
     await (await fetch(`${h.statusUrl}/cards`, { headers: auth })).text(),
     /This relay has no Wii files/,
   );
-  assert.equal((await fetch(`${h.statusUrl}/cards/zip?station=1`, { headers: auth })).status, 503);
+  assert.equal((await fetch(`${h.statusUrl}/cards/zip`, { headers: auth })).status, 503);
 });

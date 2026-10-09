@@ -1,0 +1,220 @@
+{
+  "entities": {
+    "groups": {
+      "id": 3103,
+      "groupTypeId": 2,
+      "displayIdentifier": "1",
+      "state": 2,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    },
+    "seeds": [
+      {
+        "id": 8100,
+        "seedNum": 1,
+        "groupSeedNum": 1,
+        "entrantId": 5101,
+        "mutations": {
+          "entrants": {
+            "5101": {
+              "id": 5101,
+              "name": "P1",
+              "participantIds": [
+                6101
+              ]
+            }
+          },
+          "participants": {
+            "6101": {
+              "gamerTag": "P1",
+              "playerId": 7101,
+              "prefix": null
+            }
+          }
+        }
+      },
+      {
+        "id": 8101,
+        "seedNum": 2,
+        "groupSeedNum": 2,
+        "entrantId": 5102,
+        "mutations": {
+          "entrants": {
+            "5102": {
+              "id": 5102,
+              "name": "P2",
+              "participantIds": [
+                6102
+              ]
+            }
+          },
+          "participants": {
+            "6102": {
+              "gamerTag": "P2",
+              "playerId": 7102,
+              "prefix": null
+            }
+          }
+        }
+      },
+      {
+        "id": 8102,
+        "seedNum": 3,
+        "groupSeedNum": 3,
+        "entrantId": 5103,
+        "mutations": {
+          "entrants": {
+            "5103": {
+              "id": 5103,
+              "name": "P3",
+              "participantIds": [
+                6103
+              ]
+            }
+          },
+          "participants": {
+            "6103": {
+              "gamerTag": "P3",
+              "playerId": 7103,
+              "prefix": null
+            }
+          }
+        }
+      },
+      {
+        "id": 8103,
+        "seedNum": 4,
+        "groupSeedNum": 4,
+        "entrantId": 5104,
+        "mutations": {
+          "entrants": {
+            "5104": {
+              "id": 5104,
+              "name": "P4",
+              "participantIds": [
+                6104
+              ]
+            }
+          },
+          "participants": {
+            "6104": {
+              "gamerTag": "P4",
+              "playerId": 7104,
+              "prefix": null
+            }
+          }
+        }
+      }
+    ],
+    "sets": [
+      {
+        "id": 2001,
+        "round": 1,
+        "fullRoundText": "Winners Round 1",
+        "callOrder": 11,
+        "isGF": false,
+        "unreachable": false,
+        "entrant1Id": 5101,
+        "entrant2Id": 5104,
+        "entrant1PrereqType": "seed",
+        "entrant1PrereqId": 8100,
+        "entrant1PrereqCondition": null,
+        "entrant2PrereqType": "seed",
+        "entrant2PrereqId": 8103,
+        "entrant2PrereqCondition": null,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "state": 1,
+        "updatedAt": 1791040000,
+        "completedAt": null,
+        "winnerId": null,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null
+      },
+      {
+        "id": 2002,
+        "round": 1,
+        "fullRoundText": "Winners Round 1",
+        "callOrder": 12,
+        "isGF": false,
+        "unreachable": false,
+        "entrant1Id": 5102,
+        "entrant2Id": 5103,
+        "entrant1PrereqType": "seed",
+        "entrant1PrereqId": 8101,
+        "entrant1PrereqCondition": null,
+        "entrant2PrereqType": "seed",
+        "entrant2PrereqId": 8102,
+        "entrant2PrereqCondition": null,
+        "wProgressionSeedId": null,
+        "lProgressionSeedId": null,
+        "state": 1,
+        "updatedAt": 1791040000,
+        "completedAt": null,
+        "winnerId": null,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null
+      },
+      {
+        "id": 2003,
+        "round": 2,
+        "fullRoundText": "Winners Final",
+        "callOrder": 13,
+        "isGF": false,
+        "unreachable": false,
+        "entrant1Id": 5101,
+        "entrant2Id": 5102,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 2001,
+        "entrant1PrereqCondition": "winner",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 2002,
+        "entrant2PrereqCondition": "winner",
+        "wProgressionSeedId": 9901,
+        "lProgressionSeedId": 9902,
+        "state": 1,
+        "updatedAt": 1791040000,
+        "completedAt": null,
+        "winnerId": null,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null
+      },
+      {
+        "id": 2004,
+        "round": -1,
+        "fullRoundText": "Losers Round 1",
+        "callOrder": 14,
+        "isGF": false,
+        "unreachable": false,
+        "entrant1Id": 5104,
+        "entrant2Id": 5103,
+        "entrant1PrereqType": "set",
+        "entrant1PrereqId": 2001,
+        "entrant1PrereqCondition": "loser",
+        "entrant2PrereqType": "set",
+        "entrant2PrereqId": 2002,
+        "entrant2PrereqCondition": "loser",
+        "wProgressionSeedId": 9903,
+        "lProgressionSeedId": null,
+        "state": 1,
+        "updatedAt": 1791040000,
+        "completedAt": null,
+        "winnerId": null,
+        "entrant1Score": null,
+        "entrant2Score": null,
+        "games": null,
+        "streamId": null,
+        "stationId": null
+      }
+    ]
+  }
+}

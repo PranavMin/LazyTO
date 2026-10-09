@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect, type Socket } from 'node:net';
 import { rmSync } from 'node:fs';
-import { STALE_CACHE_MS, renderStatus } from '../src/status.js';
+import { NO_CONTACT_MS, STALE_CACHE_MS, beaconProblem, renderStatus } from '../src/status.js';
 import { WiiClient, game } from './wii-client.js';
 import { telemetryDatagram, statusPayload, crashPayload } from './telemetry-helpers.js';
 import { ModuleState, TelemetryKind } from '../generated/wire.js';
@@ -32,7 +32,7 @@ test('status page', async (t) => {
         0,
         'Patch:Game ID = 47414c45\nTMOD:arena top 00000000 below module end 817f38a4\n',
       ),
-      '192.168.1.80',
+      '127.0.0.1',
     );
     telemetry.receive(
       telemetryDatagram(
@@ -41,7 +41,7 @@ test('status page', async (t) => {
         1,
         statusPayload({ module_state: ModuleState.MOD_ARENA, arena_hi: 0 }),
       ),
-      '192.168.1.80',
+      '127.0.0.1',
     );
     html = await (await fetch(statusUrl)).text();
     assert.match(html, /<h2>Wii consoles<\/h2>/);
@@ -51,12 +51,12 @@ test('status page', async (t) => {
       /TMOD:arena top 00000000 below module end 817f38a4/,
       'log tail on the main page',
     );
-    assert.match(html, /192\.168\.1\.80/);
+    assert.match(html, /127\.0\.0\.1/);
     const log = await fetch(`${statusUrl}/log?station=4`);
     assert.equal(log.status, 200);
     assert.match(
       await log.text(),
-      /^station 4 \(192\.168\.1\.80\)[\s\S]*Patch:Game ID = 47414c45\nTMOD:arena top/,
+      /^station 4 \(127\.0\.0\.1\)[\s\S]*Patch:Game ID = 47414c45\nTMOD:arena top/,
     );
     assert.equal((await fetch(`${statusUrl}/log?station=9`)).status, 404);
     telemetry.receive(
@@ -71,7 +71,7 @@ test('status page', async (t) => {
           module_load: 0x817e0000,
         }),
       ),
-      '192.168.1.80',
+      '127.0.0.1',
     );
     html = await (await fetch(statusUrl)).text();
     assert.match(html, /loaded \(80288 bytes, 28 patches\)/);
@@ -83,7 +83,7 @@ test('status page', async (t) => {
         3,
         crashPayload({ srr0: 0x817e88d8, srr1: 0x00083032, lr: 0x801bf94c }),
       ),
-      '192.168.1.80',
+      '127.0.0.1',
     );
     html = await (await fetch(statusUrl)).text();
     assert.match(
@@ -268,3 +268,53 @@ test(
     rmSync(h.dataDir, { recursive: true, force: true });
   },
 );
+
+test('network warnings: no beamer has answered the beacon; macOS Local Network', async (t) => {
+  const h = await startHarness();
+  t.after(h.close);
+  const beacon = (firstSentAt: number | null, lastErrorCode: string | null = null) => ({
+    status: () => ({
+      targets: ['192.168.1.255'],
+      sent: 60,
+      firstSentAt,
+      lastSentAt: Date.now(),
+      lastError: lastErrorCode ? 'send EHOSTUNREACH 192.168.1.255:29471' : null,
+      lastErrorCode,
+    }),
+  });
+  const now = Date.now();
+  assert.doesNotMatch(
+    renderStatus({ ...h.view, beacon: beacon(now - 60_000) }),
+    /No beamer has reached this relay/,
+    'a minute is not long enough to say',
+  );
+  assert.match(
+    renderStatus({ ...h.view, beacon: beacon(now - NO_CONTACT_MS - 60_000) }),
+    /No beamer has reached this relay: its beacon has gone out for 3 min/,
+  );
+  assert.match(
+    beaconProblem(beacon(now, 'EHOSTUNREACH').status(), 'darwin'),
+    /macOS is blocking LazyTO from your network: System Settings > Privacy & Security > Local Network/,
+  );
+  assert.match(beaconProblem(beacon(now, 'EHOSTUNREACH').status(), 'win32'), /^discovery beacon:/);
+  // Anything at all from a beamer, even a refused request, clears it.
+  await h.wii(2).listSets();
+  assert.doesNotMatch(
+    renderStatus({ ...h.view, beacon: beacon(now - NO_CONTACT_MS - 60_000) }),
+    /No beamer has reached this relay/,
+  );
+});
+
+test('Replays: a finished set with a game that has no replay is listed as skipped for Lucky Stats', async (t) => {
+  const h = await startHarness();
+  t.after(h.close);
+  const wii = h.wii(6);
+  await wii.startSet(107949995);
+  const g = (w: 1 | 2, id: number) => game(w, 9, 2, 0x1f, [0xff, 0xff], [0, 0], { replay_id: id });
+  await wii.endSet(107949995, [g(1, 0), g(1, 1791403502), g(1, 1791403802)]);
+  const html = await (await fetch(h.statusUrl)).text();
+  assert.match(
+    html,
+    /✗ WQF Charlie vs Delta \(station 6, ended \d+s ago\): no zip for Lucky Stats yet — game 1 not recorded; game 2 its beamer has not synced; game 3 its beamer has not synced/,
+  );
+});

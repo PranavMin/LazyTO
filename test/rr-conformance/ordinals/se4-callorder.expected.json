@@ -1,0 +1,22 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-ordinals.ts: RR getPhaseGroup (startgg.ts:451-784) unmodified, fetch stubbed",
+  "input": "se4-callorder.input.json",
+  "bracketType": 1,
+  "ordinals": {
+    "1001": {
+      "ordinal": 1,
+      "round": 1,
+      "fullRoundText": "Winners Semi-Final"
+    },
+    "1002": {
+      "ordinal": 2,
+      "round": 1,
+      "fullRoundText": "Winners Semi-Final"
+    },
+    "1003": {
+      "ordinal": 3,
+      "round": 2,
+      "fullRoundText": "Winners Final"
+    }
+  }
+}

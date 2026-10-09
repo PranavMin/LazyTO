@@ -1,0 +1,87 @@
+{
+  "generatedBy": "lazyto-bundle/tools/make-e2e.ts: RR getTournament/getEvent/getPhase/getPhaseGroup/getSelectedSetChain (startgg.ts, unmodified), fetch stubbed",
+  "from": "05-gfr-edge-names",
+  "requests": [
+    "GET https://api.start.gg/tournament/lazyto-conformance-weekly-1?expand[]=event",
+    "POST https://api.start.gg/gql/alpha TournamentStreamsAndStationsQuery",
+    "POST https://api.start.gg/gql/alpha TournamentParticipantsQuery",
+    "GET https://api.start.gg/event/1000091?expand[]=phase",
+    "GET https://api.start.gg/phase/2000092?expand[]=groups",
+    "GET https://api.start.gg/phase_group/3000091?expand[]=sets&expand[]=entrants&expand[]=seeds&bustCache=true"
+  ],
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "eventCount": 2
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000091,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": true
+    },
+    "phase": {
+      "id": 2000092,
+      "name": "Top 8",
+      "hasSiblings": true
+    },
+    "phaseGroup": {
+      "id": 3000091,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000091,
+    "sggId": 90000091,
+    "state": 2,
+    "round": 4,
+    "fullRoundText": "Grand Final Reset",
+    "winnerId": null,
+    "entrant1Id": 5000051,
+    "entrant1Participants": [
+      {
+        "id": 6000051,
+        "displayName": "Ca$$h/Money?",
+        "prefix": "C9 |",
+        "pronouns": "he/him"
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000052,
+    "entrant2Participants": [
+      {
+        "id": 6000052,
+        "displayName": "Ünïcødé $& 🦊",
+        "prefix": "",
+        "pronouns": "any/all"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": {
+      "id": 8001,
+      "domain": "twitch",
+      "path": "lazytomelee"
+    },
+    "station": null,
+    "ordinal": 0,
+    "wasReported": false,
+    "updatedAtMs": 1791079500000,
+    "completedAtMs": 0
+  },
+  "ordinals": {
+    "90000091": 0,
+    "90000092": -5,
+    "90000093": -6,
+    "90000094": -3,
+    "90000095": -4,
+    "90000096": -2,
+    "90000097": -1
+  }
+}

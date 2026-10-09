@@ -1,0 +1,232 @@
+{
+  "name": "02-bo5-3-2-charswitch",
+  "description": "Bo5 won 3-2 by entrant2 (Quill) in Top 8 Losers Final, on stream. Characters change between games for both players. The five decisive real replays only allow a 3-2 if the players swap ports once (after game 1: Quill moves P1 -> P2), so RR's port-ordered running score is wrong here too (see 03). Phase has siblings, so {phaseOrEvent} is the phase name.",
+  "startggTournament": {
+    "slug": "lazyto-conformance-weekly-1",
+    "name": "LazyTO Conformance Weekly #1",
+    "location": "Springfield, IL",
+    "events": [
+      {
+        "id": 1000001,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "phases": [
+          {
+            "id": 2000021,
+            "name": "Pools",
+            "phaseGroups": [
+              {
+                "id": 3000020,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "A1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": 4001,
+                "winnersTargetPhaseId": 2000022
+              }
+            ],
+            "state": 2
+          },
+          {
+            "id": 2000022,
+            "name": "Top 8",
+            "phaseGroups": [
+              {
+                "id": 3000021,
+                "bracketType": 2,
+                "seeds": [],
+                "name": "1",
+                "sets": {
+                  "pendingSets": [],
+                  "completedSets": []
+                },
+                "state": 2,
+                "waveId": null,
+                "winnersTargetPhaseId": null
+              }
+            ],
+            "state": 2
+          }
+        ]
+      }
+    ],
+    "stations": [],
+    "streams": [
+      {
+        "id": 8001,
+        "domain": "twitch",
+        "path": "lazytomelee"
+      }
+    ]
+  },
+  "selectedSetChain": {
+    "event": {
+      "id": 1000001,
+      "name": "Melee Singles",
+      "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+      "hasSiblings": false
+    },
+    "phase": {
+      "id": 2000022,
+      "name": "Top 8",
+      "hasSiblings": true
+    },
+    "phaseGroup": {
+      "id": 3000021,
+      "name": "1",
+      "bracketType": 2,
+      "hasSiblings": false,
+      "waveId": null,
+      "winnersTargetPhaseId": null
+    }
+  },
+  "selectedSet": {
+    "id": 90000021,
+    "sggId": 90000021,
+    "state": 2,
+    "round": -5,
+    "fullRoundText": "Losers Final",
+    "winnerId": null,
+    "entrant1Id": 5000021,
+    "entrant1Participants": [
+      {
+        "id": 6000021,
+        "displayName": "Hollow",
+        "prefix": "GG",
+        "pronouns": "he/him"
+      }
+    ],
+    "entrant1Score": null,
+    "entrant2Id": 5000022,
+    "entrant2Participants": [
+      {
+        "id": 6000022,
+        "displayName": "Quill",
+        "prefix": "",
+        "pronouns": "they/them"
+      }
+    ],
+    "entrant2Score": null,
+    "gameScores": [],
+    "stream": {
+      "id": 8001,
+      "domain": "twitch",
+      "path": "lazytomelee"
+    },
+    "station": null,
+    "ordinal": -2,
+    "wasReported": false,
+    "updatedAtMs": 1791060000000,
+    "completedAtMs": 0
+  },
+  "report": {
+    "updatedSetFields": {
+      "id": 90000021,
+      "sggId": 90000021,
+      "completedAtMs": 1791062144000,
+      "stream": {
+        "id": 8001,
+        "domain": "twitch",
+        "path": "lazytomelee"
+      }
+    }
+  },
+  "clock": "2026-10-03T21:15:47Z",
+  "games": [
+    {
+      "replay": "Game_001FC5FE0637_20110202T204931.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 2,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 1,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T213333.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T213903.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T222643.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    },
+    {
+      "replay": "Game_001FC5FE0637_20110202T223403.slp",
+      "ports": [
+        {
+          "port": 1,
+          "entrant": 1,
+          "participant": 0
+        },
+        {
+          "port": 2,
+          "entrant": 2,
+          "participant": 0
+        }
+      ]
+    }
+  ],
+  "mode": "start.gg",
+  "copySettings": {
+    "output": 2,
+    "writeContext": true,
+    "writeDisplayNames": true,
+    "writeFileNames": true,
+    "writeStartTimes": true
+  },
+  "folderNameFormat": "{phaseOrEvent} {roundShort} - {playersChars}",
+  "fileNameFormat": " - {playersChars} - {stage}",
+  "undoSubdir": "",
+  "host": {
+    "name": "",
+    "address": ""
+  }
+}

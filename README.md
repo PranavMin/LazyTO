@@ -82,6 +82,8 @@ The kiosk's source is in [kiosk/](kiosk/). It builds against the unmodified Mele
 
 Copyright (C) 2026 Kegstand Jesus (PranavMin). LazyTO is free software under the GNU General Public License, version 2: see [LICENSE](LICENSE). The LazyTO loader is a fork of Slippi Nintendont and stays under its GPLv2.
 
+One exception: the wire protocol is MIT ([LICENSE-MIT](LICENSE-MIT)), so the LazyTO beamer firmware (MIT) can build against it. That is `protocol.yaml` and the files generated from it: `generated/wire.ts` and `relay_proto.h` (`kiosk/include/` and the loader's `kernel/`). Each carries `SPDX-License-Identifier: MIT`.
+
 ### Nintendo and Melee
 
 LazyTO ships no Nintendo code, no game images and no game assets. You supply your own legally

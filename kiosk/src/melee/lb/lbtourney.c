@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <dolphin/base/PPCArch.h>
 #include <dolphin/pad.h>
 #include <melee/ft/forward.h>
 #include <melee/gm/forward.h>
@@ -53,6 +54,27 @@ static u32 timeout;
 static u32 end_hold; /* consecutive frames Z + C-up has been held */
 static int prev_cdir; /* last frame's aggregate C-stick direction, for edges */
 static u32 sent_flash; /* frames left showing the "SENT" confirmation */
+
+/* What the host says about the beamer (exi_poll_hdr): from the START_SET
+ * reply, every poll of a report, and a peek every LB_TOURNEY_PEEK_FRAMES on
+ * the CSS while nothing is in flight. Only its storage and "starting" state
+ * are shown here (the banner); the set list explains everything else. */
+#define LB_TOURNEY_PEEK_FRAMES 120
+static struct exi_poll_hdr css_host;
+
+/* The record gate (protocol.yaml record_gate, docs/redesign.md "Recording
+ * only set games"): 64 bytes of MEM2 the kernel reads at Slippi's Game
+ * Start. Line 0 (want) is ours, line 1 (start_seq, file_seq, file_id) the
+ * kernel's. Touched only with u32 loads and stores through the uncached
+ * window (lbcrash.c: it breaks 64-bit moves), and only when the host that
+ * started the set has the gate (host_build >= RECORD_GATE_HOST_BUILD), so
+ * never in Dolphin, which has no MEM2 and sends host_build 0. */
+static volatile struct record_gate* const gate =
+    (volatile struct record_gate*) RECORD_GATE_PPC;
+static u8 gate_build;     /* host_build of the host that started the set */
+static u32 last_match_seq; /* start_seq of the set's last VS match if the
+                            * kiosk asked for it to be recorded and its Game
+                            * Start was seen; 0 = not recorded */
 
 /* Score overlay, screen-space SIS canvas like the title-screen timestamp.
  * Recreated per CSS visit; the scene teardown frees the objects and
@@ -105,6 +127,7 @@ static bool tiebreak_armed;   /* that game tied: score LGL's tiebreak game */
 static u8 auto_chars[2];      /* external CharacterKind of entrant 1 and 2 */
 static u8 auto_stocks[2];     /* stocks left at the end, entrant 1 and 2 */
 static u8 auto_costumes[2];   /* costume (colour) index, entrant 1 and 2 */
+static u8 auto_ports[2];      /* CSS port entrant 1 and 2 played on */
 static u8 auto_stage;         /* internal StKind the game was played on */
 static char auto_note[40];    /* why nothing was scored, or what was */
 static u32 auto_note_frames;  /* frames left showing auto_note */
@@ -150,11 +173,21 @@ static int entrantPort(int entrant)
     return -1;
 }
 
-void lbTourney_SetCurrent(const struct set_entry* set)
+void lbTourney_SetCurrent(const struct set_entry* set,
+                          const struct exi_poll_hdr* host,
+                          const struct start_set_resp* held)
 {
     cur_set = *set;
+    css_host = *host;
+    gate_build = host->host_build;
+    last_match_seq = 0;
+    /* The relay's games for the set: none for a new set; on a resume after a
+     * reboot, the games already reported, so the next report keeps them
+     * (docs/redesign.md, N3). Their replay ids come along, so a later hand
+     * score never takes one of them again. */
     memset(games, 0, sizeof(games));
-    game_count = 0;
+    game_count = held->game_count;
+    memcpy(games, held->games, game_count * sizeof(struct game_result));
     pending_cmd = 0;
     last_failed = false;
     end_hold = 0;
@@ -176,6 +209,7 @@ void lbTourney_ClearCurrent(void)
     has_set = false;
     pending_cmd = 0;
     claim_port = -1;
+    last_match_seq = 0;
     css_dirty = true;
 }
 
@@ -242,15 +276,48 @@ static void sendEndSet(void)
 /* Stocks and costume per entrant (2026-09-30): the relay folds them into
  * start.gg's per-game score as (costume + 1) * 100 + stocks, the Replay
  * Reporter for Slippi convention, so the set page shows colour and stocks.
- * Unknown (hand-scored) games send 0xFF and get no score. */
+ * Unknown (hand-scored) games send 0xFF and get no score. The ports
+ * (protocol v2) say which replay port is which entrant; NO_PORT when
+ * unknown. */
+
+/* The replay a game appended now gets (game_result.replay_id): the file the
+ * kernel opened for the set's last match, if the kiosk asked for that match
+ * to be recorded (last_match_seq, from lbTourney_MatchEnter), the kernel's
+ * line says it opened a file for exactly that Game Start, and no earlier game
+ * of the set already carries it; 0 = no replay. One rule for every game:
+ * an auto-scored game is appended on the first CSS frame after its match (or
+ * after LGL's tiebreak game, which records nothing and leaves the main game
+ * the last match), a hand-scored one whenever it is flicked. So a handwarmer
+ * that turned into a real game gets 0 (it was not recorded), never an older
+ * no-contest's file, and undo frees an id (its game is cleared). Read late,
+ * not at the VS exit, so a writer that opened the file late still counts.
+ * file_seq is read before file_id: the kernel writes file_id first. */
+static u32 lastMatchReplay(void)
+{
+    u32 id;
+    int i;
+
+    if (last_match_seq == 0 || gate->file_seq != last_match_seq) {
+        return 0;
+    }
+    id = gate->file_id;
+    for (i = 0; i < game_count; i++) {
+        if (games[i].replay_id == id) {
+            return 0;
+        }
+    }
+    return id;
+}
+
 static void appendGame(int winner_slot, u8 p1_char, u8 p2_char, u8 stage,
-                       const u8* stocks, const u8* costumes)
+                       const u8* stocks, const u8* costumes, const u8* ports)
 {
     struct game_result* game;
     if (game_count >= MAX_GAMES) {
         return;
     }
     game = &games[game_count];
+    memset(game, 0, sizeof(*game));
     game->winner_slot = winner_slot;
     game->p1_char = p1_char;
     game->p2_char = p2_char;
@@ -259,8 +326,24 @@ static void appendGame(int winner_slot, u8 p1_char, u8 p2_char, u8 stage,
     game->p2_stocks = stocks ? stocks[1] : STOCKS_UNKNOWN;
     game->p1_costume = costumes ? costumes[0] : COSTUME_UNKNOWN;
     game->p2_costume = costumes ? costumes[1] : COSTUME_UNKNOWN;
+    game->p1_port = ports ? ports[0] : NO_PORT;
+    game->p2_port = ports ? ports[1] : NO_PORT;
+    game->replay_id = lastMatchReplay();
     game_count++;
     sendReport();
+}
+
+/* A game scored by hand: the winner, and the entrants' ports when the L + R
+ * claim knows them (they label the replay's players); everything else
+ * unknown. */
+static void appendHandScored(int winner_slot)
+{
+    u8 ports[2];
+    int p1 = entrantPort(1);
+    int p2 = entrantPort(2);
+    ports[0] = p1 >= 0 ? (u8) p1 : NO_PORT;
+    ports[1] = p2 >= 0 ? (u8) p2 : NO_PORT;
+    appendGame(winner_slot, CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL, ports);
 }
 
 static void undoGame(void)
@@ -391,9 +474,9 @@ static void handleInputs(void)
     /* Score / undo fire once per flick: on the edge into a new direction. */
     if (cdir != prev_cdir) {
         if (cdir == CDIR_LEFT) {
-            appendGame(leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL);
+            appendHandScored(leftEntrant());
         } else if (cdir == CDIR_RIGHT) {
-            appendGame(3 - leftEntrant(), CHAR_UNKNOWN, CHAR_UNKNOWN, 0, NULL, NULL);
+            appendHandScored(3 - leftEntrant());
         } else if (cdir == CDIR_DOWN) {
             undoGame();
         }
@@ -406,6 +489,10 @@ static void pollRelay(void)
     const struct lbRelayExi_PollBuf* r;
     s32 state = lbRelayExi_Poll();
 
+    if (state >= 0) {
+        /* The host fills its header on every poll, done or not. */
+        css_host = lbRelayExi_Response()->ph;
+    }
     if (state < 0 || state == RELAY_ERROR) {
         pending_cmd = 0;
         last_failed = true;
@@ -546,6 +633,8 @@ static void autoScoreFromMatch(const struct MatchEnd* me)
      * as 0 on the first Wii set (2026-09-30). */
     auto_costumes[who[0] - 1] = (u8) Player_GetCostumeId(slots[0]);
     auto_costumes[who[1] - 1] = (u8) Player_GetCostumeId(slots[1]);
+    auto_ports[who[0] - 1] = (u8) slots[0];
+    auto_ports[who[1] - 1] = (u8) slots[1];
     auto_stage = (u8) gm_GetStartMeleeRules()->stkind;
     /* The game's own winner, never recomputed here. The cards run Gameplay:
      * Both (LGL and anti-wobbling). On a time-out LGL takes the player ahead
@@ -808,10 +897,43 @@ static void bannerEnd(void)
     }
 }
 
+/* What the banner says every other two seconds instead of the score, most
+ * urgent first: the beamer is restarting (the kernel's NB_STARTING, about
+ * 45 s after a USB change: play goes on, and a report sent meanwhile fails),
+ * a report failed, the beamer's card cannot take a replay, nobody is placed
+ * yet. */
+enum lbTourney_Alert {
+    ALERT_NONE,
+    ALERT_BEAMER_STARTING,
+    ALERT_SEND_FAILED,
+    ALERT_NOT_SAVING,
+    ALERT_PLACE_PLAYERS
+};
+
+static int bannerAlert(void)
+{
+    if ((css_host.flags & PF_NO_BEAMER) != 0 &&
+        css_host.no_beamer_reason == NB_STARTING)
+    {
+        return ALERT_BEAMER_STARTING;
+    }
+    if (last_failed) {
+        return ALERT_SEND_FAILED;
+    }
+    if (lbRelayExi_NotSaving(&css_host)) {
+        return ALERT_NOT_SAVING;
+    }
+    if (entrantPort(1) < 0 || entrantPort(2) < 0) {
+        return ALERT_PLACE_PLAYERS;
+    }
+    return ALERT_NONE;
+}
+
 static void redraw(void)
 {
     char p1[TAG_LEN + 1];
     char p2[TAG_LEN + 1];
+    int alert;
 
     if (!has_set) {
         freeText(&css_text);
@@ -838,8 +960,9 @@ static void redraw(void)
      * "NAME P1   0 - 0   P3 NAME" (entrant 1 left, digits yellow, amber
      * while a report is in flight, green just after one landed, red after a
      * failure), or a timed message: the auto-score note, HANDWARMER - NOT
-     * SCORED while the flag is armed, and SEND FAILED - TELL THE TO
-     * alternating with the red score every two seconds. */
+     * SCORED while the flag is armed, and the alert (bannerAlert)
+     * alternating with the score every two seconds. */
+    alert = ((css_frames / 120) & 1) != 0 ? bannerAlert() : ALERT_NONE;
     bannerBegin();
     if (handwarmer) {
         bannerColor(&ov_amb);
@@ -849,13 +972,19 @@ static void redraw(void)
         bannerColor(&ov_amb);
         bannerText(auto_note);
         bannerPop();
-    } else if (last_failed && ((css_frames / 120) & 1) != 0) {
+    } else if (alert == ALERT_BEAMER_STARTING) {
+        bannerColor(&ov_amb);
+        bannerText("WAITING FOR THE BEAMER");
+        bannerPop();
+    } else if (alert == ALERT_SEND_FAILED) {
         bannerColor(&ov_red);
         bannerText("SEND FAILED - TELL THE TO");
         bannerPop();
-    } else if ((entrantPort(1) < 0 || entrantPort(2) < 0) &&
-               ((css_frames / 120) & 1) != 0)
-    {
+    } else if (alert == ALERT_NOT_SAVING) {
+        bannerColor(&ov_red);
+        bannerText("REPLAYS NOT SAVING - TELL THE TO");
+        bannerPop();
+    } else if (alert == ALERT_PLACE_PLAYERS) {
         /* Nobody is placed yet: every other two seconds the banner says how
          * (the L + R hold by the player named first). */
         bannerColor(&ov_amb);
@@ -915,6 +1044,39 @@ void lbTourney_SSSEnter(void* arg)
     mnStageSel_Scene_OnEnter(arg);
 }
 
+/* GS_VS on_enter (scene table hook, docs/redesign.md "Recording only set
+ * games"). Vanilla gm_Scene_Vs_OnEnter calls StartMelee, where Slippi's core
+ * code sends Game Start over EXI, and the PPC waits until the kernel has
+ * taken that transfer; the kernel decides there, from the gate's want word,
+ * whether the writer records the match. So want is RECORD_THIS_MATCH exactly
+ * around vanilla, and only for a game of the current set that is not a
+ * handwarmer, on a host with the gate: friendlies, handwarmers, matches from
+ * the vanilla main menu and every other scene (training, LGL's tiebreak game
+ * in GS_SUDDEN_DEATH) leave no file. The kernel counts every Game Start in
+ * start_seq; one more than before vanilla ran is this match's, which
+ * lastMatchReplay later finds the file by. CSS exit would be too early (B
+ * leaves it too) and the first VS frame too late. */
+void lbTourney_MatchEnter(void* arg)
+{
+    bool rec = has_set && !handwarmer && gate_build >= RECORD_GATE_HOST_BUILD;
+    u32 seq = 0;
+
+    last_match_seq = 0;
+    if (rec) {
+        seq = gate->start_seq;
+        gate->want = RECORD_THIS_MATCH;
+        PPCSync();
+    }
+    gm_Scene_Vs_OnEnter(arg);
+    if (rec) {
+        gate->want = 0;
+        PPCSync();
+        if (gate->start_seq == seq + 1) {
+            last_match_seq = seq + 1;
+        }
+    }
+}
+
 void lbTourney_MatchFrame(void)
 {
     hw_battlefield = false; /* consumed by the SSS enter; never carry it over */
@@ -969,8 +1131,12 @@ void lbTourney_MatchExit(void* arg)
  * scene has its own scene-table row; its exit is the same vanilla
  * gm_Scene_Vs_OnExit, filling gmVsMelee_SuddenDeathExitInfo, so the tiebreak
  * is scored like any game and stands for the tied game, which appended
- * nothing. A tiebreak that ties again is not replayed (vanilla goes to the
- * results screen): its TIE note asks for hand scoring. */
+ * nothing. It is not recorded (the gate is the VS scene's), so it reports the
+ * tied game's replay, and no stocks: its own 1 and 0 would contradict that
+ * replay, whose stocks are tied (both 0xFF, so the relay sends no per-game
+ * score and its content check compares none; protocol.yaml game_result). A
+ * tiebreak that ties again is not replayed (vanilla goes to the results
+ * screen): its TIE note asks for hand scoring. */
 void lbTourney_TiebreakExit(void* arg)
 {
     bool armed = tiebreak_armed;
@@ -979,6 +1145,8 @@ void lbTourney_TiebreakExit(void* arg)
     if (armed && has_set && !handwarmer && arg != NULL) {
         autoScoreFromMatch(&((struct lbTourney_EndMelee*) arg)->me);
         tiebreak_armed = false;
+        auto_stocks[0] = STOCKS_UNKNOWN;
+        auto_stocks[1] = STOCKS_UNKNOWN;
     }
 }
 
@@ -1015,7 +1183,7 @@ void lbTourney_CSSFrame(void)
                 const char* src =
                     auto_pending == 1 ? cur_set.p1_tag : cur_set.p2_tag;
                 appendGame(auto_pending, auto_chars[0], auto_chars[1],
-                           auto_stage, auto_stocks, auto_costumes);
+                           auto_stage, auto_stocks, auto_costumes, auto_ports);
                 memcpy(tag, src, TAG_LEN);
                 tag[TAG_LEN] = '\0';
                 /* "GAME 3 TO MANGO", "GAME 3 TO MANGO - LGL" */
@@ -1038,9 +1206,19 @@ void lbTourney_CSSFrame(void)
             css_dirty = true;
         }
         css_frames++;
-        if ((last_failed || entrantPort(1) < 0 || entrantPort(2) < 0) &&
-            css_frames % 120 == 0)
-        {
+        if (pending_cmd == 0 && css_frames % LB_TOURNEY_PEEK_FRAMES == 0) {
+            /* The beamer's state for the banner, read on the frames it may
+             * flip; a failed read keeps the last one. */
+            struct exi_poll_hdr ph;
+            if (lbRelayExi_Peek(&ph)) {
+                int before = bannerAlert();
+                css_host = ph;
+                if (bannerAlert() != before) {
+                    css_dirty = true;
+                }
+            }
+        }
+        if (bannerAlert() != ALERT_NONE && css_frames % 120 == 0) {
             css_dirty = true; /* the banner flips between score and message */
         }
 #if LB_TOURNEY_DEMO_CLAIM

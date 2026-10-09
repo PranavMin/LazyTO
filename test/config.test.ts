@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  defaultDataDir,
   loadConfig,
   newSecret,
   parseConfig,
@@ -22,6 +23,7 @@ const VALID: Config = {
   streamName: 'LazyTOStream',
   streamStation: 1,
   setFormat: 'top8q',
+  archiveDir: '',
 };
 
 // A settings file as the relay before config v2 wrote it (the shape a Pi set
@@ -120,7 +122,19 @@ test('optional fields take their defaults', () => {
     streamName: '',
     streamStation: 1,
     setFormat: 'startgg',
+    archiveDir: '',
   });
+});
+
+test("the archive's old file-name templates load, ignored: the zips are named as Replay Reporter names them", () => {
+  const r = parseConfig({
+    ...VALID,
+    archiveSetName: '{tournament} - {round_short} - {p1} vs {p2}',
+    archiveGameName: 'Game {game} - {p1} ({p1_char}) vs {p2} ({p2_char}) - {stage}',
+  });
+  assert.ok(r.ok);
+  assert.deepEqual(r.ignored.sort(), ['archiveGameName', 'archiveSetName']);
+  assert.deepEqual(r.config, VALID);
 });
 
 test('unknown fields are ignored and reported, never fatal', () => {
@@ -194,7 +208,7 @@ test('adminPassword: printable, 8-64, not the secret', () => {
   }
   expectProblems(
     { ...VALID, adminPassword: VALID.secret },
-    'adminPassword must differ from secret (the secret is on every SD card)',
+    'adminPassword must differ from secret (the secret is on every beamer)',
   );
 });
 
@@ -228,4 +242,26 @@ test('weeklyPrefixFrom strips the trailing number', () => {
   assert.equal(weeklyPrefixFrom('Smash Weekly 42'), 'Smash Weekly ');
   assert.equal(weeklyPrefixFrom('GENESIS: BLACK'), '');
   assert.equal(weeklyPrefixFrom('2026'), '');
+});
+
+test('archiveDir: "" for the default folder, or a full path on this machine', () => {
+  const here = join(tmpdir(), 'LazyTO archive');
+  assert.equal(valid({ ...VALID, archiveDir: here }).archiveDir, here);
+  assert.equal(valid({ ...VALID, archiveDir: '' }).archiveDir, '');
+  expectProblems({ ...VALID, archiveDir: 'LazyTO' }, 'archiveDir must be "" (the default folder)');
+  expectProblems({ ...VALID, archiveDir: 3 }, 'archiveDir must be');
+});
+
+test("the data folder: the Pi's on Linux, the desktop app's elsewhere, LAZYTO_DIR first", () => {
+  assert.equal(defaultDataDir('linux', {}, '/home/pi'), '/var/lib/lazyto');
+  assert.equal(
+    defaultDataDir('win32', { APPDATA: 'C:\\Users\\to\\AppData\\Roaming' }, 'C:\\Users\\to'),
+    'C:\\Users\\to\\AppData\\Roaming\\LazyTO',
+  );
+  assert.equal(
+    defaultDataDir('darwin', {}, '/Users/to'),
+    '/Users/to/Library/Application Support/LazyTO',
+  );
+  assert.equal(defaultDataDir('darwin', { LAZYTO_DIR: '/tmp/x' }, '/Users/to'), '/tmp/x');
+  assert.equal(defaultDataDir('linux', { LAZYTO_DIR: '/tmp/y' }, '/home/pi'), '/tmp/y');
 });

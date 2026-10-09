@@ -51,9 +51,9 @@ bool lbRelayExi_Request(u8 cmd, const void* payload, u16 len)
     req_buf.hdr.magic[1] = RELAY_MAGIC_1;
     req_buf.hdr.version = RELAY_PROTO_VERSION;
     req_buf.hdr.cmd = cmd;
-    /* The game does not know the station; the Nintendont kernel / Dolphin
-     * forwarder stamps station from lazyto_station.txt before the
-     * request reaches the relay. */
+    /* The game does not know the station; the Nintendont kernel stamps it
+     * from the beamer's hello (the Dolphin forwarder: 0) before the request
+     * reaches the relay. */
     req_buf.hdr.station = 0;
     req_buf.hdr.len = len;
     if (len != 0) {
@@ -143,4 +143,10 @@ const struct lbRelayExi_PollBuf* lbRelayExi_Response(void)
 void lbRelayExi_Abort(void)
 {
     in_flight = false;
+}
+
+bool lbRelayExi_NotSaving(const struct exi_poll_hdr* ph)
+{
+    return ph->beamer_storage != STORE_OK &&
+           ph->beamer_storage != STORE_FILLING;
 }

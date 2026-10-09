@@ -10,11 +10,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { App } from '../src/app.js';
+import type { RelayGuard } from '../src/guard.js';
 import { configPath, saveConfig, type Config } from '../src/config.js';
 import type { RunningEvent } from '../src/relay.js';
 import type { StartggClient } from '../src/startgg.js';
 import type { StatusView } from '../src/status.js';
 import type { SetFormat } from '../src/format.js';
+import type { Platform } from '../src/platform.js';
 import {
   makeFake,
   FakeStartgg,
@@ -46,6 +48,19 @@ export interface HarnessOptions {
   stream?: false;
   /** The bundle's wii/ folder, for the SD-card zips. */
   wiiDir?: string;
+  /** The archive folder; default <dataDir>/archive, never the real Documents/LazyTO. */
+  archiveDir?: string;
+  /** A stand-in free-disk figure for the archive's disk. */
+  freeBytes?: () => number;
+  /** The one-relay-per-network guard (guard.ts); none by default without the network side. */
+  guard?: RelayGuard;
+  /** The desktop app's view of the laptop (src/platform.ts); default none, as src/main.ts runs. */
+  platform?: Platform;
+  /** The settings' tournament and event name; default the fake's test tournament and its singles event. */
+  tournament?: string;
+  eventName?: string;
+  /** The set archive's clock; default the real one. */
+  archiveClock?: () => number;
 }
 
 export interface Harness {
@@ -56,8 +71,10 @@ export interface Harness {
   view: StatusView;
   statusUrl: string;
   dataDir: string;
-  /** A Wii at this station; stream is what it puts in start_set_req.stream. */
-  wii(station: number, stream?: 0 | 1): WiiClient;
+  /** A Wii at this station, behind a beamer at `beamer` (default 127.0.0.1); stream is what it puts in start_set_req.stream. */
+  wii(station: number, stream?: 0 | 1, beamer?: string): WiiClient;
+  /** The relay's TCP port, where beamers sync. */
+  tcpPort: number;
   /** Every audit record written so far, oldest first. */
   auditEvents(): Record<string, unknown>[];
   close(): Promise<void>;
@@ -67,14 +84,15 @@ export interface Harness {
 export function harnessConfig(opts: HarnessOptions = {}): Config {
   return {
     token: FIXTURE_TOKEN,
-    tournament: FIXTURE_TOURNAMENT,
-    eventName: FIXTURE_EVENT_NAME,
+    tournament: opts.tournament ?? FIXTURE_TOURNAMENT,
+    eventName: opts.eventName ?? FIXTURE_EVENT_NAME,
     secret: opts.secret ?? TEST_SECRET,
     adminPassword: TEST_PASSWORD,
     weeklyNamePrefix: '',
     streamName: opts.stream === false ? '' : FIXTURE_STREAM_NAME,
     streamStation: STREAM_STATION,
     setFormat: opts.setFormat ?? 'startgg',
+    archiveDir: '',
   };
 }
 
@@ -97,6 +115,12 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     startggOptions: { retryDelaysMs: [0, 0], limits: opts.limits },
     clockSynced: () => true,
     wiiDir: opts.wiiDir,
+    archiveDir: opts.archiveDir ?? join(dataDir, 'archive'),
+    rawStore: opts.freeBytes ? { freeBytes: opts.freeBytes } : undefined,
+    stallMs: 2000,
+    guard: opts.guard,
+    platform: opts.platform,
+    archiveClock: opts.archiveClock,
   });
   await app.start();
   const m = app.current();
@@ -115,7 +139,9 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     view: m.view,
     statusUrl: `http://127.0.0.1:${app.web.address().port}`,
     dataDir,
-    wii: (station, stream = 0) => new WiiClient(port, station, stream, '127.0.0.1', secret),
+    wii: (station, stream = 0, beamer) =>
+      new WiiClient(port, station, stream, '127.0.0.1', secret, beamer),
+    tcpPort: port,
     auditEvents: () =>
       readFileSync(m.ev.audit.path, 'utf8')
         .split('\n')

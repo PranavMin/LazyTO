@@ -15,18 +15,60 @@
 // wrote and an auto-update never stalls a Pi (test/config.test.ts keeps a
 // frozen copy of an old file). Unknown fields are ignored and reported, so a
 // field a later build dropped does no harm either.
+//
+// The set archive (archive.ts): archiveDir is the archive folder (zips, raw
+// replays, unmatched/), "" for the app's own (AppOptions.archiveDir,
+// Documents/LazyTO by default: defaultArchiveDir()), so the TO can move it.
+// Its zips are named as Replay Reporter for Slippi names them (names.ts), so
+// the file-name templates archiveSetName and archiveGameName of earlier builds
+// are gone: a file that still has them loads, with them ignored. The beamers'
+// HTTP port comes from their syncs and is not a setting.
 
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join, posix, win32 } from 'node:path';
 import { SET_FORMATS, type SetFormat } from './format.js';
 
 /** Fixed facts of every install; not settings. */
 export const STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha';
 export const TCP_PORT = 29470;
 export const HTTP_PORT = 29473;
-/** Settings, audit logs and Wii logs. LAZYTO_DIR overrides it on a development machine. */
-export const DATA_DIR = process.env.LAZYTO_DIR ?? '/var/lib/lazyto';
+
+/**
+ * Settings, audit logs and Wii logs when the relay runs on its own
+ * (src/main.ts): /var/lib/lazyto on Linux, the Pi's install; on Windows and
+ * macOS the folder the desktop app keeps them in (Electron's userData for
+ * LazyTO), so a relay run from source there finds the app's settings.
+ * LAZYTO_DIR overrides it on a development machine. The desktop app passes
+ * its folder itself.
+ */
+export function defaultDataDir(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+): string {
+  if (env.LAZYTO_DIR) return env.LAZYTO_DIR;
+  switch (platform) {
+    case 'win32':
+      return win32.join(env.APPDATA ?? win32.join(home, 'AppData', 'Roaming'), 'LazyTO');
+    case 'darwin':
+      return posix.join(home, 'Library', 'Application Support', 'LazyTO');
+    default:
+      return '/var/lib/lazyto';
+  }
+}
+
+export const DATA_DIR = defaultDataDir();
+
+/**
+ * The archive folder by default: Documents/LazyTO, visible and easy to find
+ * (docs/redesign.md, D16). Raw replays stay there until the TO deletes the
+ * event, about 3 GB a night for 12 stations.
+ */
+export function defaultArchiveDir(home: string = homedir()): string {
+  return join(home, 'Documents', 'LazyTO');
+}
 
 export function configPath(dataDir: string): string {
   return join(dataDir, 'config.json');
@@ -42,6 +84,7 @@ export interface Config {
   streamName: string; // the stream's name in the tournament's stream settings; "" = no stream
   streamStation: number; // station number (u16 on the wire) of the stream Wii
   setFormat: SetFormat; // "startgg": each set's best-of as start.gg has it; "top8q" (format.ts)
+  archiveDir: string; // "" = the app's archive folder; else an absolute folder on this machine
 }
 
 export const SECRET_RE = /^[A-Za-z0-9_-]{8,16}$/;
@@ -65,9 +108,9 @@ const FIELDS: {
     check: (v) =>
       typeof v === 'string' && v.trim().length > 0 ? null : 'must be a non-empty string',
   },
-  // Letters, digits, - and _ only: it is written onto every SD card as
-  // secret=<value> and must survive the kernel's key=value parser. 8 to
-  // SECRET_LEN (16) characters.
+  // Letters, digits, - and _ only: it is written into every beamer's
+  // CONFIG/config.txt as LAZYTO-SECRET and must survive the firmware's
+  // key = value parser. 8 to SECRET_LEN (16) characters.
   secret: {
     check: (v) =>
       typeof v === 'string' && SECRET_RE.test(v) ? null : 'must be 8-16 letters, digits, - or _',
@@ -100,6 +143,13 @@ const FIELDS: {
         ? null
         : `must be one of ${SET_FORMATS.map((f) => `"${f}"`).join(', ')}`,
     default: 'startgg',
+  },
+  archiveDir: {
+    check: (v) =>
+      typeof v === 'string' && (v === '' || isAbsolute(v))
+        ? null
+        : 'must be "" (the default folder) or a full path to a folder',
+    default: '',
   },
 };
 
@@ -137,7 +187,7 @@ export function parseConfig(raw: unknown): ParsedConfig {
     problems.push('weeklyNamePrefix only applies to a short URL; set it to "" with a full slug');
   }
   if (typeof obj.adminPassword === 'string' && obj.adminPassword === obj.secret) {
-    problems.push('adminPassword must differ from secret (the secret is on every SD card)');
+    problems.push('adminPassword must differ from secret (the secret is on every beamer)');
   }
   if (problems.length > 0) return { ok: false, problems };
   const ignored = Object.keys(obj).filter((k) => !(k in FIELDS));

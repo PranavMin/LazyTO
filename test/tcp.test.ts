@@ -9,8 +9,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { RelayStatus, RelayCmd, MAX_SETS, encodeStartSetReq } from '../generated/wire.js';
-import { entrant, FIXTURE_STREAM_ID, type FakeSet } from './fake-startgg.js';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  BEAMER_SYNC_VERSION,
+  PROTO_VERSION,
+  RelayStatus,
+  RelayCmd,
+  MAX_SETS,
+  encodeBeamerSyncReq,
+  encodeStartSetReq,
+} from '../generated/wire.js';
+import { entrant, makeFake, FIXTURE_STREAM_ID, type FakeSet } from './fake-startgg.js';
 import { rawRequest, game } from './wii-client.js';
 import { startHarness, STREAM_STATION } from './harness.js';
 
@@ -39,7 +50,7 @@ test('framing and versioning', async (t) => {
 
   await t.test('bad protocol version gets ST_BAD_VERSION', async () => {
     const r = await rawRequest(env.port, 3, RelayCmd.CMD_LIST_SETS, new Uint8Array(0), {
-      version: 2,
+      version: PROTO_VERSION + 1,
     });
     assert.equal(r.resp.status, RelayStatus.ST_BAD_VERSION);
     assert.equal(r.hdr.cmd, RelayCmd.CMD_LIST_SETS);
@@ -359,11 +370,38 @@ test('station reboot mid-set', async (t) => {
   assert.equal(sets[0]!.state, 1);
 
   const upstreamBefore = env.fake.calls.length;
-  const r = await wii.startSet(SET);
+  const r = await wii.startSetGames(SET);
   assert.equal(r.resp.status, RelayStatus.ST_OK);
   assert.equal(r.resp.msg, 'resumed');
   assert.equal(env.fake.calls.length, upstreamBefore, 'resume makes no upstream call');
   assert.equal(env.state.get(7)!.games.length, 2, 'the claim keeps its games');
+  // N3: the reply hands the rebooted Wii its games back, so it goes on at 1-1, not 0-0.
+  assert.equal(r.reply!.set_id, SET);
+  assert.deepEqual(r.games, [game(1), game(2)]);
+});
+
+test("START_SET answers a new set with no games, and a resume after a relay restart with the claim's", async (t) => {
+  const fake = makeFake();
+  await fake.start();
+  const dataDir = mkdtempSync(join(tmpdir(), 'lazyto-resume-'));
+  t.after(async () => {
+    await fake.close();
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+  const g1 = game(2, 9, 2, 0x1f, [0, 3], [1, 0], { p1_port: 0, p2_port: 1, replay_id: 1791403502 });
+  const first = await startHarness({ fake, dataDir });
+  const fresh = await first.wii(9).startSetGames(SET);
+  assert.equal(fresh.resp.status, RelayStatus.ST_OK);
+  assert.equal(fresh.resp.msg, 'set started');
+  assert.deepEqual(fresh.games, []);
+  assert.equal((await first.wii(9).reportScore(SET, [g1])).resp.status, RelayStatus.ST_OK);
+  await first.close();
+  // The relay restarts on the same data dir: the claim comes back from the audit log.
+  const again = await startHarness({ fake, dataDir });
+  t.after(again.close);
+  const resumed = await again.wii(9).startSetGames(SET);
+  assert.equal(resumed.resp.msg, 'resumed');
+  assert.deepEqual(resumed.games, [g1], 'ports and replay id come back too');
 });
 
 test('claim guards', async (t) => {
@@ -496,4 +534,123 @@ test('close() drops a connection that never sends its request', { timeout: 5000 
   await env.close();
   assert.ok(Date.now() - start < 1000, `close() took ${Date.now() - start} ms`);
   await dropped;
+});
+
+// ---- protocol v2: replay ids, the retired CMD_GAME_START, the beamer sync ----
+
+test("a game's ports and replay id reach the archive with the report", async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  const wii = env.wii(3);
+  assert.equal((await wii.startSet(SET)).resp.status, RelayStatus.ST_OK);
+  const g = game(1, 9, 2, 0x1f, [2, 0], [0, 0], { p1_port: 2, p2_port: 0, replay_id: 1791403502 });
+  assert.equal((await wii.reportScore(SET, [g])).resp.status, RelayStatus.ST_OK);
+  assert.deepEqual(
+    env.ev.archive.status().inProgress.map((s) => [s.setId, s.station, s.games]),
+    [[SET, 3, 1]],
+  );
+  const score = env.auditEvents().find((e) => e.type === 'score');
+  assert.deepEqual((score?.games as { replay_id: number; p1_port: number }[])[0], g);
+});
+
+test('CMD_GAME_START (6) is retired: an unknown command', async () => {
+  const env = await setup();
+  try {
+    const r = await rawRequest(env.port, 3, 6, new Uint8Array(20));
+    assert.equal(r.resp.status, RelayStatus.ST_INTERNAL);
+    assert.equal(r.resp.msg, 'unknown command');
+  } finally {
+    await env.close();
+  }
+});
+
+test('CMD_BEAMER_SYNC speaks BEAMER_SYNC_VERSION, not PROTO_VERSION, and makes no station row', async () => {
+  const env = await setup();
+  try {
+    const sync = encodeBeamerSyncReq({
+      station_id: new Uint8Array(16).fill(0x11),
+      archive_id: new Uint8Array(16),
+      nonce: new Uint8Array(16).fill(0x22),
+      fw_build: 2,
+      uptime_s: 60,
+      free_mb: 3000,
+      card_mb: 3800,
+      used_mb: 700,
+      station: 3,
+      http_port: 80,
+      on_card: 0,
+      to_collect: 0,
+      to_erase: 0,
+      empty: 0,
+      incomplete: 0,
+      acks: 0,
+      erased: 0,
+      erased_empty: 0,
+      erase_ms: 0,
+      erase_left: 0,
+      flags: 1,
+      storage: 0,
+      last_result: 0,
+      rssi: 60,
+      files: [],
+    });
+    const ok = await rawRequest(env.port, 3, RelayCmd.CMD_BEAMER_SYNC, sync, {
+      version: BEAMER_SYNC_VERSION,
+    });
+    assert.equal(ok.hdr.version, BEAMER_SYNC_VERSION, 'the reply carries the sync version');
+    assert.equal(ok.hdr.cmd, RelayCmd.CMD_BEAMER_SYNC);
+    assert.equal(ok.resp.status, RelayStatus.ST_OK);
+    assert.equal(ok.resp.msg, 'synced');
+    assert.equal(ok.payload.length, 52, 'a beamer_sync_resp with no answers');
+    const truncated = await rawRequest(
+      env.port,
+      3,
+      RelayCmd.CMD_BEAMER_SYNC,
+      sync.subarray(0, 60),
+      {
+        version: BEAMER_SYNC_VERSION,
+      },
+    );
+    assert.equal(truncated.resp.status, RelayStatus.ST_INTERNAL);
+    assert.equal(truncated.resp.msg, 'bad payload');
+    const v2 = await rawRequest(env.port, 3, RelayCmd.CMD_BEAMER_SYNC, sync, {
+      version: PROTO_VERSION,
+    });
+    assert.equal(v2.resp.status, RelayStatus.ST_BAD_VERSION);
+    assert.equal(env.state.lastAction(3), undefined, 'a beamer sync is not a station action');
+  } finally {
+    await env.close();
+  }
+});
+
+test('an archive that cannot write fails no Wii request: START_SET, REPORT_SCORE and END_SET still answer ST_OK', async (t) => {
+  const env = await setup();
+  t.after(env.close);
+  // The set records' folder is gone and a file stands in its place (a
+  // deleted or moved archive folder, a full disk, a rename Windows refuses):
+  // every write of a set record fails.
+  const sets = join(env.dataDir, 'archive', '.sets');
+  rmSync(sets, { recursive: true, force: true });
+  writeFileSync(sets, 'not a folder');
+  const wii = env.wii(3);
+  assert.equal((await wii.startSet(SET)).resp.status, RelayStatus.ST_OK);
+  assert.equal(env.fake.getSet(SET).state, 2);
+  assert.equal((await wii.reportScore(SET, [game(1), game(1)])).resp.status, RelayStatus.ST_OK);
+  const end = await wii.endSet(SET, [game(1), game(1), game(1)]);
+  assert.equal(end.resp.status, RelayStatus.ST_OK, 'start.gg has the set, and so does the Wii');
+  assert.equal(end.resp.msg, 'final 3-0');
+  assert.equal(env.fake.getSet(SET).state, 3);
+  assert.equal(env.state.get(3), undefined, 'the station is free for its next set');
+  const errors = env.auditEvents().filter((e) => e.type === 'archive_error');
+  assert.ok(errors.length >= 1);
+  assert.equal(errors[0]!.op, 'setStarted');
+  assert.match(
+    await (await fetch(env.statusUrl)).text(),
+    /The archive could not save set 107949994, .* ago: /,
+  );
+  // The folder back: the next record write makes .sets again.
+  rmSync(sets, { force: true });
+  const next = 107949995;
+  assert.equal((await wii.startSet(next)).resp.status, RelayStatus.ST_OK);
+  assert.ok(existsSync(join(sets, `${next}.json`)));
 });

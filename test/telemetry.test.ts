@@ -71,7 +71,9 @@ test('a beacon request (relay_beacon with tcp_port 0) is answered with the relay
   await t.start();
   try {
     const got = new Promise<Buffer>((resolve) => station.once('message', (m) => resolve(m)));
-    const request = new Uint8Array([MAGIC_0, 0x54, PROTO_VERSION, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // tcp_port 0 = please send it
+    // tcp_port 0 = please send it. From a beamer built against protocol v1:
+    // the beacon is frozen, so its version is never checked.
+    const request = new Uint8Array([MAGIC_0, 0x54, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     await new Promise<void>((resolve, reject) =>
       station.send(request, t.address().port, '127.0.0.1', (e) => (e ? reject(e) : resolve())),
     );
@@ -227,7 +229,7 @@ test('memory is bounded: lines per station and number of stations', () => {
   assert.equal(lines.length, MAX_LINES);
   assert.equal(lines.at(-1), `line ${MAX_LINES + 49}`);
   for (let st = 2; st < MAX_STATIONS + 10; st++)
-    t.receive(telemetryDatagram(TelemetryKind.TM_LOG, st, 0, 'x\n'), 'w');
+    t.receive(telemetryDatagram(TelemetryKind.TM_LOG, st, 0, 'x\n'), `w${st}`);
   assert.equal(t.stations().length, MAX_STATIONS);
 });
 
@@ -239,4 +241,49 @@ test('every complete line reaches onLine (the per-station log file)', () => {
   });
   t.receive(telemetryDatagram(TelemetryKind.TM_LOG, 6, 0, 'a\nb\npart'), 'w');
   assert.deepEqual(got, ['6:a', '6:b']);
+});
+
+test('a renumbered beamer keeps its Wii in one row, showing the new number', () => {
+  const got: string[] = [];
+  const t = new StationTelemetry({
+    secret: TEST_SECRET,
+    onLine: (st, line) => got.push(`${st}:${line}`),
+  });
+  // The button pressed from 1 up to 11, the Wii reporting all the while (hardware test, 2026-10-08).
+  for (let st = 1; st <= 11; st++)
+    t.receive(telemetryDatagram(TelemetryKind.TM_LOG, st, st - 1, `at ${st}\n`), '10.0.0.5');
+  const rows = t.stations();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].station, 11);
+  assert.equal(rows[0].lost, 0, 'one kernel, one seq');
+  assert.equal(t.get(1), undefined);
+  assert.deepEqual(rows[0].lines.slice(-2), ['--- now station 11 (was 10) ---', 'at 11']);
+  assert.deepEqual(got.slice(-2), ['11:--- now station 11 (was 10) ---', '11:at 11']);
+});
+
+test("a row follows its beamer's station_id: by address before the first sync, across a new address after", () => {
+  const ids = new Map<string, string>();
+  const t = new StationTelemetry({ secret: TEST_SECRET, identify: (from) => ids.get(from) });
+  t.receive(telemetryDatagram(TelemetryKind.TM_LOG, 3, 0, 'before the sync\n'), '10.0.0.5');
+  ids.set('10.0.0.5', 'aa'); // its first sync
+  t.receive(telemetryDatagram(TelemetryKind.TM_LOG, 3, 1, 'after it\n'), '10.0.0.5');
+  ids.set('10.0.0.7', 'aa'); // a DHCP renewal: a new address, the same beamer
+  t.receive(telemetryDatagram(TelemetryKind.TM_LOG, 4, 2, 'renumbered\n'), '10.0.0.7');
+  ids.set('10.0.0.9', 'bb'); // another beamer takes the old number
+  t.receive(telemetryDatagram(TelemetryKind.TM_LOG, 3, 0, 'another wii\n'), '10.0.0.9');
+  const rows = t.stations();
+  assert.deepEqual(
+    rows.map((r) => [r.station, r.from]),
+    [
+      [3, '10.0.0.9'],
+      [4, '10.0.0.7'],
+    ],
+  );
+  assert.deepEqual(rows[1].lines, [
+    'before the sync',
+    'after it',
+    '--- now station 4 (was 3) ---',
+    'renumbered',
+  ]);
+  assert.deepEqual(t.get(3)?.lines, ['another wii']);
 });

@@ -6,13 +6,18 @@
 //   starting  settings saved: finding tonight's tournament and event
 //   failed    the event couldn't be found or started (bad token, short URL on
 //             no tournament, start.gg or the internet down, the clock not set
-//             yet): the page shows why, with Retry; it also retries by itself
-//             after 30 s, 60 s, then every 2 min
+//             yet, another LazyTO relay on the network): the page shows why,
+//             with Retry; it also retries by itself after 30 s, 60 s, then
+//             every 2 min
 //   running   relay.ts startEvent: TCP, beacon, telemetry; the status page
 //
 // Saving settings rewrites the file and applies it in this process: the
 // running event stops and starts again from the new file. Claims survive,
 // because the same event replays the same audit log.
+//
+// One LazyTO per network (guard.ts): with the network side on, the relay
+// listens for other relays' beacons from the start, and an event does not
+// start while another relay's beacon has been heard.
 //
 // Two accepted exceptions to fail-fast (CLAUDE.md): without valid settings the
 // relay serves only the setup page, and a set-up relay whose event can't be
@@ -23,14 +28,28 @@ import { randomInt } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localAddresses } from './beacon.js';
+import { RelayGuard } from './guard.js';
+import type { Platform } from './platform.js';
 import { STARTGG_ENDPOINT, configPath, loadConfig, saveConfig, type Config } from './config.js';
+import type { RawStoreOptions } from './rawstore.js';
 import { startEvent, type RunningEvent } from './relay.js';
 import { resolveEvent, type Resolved } from './resolve.js';
 import { StartggClient, type StartggClientOptions } from './startgg.js';
 import { serveCards } from './cards.js';
 import { renderStatus, serveAction, serveLog, type StatusView } from './status.js';
 import { serveSetup } from './setup.js';
-import { WebServer, age, escapeHtml, page, redirect, sendHtml, sendText } from './web.js';
+import {
+  WebServer,
+  age,
+  escapeHtml,
+  page,
+  redirect,
+  redirectWithResult,
+  requirePassword,
+  sendHtml,
+  sendText,
+} from './web.js';
+import { BEACON_PORT } from '../generated/wire.js';
 
 export type UpdateChannel = 'release' | 'main' | 'off';
 export const UPDATE_CHANNELS: readonly UpdateChannel[] = ['release', 'main', 'off'];
@@ -52,6 +71,24 @@ export interface AppOptions {
   host?: string;
   /** Beacon and telemetry; off in tests. */
   network?: boolean;
+  /**
+   * The archive folder unless the settings name one (config.ts archiveDir):
+   * raw replays, unmatched/, archive.json and the set zips (rawstore.ts,
+   * archive.ts). main.ts passes Documents/LazyTO (config.ts
+   * defaultArchiveDir), the desktop app its Documents folder's, tests a
+   * temporary one, so no test ever writes to the real one.
+   */
+  archiveDir: string;
+  /** Tests stand in a full disk and shorten the download stall timeout. */
+  rawStore?: RawStoreOptions;
+  stallMs?: number;
+  /** The set archive's clock (its zips' entry times); tests pin it. */
+  archiveClock?: () => number;
+  /**
+   * The one-relay-per-network guard; by default one on BEACON_PORT with the
+   * network side on, none without it. Tests pass one on an ephemeral port.
+   */
+  guard?: RelayGuard;
   /** start.gg's GraphQL URL; tests point it at the fake. */
   startggEndpoint?: string;
   startggOptions?: Pick<StartggClientOptions, 'limits' | 'retryDelaysMs'>;
@@ -60,6 +97,8 @@ export interface AppOptions {
   version?: string;
   /** Whether the system clock is set (the weekly fallback picks the weekly nearest "now"). */
   clockSynced?: () => boolean;
+  /** The desktop app's view of the laptop (platform.ts); absent when the relay runs on its own. */
+  platform?: Platform;
 }
 
 const DEFAULT_RETRY_DELAYS_MS = [30_000, 60_000, 120_000];
@@ -91,17 +130,34 @@ export class App {
   private attempt = 0;
   private retryTimer: NodeJS.Timeout | null = null;
   private codeFailures: number[] = [];
+  private readonly guard: RelayGuard | null;
 
   constructor(private readonly opts: AppOptions) {
     this.version = opts.version ?? 'dev';
+    this.guard =
+      opts.guard ?? (opts.network === false ? null : new RelayGuard({ port: BEACON_PORT }));
     this.web = new WebServer((req, res, url) => this.route(req, res, url));
   }
 
   // ---- lifecycle ----
 
   async start(): Promise<void> {
+    await (
+      await this.serve()
+    ).applied;
+  }
+
+  /**
+   * start(), resolved as soon as the web server is up, so the desktop app can
+   * show the page while tonight's event is still being found. The mode is
+   * already "setup" or "starting" by then; `applied` settles once the event
+   * runs or has failed. Throws (EADDRINUSE) when port 29473 is taken.
+   */
+  async serve(): Promise<{ applied: Promise<void> }> {
     await this.web.listen(this.opts.httpPort, this.opts.host);
-    await this.apply();
+    // Listening from the start, so another relay is heard before the event would start.
+    await this.guard?.listen();
+    return { applied: this.apply() };
   }
 
   async stop(): Promise<void> {
@@ -112,6 +168,7 @@ export class App {
       m.ev.audit.record({ type: 'shutdown' });
       await m.ev.stop();
     }
+    await this.guard?.stop();
     await this.web.close();
   }
 
@@ -146,6 +203,21 @@ export class App {
     if (this.mode.kind !== 'running') return 0;
     const state = this.mode.ev.state;
     return state.stations().filter((s) => state.get(s) !== undefined).length;
+  }
+
+  /** The archive folder when the settings leave it blank. */
+  defaultArchiveDir(): string {
+    return this.opts.archiveDir;
+  }
+
+  /** Where tonight's set archives go: the settings' folder, or the default one. */
+  archiveDir(config: Config): string {
+    return config.archiveDir === '' ? this.defaultArchiveDir() : config.archiveDir;
+  }
+
+  /** True in the desktop app, which checks for new versions itself (no update channel). */
+  updatesByApp(): boolean {
+    return this.opts.platform !== undefined;
   }
 
   /** Save new settings (and the update channel) and apply them now. */
@@ -243,6 +315,12 @@ export class App {
       );
       return;
     }
+    const blocked = this.guard ? await this.guard.check() : null;
+    if (gen !== this.generation) return;
+    if (blocked) {
+      this.fail(gen, blocked);
+      return;
+    }
     let ev: RunningEvent | null = null;
     try {
       const startgg = this.startgg(config.token);
@@ -261,6 +339,9 @@ export class App {
         tcpPort: this.opts.tcpPort,
         host: this.opts.host,
         network: this.opts.network,
+        archive: { dir: this.archiveDir(config), event: resolved, clock: this.opts.archiveClock },
+        rawStore: this.opts.rawStore,
+        stallMs: this.opts.stallMs,
       });
       if (gen !== this.generation) {
         await ev.stop();
@@ -275,13 +356,26 @@ export class App {
         streamStation,
         eventLabel: `${resolved.tournamentName} · ${resolved.eventName} (${resolved.eventId})`,
         beacon: running.beacon ?? {
-          status: () => ({ targets: [], sent: 0, lastSentAt: null, lastError: null }),
+          status: () => ({
+            targets: [],
+            sent: 0,
+            firstSentAt: null,
+            lastSentAt: null,
+            lastError: null,
+            lastErrorCode: null,
+          }),
         },
         tcp: running.tcp,
         telemetry: running.telemetry,
+        archive: running.archive,
+        beamers: running.beamers,
+        collector: running.collector,
+        store: running.store,
+        otherRelay: () => this.guard?.heard() ?? null,
         admin: running.admin,
         addresses: this.addresses(),
         version: this.version,
+        platform: this.opts.platform ?? null,
       };
       this.mode = { kind: 'running', ev: running, resolved, view };
       this.attempt = 0;
@@ -336,22 +430,19 @@ export class App {
       redirect(res, '/');
       return;
     }
+    // The desktop app's one action (platform.ts): the firewall fix, behind the admin password.
+    if (url.pathname === '/platform' && req.method === 'POST' && this.opts.platform) {
+      if (!this.settings) return redirect(res, '/setup');
+      if (!requirePassword(req, res, this.settings.adminPassword)) return;
+      const r = await this.opts.platform.act(url.searchParams.get('action') ?? '');
+      redirectWithResult(res, r.ok, r.msg);
+      return;
+    }
     // SD cards need only the settings, so they work before tonight's event resolves.
     if (url.pathname === '/cards' || url.pathname === '/cards/zip') {
       if (!this.settings) return redirect(res, '/setup');
-      const m = this.mode;
       return serveCards(
-        {
-          wiiDir: this.opts.wiiDir ?? null,
-          config: this.settings,
-          streamStation:
-            m.kind === 'running'
-              ? m.view.streamStation
-              : this.settings.streamName
-                ? this.settings.streamStation
-                : null,
-          version: this.version,
-        },
+        { wiiDir: this.opts.wiiDir ?? null, config: this.settings, version: this.version },
         req,
         res,
         url,
@@ -397,7 +488,7 @@ export class App {
     return page(
       `${banner}<div class="card bad"><p><b class="warn">Not running.</b> ${escapeHtml(m.reason)}</p>` +
         `<p class="muted">Tried ${age(m.at)} ago${next !== null ? `; trying again in ${next} s` : ''}. ` +
-        `The Wiis show NO RELAY FOUND until this is fixed.</p>` +
+        `The beamers hear no relay until this is fixed.</p>` +
         `<div class="acts"><form method="post" action="/retry"><button class="primary">Retry now</button></form>` +
         `<a class="btnlink" href="/setup">Settings</a></div></div>${where}`,
       { refreshSeconds: 10 },

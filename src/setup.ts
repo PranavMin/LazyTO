@@ -8,7 +8,9 @@
 //                  each week, or only that tournament; or a pasted link, for
 //                  an unpublished tournament no list returns
 //   3. event       its Melee singles event, the stream (or none), the stream
-//                  station, the set format, the update channel, the password
+//                  station, the set format, the archive folder, the update
+//                  channel (not in the desktop app, which checks for updates
+//                  itself), the password
 //
 // Saving checks everything the relay will check at start (config.ts), then
 // does the same lookup the relay does (resolve.ts), then app.save() writes the
@@ -18,6 +20,7 @@
 // into a page: a blank token field means "keep the saved one".
 //
 // First run: every POST needs the setup code. After that: the admin password.
+// The desktop app opens /setup?code=<code> on its own machine, which fills it in.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { App, UpdateChannel } from './app.js';
@@ -77,7 +80,8 @@ export async function serveSetup(
 
   if (req.method === 'GET') {
     if (saved === null || url.searchParams.get('step') === 'token') {
-      sendHtml(res, stepToken(app, { code: '', token: '' }));
+      const code = saved === null ? (url.searchParams.get('code') ?? '').replace(/\D/g, '') : '';
+      sendHtml(res, stepToken(app, { code, token: '' }));
     } else {
       sendHtml(res, await settingsPage(app, saved));
     }
@@ -152,12 +156,12 @@ ${
   firstRun
     ? `<label for="code">Setup code</label>
 <input type="text" id="code" name="code" inputmode="numeric" autocomplete="off" value="${escapeHtml(carry.code)}" required>
-<p class="muted small">Printed when LazyTO was installed on this Pi.</p>`
+<p class="muted small">In the relay's log; a Pi's installer prints it. The LazyTO app fills it in.</p>`
     : ''
 }
 <label for="token">start.gg token</label>
 <input type="password" id="token" name="token" autocomplete="off" required>
-<p class="muted small">On start.gg, signed in as an admin of your tournament: Developer Settings, Personal Access Tokens, Create new token. LazyTO keeps it on this Pi only.</p>
+<p class="muted small">On start.gg, signed in as an admin of your tournament: Developer Settings, Personal Access Tokens, Create new token. LazyTO keeps it on this machine only.</p>
 <div class="acts"><button class="primary">Next</button>${firstRun ? '' : '<a class="btnlink" href="/setup">cancel</a>'}</div>
 </form>`,
   );
@@ -239,6 +243,7 @@ interface Prefill {
   streamStation?: number;
   setFormat?: SetFormat;
   channel?: UpdateChannel;
+  archiveDir?: string;
 }
 
 async function stepEvent(
@@ -300,10 +305,14 @@ async function stepEvent(
       `<label class="choice"><input type="radio" name="setFormat" value="${f}"${f === format ? ' checked' : ''}><span>${escapeHtml(SET_FORMAT_TEXT[f])}</span></label>`,
   ).join('\n');
   const channel = prefill.channel ?? app.updateChannel();
-  const channelRadios = UPDATE_CHANNELS.map(
-    (c) =>
-      `<label class="choice"><input type="radio" name="channel" value="${c}"${c === channel ? ' checked' : ''}><span>${escapeHtml(CHANNEL_TEXT[c])}</span></label>`,
-  ).join('\n');
+  // The desktop app checks for new versions itself: no channel to pick.
+  const updates = app.updatesByApp()
+    ? `<input type="hidden" name="channel" value="${channel}">`
+    : `<h2>Updates</h2>\n<div class="card list">${UPDATE_CHANNELS.map(
+        (c) =>
+          `<label class="choice"><input type="radio" name="channel" value="${c}"${c === channel ? ' checked' : ''}><span>${escapeHtml(CHANNEL_TEXT[c])}</span></label>`,
+      ).join('\n')}</div>`;
+  const archiveDir = prefill.archiveDir ?? saved?.archiveDir ?? '';
 
   const following = !choice.tournament.startsWith('tournament/');
   const midSet = app.stationsMidSet();
@@ -329,15 +338,18 @@ ${hidden(carry)}<input type="hidden" name="step" value="save">
 <p class="muted small">The Wii on stream. Its sets go on the stream above.</p>
 <h2>Set format</h2>
 <div class="card list">${formatRadios}</div>
-<h2>Updates</h2>
-<div class="card list">${channelRadios}</div>
+<h2>Set archives</h2>
+<label for="archiveDir">Folder (empty: ${escapeHtml(app.defaultArchiveDir())})</label>
+<input type="text" id="archiveDir" name="archiveDir" value="${escapeHtml(archiveDir)}" placeholder="${escapeHtml(app.defaultArchiveDir())}" autocomplete="off">
+<p class="muted small">Each finished set's replays, zipped for Lucky Stats. A full path on this machine. An event's replays take a few GB, so pick a folder OneDrive or iCloud does not sync. Change it between events, not during one.</p>
+${updates}
 <h2>Admin password</h2>
 <label for="password">${firstRun ? 'Password' : 'New password (empty: keep the current one)'}</label>
 <input type="password" id="password" name="password" autocomplete="new-password"${firstRun ? ' required' : ''}>
 <label for="password2">Again</label>
 <input type="password" id="password2" name="password2" autocomplete="new-password"${firstRun ? ' required' : ''}>
 <p class="muted small">For these settings and the status page's buttons. 8 or more characters, no spaces. Your browser asks for it; the user name can be anything.</p>
-${saved ? `<h2>Wii secret</h2>\n<p><code>${escapeHtml(saved.secret)}</code></p>\n<p class="muted small">On every SD card, as <code>secret=</code> in lazyto_station.txt.</p>\n<label class="choice"><input type="checkbox" name="newSecret"><span>Make a new Wii secret, for a lost card or a stranger on the network. Every card then needs the new one.</span></label>\n` : ''}${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
+${saved ? `<h2>Wii secret</h2>\n<p><code>${escapeHtml(saved.secret)}</code></p>\n<p class="muted small">On every beamer, as <code>LAZYTO-SECRET</code> in its <code>CONFIG/config.txt</code>. The SD cards carry none.</p>\n<label class="choice"><input type="checkbox" name="newSecret"><span>Make a new Wii secret, for a lost beamer or a stranger on the network. Every beamer then needs the new one.</span></label>\n` : ''}${midSet ? `<p class="warn">${midSet} station(s) are mid-set. Saving restarts the relay for a second; their sets carry on.</p>` : ''}
 <div class="acts"><button class="primary">Save</button>${firstRun ? '' : '<a class="btnlink" href="/">cancel</a>'}</div>
 </form>
 ${firstRun ? '' : `<form method="post" action="/setup" class="block"><input type="hidden" name="step" value="token"><div class="acts"><button>Change tournament</button></div></form>`}`,
@@ -365,6 +377,7 @@ async function save(
     streamStation: Number(form.get('station')),
     setFormat,
     channel,
+    archiveDir: (form.get('archiveDir') ?? '').trim(),
   };
   const again = async (error: string) =>
     sendHtml(res, await stepEvent(app, carry, token, choice, error, prefill), 400);
@@ -385,6 +398,7 @@ async function save(
     streamName: prefill.streamName,
     streamStation: prefill.streamStation,
     setFormat,
+    archiveDir: prefill.archiveDir,
   });
   if (!parsed.ok) return again(parsed.problems.join('; '));
   const config: Config = parsed.config;
@@ -431,6 +445,7 @@ async function settingsPage(app: App, saved: Config): Promise<string> {
       streamName: saved.streamName,
       streamStation: saved.streamStation,
       setFormat: saved.setFormat,
+      archiveDir: saved.archiveDir,
     },
   );
 }

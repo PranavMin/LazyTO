@@ -20,13 +20,14 @@
 import type { SetCache } from './cache.js';
 import type { StationState } from './state.js';
 import type { StartggClient } from './startgg.js';
-import type { AuditSink } from './tcp.js';
+import type { ArchiveHooks, AuditSink } from './tcp.js';
 
 export interface AdminDeps {
   state: StationState;
   cache: SetCache;
   startgg: Pick<StartggClient, 'resetSet'>;
   audit: AuditSink;
+  archive: Pick<ArchiveHooks, 'setAbandoned'>;
 }
 
 export interface AdminResult {
@@ -76,6 +77,7 @@ export class Admin {
       reason: 'dashboard',
       gamesDiscarded: live ? claim.games.length : 0,
     });
+    this.deps.archive.setAbandoned(setId);
     state.recordAction(station, 'FREED_BY_TO', true, 'ST_OK', 'freed by TO');
     return {
       ok: true,

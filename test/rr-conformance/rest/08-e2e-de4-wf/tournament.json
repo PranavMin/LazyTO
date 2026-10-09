@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "tournament": {
+      "id": 4000001,
+      "name": "LazyTO Conformance Weekly #1",
+      "slug": "tournament/lazyto-conformance-weekly-1",
+      "locationDisplayName": "Springfield, IL"
+    },
+    "event": [
+      {
+        "id": 1000081,
+        "name": "Melee Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-singles",
+        "state": 2,
+        "videogameId": 1,
+        "teamRosterSize": null
+      },
+      {
+        "id": 1000089,
+        "name": "Ultimate Singles",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/ultimate-singles",
+        "state": 2,
+        "videogameId": 1386,
+        "teamRosterSize": null
+      },
+      {
+        "id": 1000088,
+        "name": "Melee Crews",
+        "slug": "tournament/lazyto-conformance-weekly-1/event/melee-crews",
+        "state": 1,
+        "videogameId": 1,
+        "teamRosterSize": {
+          "minPlayers": 3,
+          "maxPlayers": 5
+        }
+      }
+    ]
+  }
+}
